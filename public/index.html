@@ -3173,553 +3173,613 @@
         };
 
         // 7. SCOUTING REPORT PAGE
-        const ScoutingReportPage = () => {
-            const [selectedPlayer, setSelectedPlayer] = useState("");
-            const [players, setPlayers] = useState([]);
-            const [schedule, setSchedule] = useState([]);
-            const [picks, setPicks] = useState([]);
-            const [history, setHistory] = useState([]);
-            const [loading, setLoading] = useState(true);
+                const ScoutingReportPage = () => {
+                    const [selectedPlayer, setSelectedPlayer] = useState("");
+                    const [players, setPlayers] = useState([]);
+                    const [schedule, setSchedule] = useState([]);
+                    const [picks, setPicks] = useState([]);
+                    const [history, setHistory] = useState([]);
+                    const [loading, setLoading] = useState(true);
 
-            useEffect(() => {
-                const init = async () => {
-                    try {
-                        const [schedRes, picksRes, histRes] = await Promise.all([
-                            fetch(SCHEDULE_URL), fetch(PICKS_URL), fetch(HISTORY_URL)
-                        ]);
-                        const schedText = await schedRes.text();
-                        const picksText = await picksRes.text();
-                        const histText = await histRes.text();
+                    // TEAM DATA FROM CSV
+                    // Reference: School Export - Teams.csv
+                    const TEAM_DATA = {
+                        "Ohio State": { hex: "#BB0000", image: "images/helmets/OhioState.gif", nickname: "Buckeyes" },
+                        "Georgia": { hex: "#BA0C2F", image: "images/helmets/Georgia.gif", nickname: "Bulldogs" },
+                        "Texas Tech": { hex: "#CC0000", image: "images/helmets/TexasTech.gif", nickname: "Red Raiders" },
+                        "Oregon": { hex: "#154734", image: "images/helmets/Oregon.gif", nickname: "Ducks" },
+                        "Texas A&M": { hex: "#500000", image: "images/helmets/TexasAM.gif", nickname: "Aggies" },
+                        "James Madison": { hex: "#450084", image: "images/helmets/JamesMadison.gif", nickname: "Dukes" },
+                        "Alabama": { hex: "#8E001C", image: "images/helmets/Alabama.gif", nickname: "Crimson Tide" },
+                        "Oklahoma": { hex: "#841617", image: "images/helmets/Oklahoma.gif", nickname: "Sooners" },
+                        "Indiana": { hex: "#990000", image: "images/helmets/Indiana.gif", nickname: "Hoosiers" },
+                        "Tulane": { hex: "#006747", image: "images/helmets/Tulane.gif", nickname: "Green Wave" },
+                        "Ole Miss": { hex: "#182B49", image: "images/helmets/OleMiss.gif", nickname: "Rebels" },
+                        "Miami (FL)": { hex: "#F47321", image: "images/helmets/MiamiFL.gif", nickname: "Hurricanes" }
+                    };
 
-                        const sData = csvToJson(schedText);
-                        const pData = csvToJson(picksText).filter(p => p.Name);
-                        const hData = csvToJson(histText);
+                    useEffect(() => {
+                        const init = async () => {
+                            try {
+                                const [schedRes, picksRes, histRes] = await Promise.all([
+                                    fetch(SCHEDULE_URL), fetch(PICKS_URL), fetch(HISTORY_URL)
+                                ]);
+                                const schedText = await schedRes.text();
+                                const picksText = await picksRes.text();
+                                const histText = await histRes.text();
 
-                        setSchedule(sData);
-                        setPicks(pData);
-                        setHistory(hData);
+                                const sData = csvToJson(schedText);
+                                const pData = csvToJson(picksText).filter(p => p.Name);
+                                const hData = csvToJson(histText);
 
-                        const names = pData.map(p => p.Name).sort();
-                        setPlayers(names);
-                        if (names.length > 0) setSelectedPlayer(names[0]);
+                                setSchedule(sData);
+                                setPicks(pData);
+                                setHistory(hData);
 
-                        setLoading(false);
-                    } catch (e) { console.error(e); setLoading(false); }
-                };
-                init();
-            }, []);
+                                const names = pData.map(p => p.Name).sort();
+                                setPlayers(names);
+                                if (names.length > 0) setSelectedPlayer(names[0]);
 
-            if (loading) return <LoadingSpinner text="Scouting players..." />;
+                                setLoading(false);
+                            } catch (e) { console.error(e); setLoading(false); }
+                        };
+                        init();
+                    }, []);
 
-            // --- CALCULATIONS ---
-                        const calculateStats = (player) => {
-                            if (!player) return null;
-                            const pData = picks.find(p => p.Name === player);
-                            if (!pData) return null;
+                    if (loading) return <LoadingSpinner text="Scouting players..." />;
 
-                            // 1. Current Rank & Wins
-                            const leaderboard = picks.map(p => {
-                                let w = 0;
-                                schedule.forEach(g => {
-                                    if (g.Winner && p[g.Bowl] && p[g.Bowl].toLowerCase() === g.Winner.toLowerCase()) w++;
-                                });
-                                return { name: p.Name, wins: w };
-                            }).sort((a,b) => b.wins - a.wins);
+                    // --- CALCULATIONS ---
+                    const calculateStats = (player) => {
+                        if (!player) return null;
+                        const pData = picks.find(p => p.Name === player);
+                        if (!pData) return null;
 
-                            // Calculate Rank with Ties logic
-                            let currentRank = 1;
-                            for (let i = 0; i < leaderboard.length; i++) {
-                                // If this player has fewer wins than the previous one, update the rank to current index + 1
-                                if (i > 0 && leaderboard[i].wins < leaderboard[i - 1].wins) {
-                                    currentRank = i + 1;
-                                }
-                                leaderboard[i].rank = currentRank;
+                        // 1. Current Rank & Wins
+                        const leaderboard = picks.map(p => {
+                            let w = 0;
+                            schedule.forEach(g => {
+                                if (g.Winner && p[g.Bowl] && p[g.Bowl].toLowerCase() === g.Winner.toLowerCase()) w++;
+                            });
+                            return { name: p.Name, wins: w };
+                        }).sort((a,b) => b.wins - a.wins);
 
-                                // Check if they are tied with someone else
-                                // A tie exists if the player above OR below has the same win count
-                                const prev = leaderboard[i-1];
-                                const next = leaderboard[i+1];
-                                leaderboard[i].isTied = (prev && prev.wins === leaderboard[i].wins) || (next && next.wins === leaderboard[i].wins);
+                        // Calculate Rank with Ties logic
+                        let currentRank = 1;
+                        for (let i = 0; i < leaderboard.length; i++) {
+                            if (i > 0 && leaderboard[i].wins < leaderboard[i - 1].wins) {
+                                currentRank = i + 1;
                             }
+                            leaderboard[i].rank = currentRank;
 
-                            const playerEntry = leaderboard.find(p => p.name === player);
-                            const rank = playerEntry.rank;
-                            const wins = playerEntry.wins;
-                            const isTied = playerEntry.isTied;
+                            const prev = leaderboard[i-1];
+                            const next = leaderboard[i+1];
+                            leaderboard[i].isTied = (prev && prev.wins === leaderboard[i].wins) || (next && next.wins === leaderboard[i].wins);
+                        }
 
-                            // 2. Past Greatness (History)
-                            const pastWinsData = history.filter(h => h.Winner && h.Winner.trim().toLowerCase() === player.toLowerCase());
-                            const titles = pastWinsData.length;
-                            const titleYears = pastWinsData.map(h => h.Year).sort().join(', ');
+                        const playerEntry = leaderboard.find(p => p.name === player);
+                        const rank = playerEntry.rank;
+                        const wins = playerEntry.wins;
+                        const isTied = playerEntry.isTied;
 
-                            // 3. Situationals
-                            const getWinStats = (filterFn) => {
-                                const games = schedule.filter(g => g.Winner && filterFn(g));
-                                if (games.length === 0) return { pct: 0, wins: 0, total: 0 };
-                                let w = 0;
-                                games.forEach(g => {
-                                    if (pData[g.Bowl] && pData[g.Bowl].toLowerCase() === g.Winner.toLowerCase()) w++;
-                                });
-                                return { pct: Math.round((w / games.length) * 100), wins: w, total: games.length };
-                            };
+                        // 2. Past Greatness (History)
+                        const pastWinsData = history.filter(h => h.Winner && h.Winner.trim().toLowerCase() === player.toLowerCase());
+                        const titles = pastWinsData.length;
+                        const titleYears = pastWinsData.map(h => h.Year).sort().join(', ');
 
-                            const getTimeHour = (g) => {
-                                if (!g.Time) return null;
-                                const timeStr = g.Time.trim().toUpperCase();
-                                let [timePart, modifier] = timeStr.split(' ');
-                                if (!modifier) {
-                                     if (timeStr.includes('PM')) { modifier = 'PM'; timePart = timeStr.replace('PM',''); }
-                                     else if (timeStr.includes('AM')) { modifier = 'AM'; timePart = timeStr.replace('AM',''); }
-                                }
-                                let [hours, minutes] = timePart.split(':').map(Number);
-                                if (modifier === 'PM' && hours !== 12) hours += 12;
-                                if (modifier === 'AM' && hours === 12) hours = 0;
-                                return hours;
-                            };
-
-                            const cfp = getWinStats(g => g.CFP);
-                            const b1g = getWinStats(g => g.B1G);
-                            const sec = getWinStats(g => g.SEC);
-
-                            const morning = getWinStats(g => {
-                                const h = getTimeHour(g);
-                                return h !== null && h < 12;
+                        // 3. Situationals
+                        const getWinStats = (filterFn) => {
+                            const games = schedule.filter(g => g.Winner && filterFn(g));
+                            if (games.length === 0) return { pct: 0, wins: 0, total: 0 };
+                            let w = 0;
+                            games.forEach(g => {
+                                if (pData[g.Bowl] && pData[g.Bowl].toLowerCase() === g.Winner.toLowerCase()) w++;
                             });
-                            const afternoon = getWinStats(g => {
-                                const h = getTimeHour(g);
-                                return h !== null && h >= 12 && h < 19;
-                            });
-                            const night = getWinStats(g => {
-                                const h = getTimeHour(g);
-                                return h !== null && h >= 19;
-                            });
-
-                            const espn = getWinStats(g => g.Network && g.Network.toUpperCase().includes('ESPN'));
-                            const abc = getWinStats(g => g.Network && g.Network.toUpperCase().includes('ABC'));
-                            const fox = getWinStats(g => g.Network && g.Network.toUpperCase().includes('FOX'));
-                            const cbs = getWinStats(g => g.Network && g.Network.toUpperCase().includes('CBS'));
-                            const tnt = getWinStats(g => g.Network && g.Network.toUpperCase().includes('TNT'));
-
-                            // 4. Maverick Rating
-                            let maverickScore = 0;
-                            let totalGames = 0;
-                            schedule.forEach(g => {
-                                if (!g.Bowl) return;
-                                const myPick = pData[g.Bowl];
-                                if (!myPick) return;
-
-                                const counts = {};
-                                picks.forEach(p => {
-                                    const pp = p[g.Bowl];
-                                    if (pp) counts[pp] = (counts[pp] || 0) + 1;
-                                });
-                                let maxC = 0; let majority = null;
-                                Object.entries(counts).forEach(([pick, count]) => {
-                                    if (count > maxC) { maxC = count; majority = pick; }
-                                });
-
-                                totalGames++;
-                                if (myPick !== majority) maverickScore++;
-                            });
-                            const maverickPct = totalGames > 0 ? Math.round((maverickScore / totalGames) * 100) : 0;
-
-                            // 5. Nemesis & BFF
-                            let maxDiff = -1; let nemesis = "-";
-                            let maxSame = -1; let bff = "-";
-
-                            picks.forEach(p => {
-                                if (p.Name === player) return;
-                                let diff = 0; let same = 0;
-                                schedule.forEach(g => {
-                                    const myP = pData[g.Bowl];
-                                    const theirP = p[g.Bowl];
-                                    if (myP && theirP) {
-                                        if (myP !== theirP) diff++;
-                                        else same++;
-                                    }
-                                });
-                                if (diff > maxDiff) { maxDiff = diff; nemesis = p.Name; }
-                                if (same > maxSame) { maxSame = same; bff = p.Name; }
-                            });
-
-                            // 6. Streaks Calculation
-                            const completedGames = schedule
-                                .filter(g => g.Winner && g.Date && g.Time)
-                                .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
-
-                            let currentStreak = 0;
-                            let maxWinStreak = 0;
-                            let maxLossStreak = 0;
-                            let tempWin = 0;
-                            let tempLoss = 0;
-
-                            completedGames.forEach(g => {
-                                const pick = pData[g.Bowl];
-                                const winner = g.Winner;
-
-                                if (pick && pick.toLowerCase() === winner.toLowerCase()) {
-                                    tempWin++;
-                                    if (tempWin > maxWinStreak) maxWinStreak = tempWin;
-                                    tempLoss = 0;
-                                    currentStreak = currentStreak >= 0 ? currentStreak + 1 : 1;
-                                } else {
-                                    tempLoss++;
-                                    if (tempLoss > maxLossStreak) maxLossStreak = tempLoss;
-                                    tempWin = 0;
-                                    currentStreak = currentStreak <= 0 ? currentStreak - 1 : -1;
-                                }
-                            });
-
-                            // 7. Ceiling Tracker Logic
-                            const totalGameCount = schedule.filter(g => g.Bowl && g["Team 1"]).length;
-                            const unplayedCount = schedule.filter(g => g.Bowl && g["Team 1"] && !g.Winner).length;
-                            const maxPotential = wins + unplayedCount;
-                            const leaderWins = Math.max(...leaderboard.map(p => p.wins));
-
-                            // 8. Signature Win Logic
-                            let bestWin = null;
-                            let minWinners = Infinity;
-
-                            schedule.forEach(g => {
-                                if (!g.Winner) return;
-                                const myPick = pData[g.Bowl];
-                                if (myPick && myPick.toLowerCase() === g.Winner.toLowerCase()) {
-                                    let gameWinnerCount = 0;
-                                    picks.forEach(p => {
-                                        const theirPick = p[g.Bowl];
-                                        if (theirPick && theirPick.toLowerCase() === g.Winner.toLowerCase()) {
-                                            gameWinnerCount++;
-                                        }
-                                    });
-
-                                    if (gameWinnerCount < minWinners) {
-                                        minWinners = gameWinnerCount;
-                                        bestWin = {
-                                            bowl: g.Bowl,
-                                            team: g.Winner,
-                                            count: gameWinnerCount
-                                        };
-                                    }
-                                }
-                            });
-
-                            return { rank, isTied, wins, titles, titleYears, cfp, b1g, sec, morning, afternoon, night, espn, abc, fox, cbs, tnt, maverickPct, nemesis, bff,
-                                     champ: pData["National Championship"], tiebreaker: pData["Tiebreaker Score"],
-                                     currentStreak, maxWinStreak, maxLossStreak,
-                                     maxPotential, totalGameCount, leaderWins, bestWin };
+                            return { pct: Math.round((w / games.length) * 100), wins: w, total: games.length };
                         };
 
-                        const stats = calculateStats(selectedPlayer);
+                        const getTimeHour = (g) => {
+                            if (!g.Time) return null;
+                            const timeStr = g.Time.trim().toUpperCase();
+                            let [timePart, modifier] = timeStr.split(' ');
+                            if (!modifier) {
+                                 if (timeStr.includes('PM')) { modifier = 'PM'; timePart = timeStr.replace('PM',''); }
+                                 else if (timeStr.includes('AM')) { modifier = 'AM'; timePart = timeStr.replace('AM',''); }
+                            }
+                            let [hours, minutes] = timePart.split(':').map(Number);
+                            if (modifier === 'PM' && hours !== 12) hours += 12;
+                            if (modifier === 'AM' && hours === 12) hours = 0;
+                            return hours;
+                        };
+
+                        const cfp = getWinStats(g => g.CFP);
+                        const b1g = getWinStats(g => g.B1G);
+                        const sec = getWinStats(g => g.SEC);
+
+                        const morning = getWinStats(g => {
+                            const h = getTimeHour(g);
+                            return h !== null && h < 12;
+                        });
+                        const afternoon = getWinStats(g => {
+                            const h = getTimeHour(g);
+                            return h !== null && h >= 12 && h < 19;
+                        });
+                        const night = getWinStats(g => {
+                            const h = getTimeHour(g);
+                            return h !== null && h >= 19;
+                        });
+
+                        const espn = getWinStats(g => g.Network && g.Network.toUpperCase().includes('ESPN'));
+                        const abc = getWinStats(g => g.Network && g.Network.toUpperCase().includes('ABC'));
+                        const fox = getWinStats(g => g.Network && g.Network.toUpperCase().includes('FOX'));
+                        const cbs = getWinStats(g => g.Network && g.Network.toUpperCase().includes('CBS'));
+                        const tnt = getWinStats(g => g.Network && g.Network.toUpperCase().includes('TNT'));
+
+                        // 4. Maverick Rating
+                        let maverickScore = 0;
+                        let totalGames = 0;
+                        schedule.forEach(g => {
+                            if (!g.Bowl) return;
+                            const myPick = pData[g.Bowl];
+                            if (!myPick) return;
+
+                            const counts = {};
+                            picks.forEach(p => {
+                                const pp = p[g.Bowl];
+                                if (pp) counts[pp] = (counts[pp] || 0) + 1;
+                            });
+                            let maxC = 0; let majority = null;
+                            Object.entries(counts).forEach(([pick, count]) => {
+                                if (count > maxC) { maxC = count; majority = pick; }
+                            });
+
+                            totalGames++;
+                            if (myPick !== majority) maverickScore++;
+                        });
+                        const maverickPct = totalGames > 0 ? Math.round((maverickScore / totalGames) * 100) : 0;
+
+                        // 5. Nemesis & BFF
+                        let maxDiff = -1; let nemesis = "-";
+                        let maxSame = -1; let bff = "-";
+
+                        picks.forEach(p => {
+                            if (p.Name === player) return;
+                            let diff = 0; let same = 0;
+                            schedule.forEach(g => {
+                                const myP = pData[g.Bowl];
+                                const theirP = p[g.Bowl];
+                                if (myP && theirP) {
+                                    if (myP !== theirP) diff++;
+                                    else same++;
+                                }
+                            });
+                            if (diff > maxDiff) { maxDiff = diff; nemesis = p.Name; }
+                            if (same > maxSame) { maxSame = same; bff = p.Name; }
+                        });
+
+                        // 6. Streaks Calculation
+                        const completedGames = schedule
+                            .filter(g => g.Winner && g.Date && g.Time)
+                            .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
+
+                        let currentStreak = 0;
+                        let maxWinStreak = 0;
+                        let maxLossStreak = 0;
+                        let tempWin = 0;
+                        let tempLoss = 0;
+
+                        completedGames.forEach(g => {
+                            const pick = pData[g.Bowl];
+                            const winner = g.Winner;
+
+                            if (pick && pick.toLowerCase() === winner.toLowerCase()) {
+                                tempWin++;
+                                if (tempWin > maxWinStreak) maxWinStreak = tempWin;
+                                tempLoss = 0;
+                                currentStreak = currentStreak >= 0 ? currentStreak + 1 : 1;
+                            } else {
+                                tempLoss++;
+                                if (tempLoss > maxLossStreak) maxLossStreak = tempLoss;
+                                tempWin = 0;
+                                currentStreak = currentStreak <= 0 ? currentStreak - 1 : -1;
+                            }
+                        });
+
+                        // 7. Ceiling Tracker Logic
+                        const totalGameCount = schedule.filter(g => g.Bowl && g["Team 1"]).length;
+                        const unplayedCount = schedule.filter(g => g.Bowl && g["Team 1"] && !g.Winner).length;
+                        const maxPotential = wins + unplayedCount;
+                        const leaderWins = Math.max(...leaderboard.map(p => p.wins));
+
+                        // 8. Signature Win Logic
+                        let bestWin = null;
+                        let minWinners = Infinity;
+
+                        schedule.forEach(g => {
+                            if (!g.Winner) return;
+                            const myPick = pData[g.Bowl];
+                            if (myPick && myPick.toLowerCase() === g.Winner.toLowerCase()) {
+                                let gameWinnerCount = 0;
+                                picks.forEach(p => {
+                                    const theirPick = p[g.Bowl];
+                                    if (theirPick && theirPick.toLowerCase() === g.Winner.toLowerCase()) {
+                                        gameWinnerCount++;
+                                    }
+                                });
+
+                                if (gameWinnerCount < minWinners) {
+                                    minWinners = gameWinnerCount;
+                                    bestWin = {
+                                        bowl: g.Bowl,
+                                        team: g.Winner,
+                                        count: gameWinnerCount
+                                    };
+                                }
+                            }
+                        });
+
+                        return { rank, isTied, wins, titles, titleYears, cfp, b1g, sec, morning, afternoon, night, espn, abc, fox, cbs, tnt, maverickPct, nemesis, bff,
+                                 champ: pData["National Championship"], tiebreaker: pData["Tiebreaker Score"],
+                                 currentStreak, maxWinStreak, maxLossStreak,
+                                 maxPotential, totalGameCount, leaderWins, bestWin };
+                    };
+
+                    const stats = calculateStats(selectedPlayer);
+
+                    // Helper component for Team Card
+                    const ChampCard = ({ teamName }) => {
+                        // Remove seed from name for lookup (e.g. "#5 Indiana" -> "Indiana")
+                        // And trim just in case
+                        const cleanName = teamName ? teamName.replace(/#\d+\s*/g, '').trim() : "";
+
+                        // Lookup data from constant (case-insensitive key check if needed, but strict here)
+                        const data = TEAM_DATA[cleanName];
+
+                        // If not found in our list, use generic fallback
+                        if (!data) {
+                            return (
+                                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 relative overflow-hidden">
+                                    <div className="text-xs font-bold text-gray-400 uppercase mb-1 relative z-10">National Championship Pick</div>
+                                    <div className="text-2xl font-black text-gray-900 truncate relative z-10">{teamName || "-"}</div>
+                                    <div className="absolute right-[-10px] bottom-[-10px] text-6xl opacity-5 pointer-events-none">🏆</div>
+                                </div>
+                            );
+                        }
 
                         return (
-                            <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
-                                 <div className="bg-white pt-8 pb-4 px-4">
-                                    <div className="max-w-4xl mx-auto text-center">
-                                        <h2 className="text-3xl text-blue-900 font-bold mb-1">Scouting Report</h2>
-                                        <p className="text-gray-600 text-sm">Deep dive analytics into your favorite people.</p>
+                            <div
+                                className="rounded-xl shadow-md p-4 relative overflow-hidden border-l-4"
+                                style={{
+                                    backgroundColor: 'white',
+                                    borderColor: data.hex,
+                                }}
+                            >
+                                 {/* Background Tint */}
+                                 <div className="absolute inset-0 opacity-5" style={{ backgroundColor: data.hex }}></div>
+
+                                 <div className="flex justify-between items-center relative z-10">
+                                    <div>
+                                        <div className="text-xs font-bold uppercase mb-1" style={{ color: data.hex }}>National Championship Pick</div>
+                                        <div className="text-3xl font-black text-gray-900 leading-none">{cleanName}</div>
+                                        <div className="text-sm font-bold text-gray-400 mt-1">{data.nickname}</div>
+                                    </div>
+                                    <div className="flex-shrink-0 w-20 h-20 -mr-2">
+                                        <img
+                                            src={data.image}
+                                            alt={cleanName}
+                                            className="w-full h-full object-contain drop-shadow-md transform hover:scale-110 transition-transform duration-300"
+                                        />
+                                    </div>
+                                 </div>
+                            </div>
+                        );
+                    };
+
+                    return (
+                        <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
+                             <div className="bg-white pt-8 pb-4 px-4">
+                                <div className="max-w-4xl mx-auto text-center">
+                                    <h2 className="text-3xl text-blue-900 font-bold mb-1">Scouting Report</h2>
+                                    <p className="text-gray-600 text-sm">Deep dive analytics into your favorite people.</p>
+                                </div>
+                            </div>
+
+                            <div className="px-4 max-w-xl mx-auto w-full flex flex-col gap-6">
+                                {/* Selector */}
+                                <div className="relative">
+                                    <select
+                                        value={selectedPlayer}
+                                        onChange={(e) => setSelectedPlayer(e.target.value)}
+                                        className="appearance-none bg-white border border-gray-300 text-gray-900 text-lg rounded-xl focus:ring-blue-500 focus:border-blue-500 block w-full p-4 font-bold shadow-sm text-center"
+                                    >
+                                        {players.map(p => <option key={p} value={p}>{p}</option>)}
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
+                                        <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
                                     </div>
                                 </div>
 
-                                <div className="px-4 max-w-xl mx-auto w-full flex flex-col gap-6">
-                                    {/* Selector */}
-                                    <div className="relative">
-                                        <select
-                                            value={selectedPlayer}
-                                            onChange={(e) => setSelectedPlayer(e.target.value)}
-                                            className="appearance-none bg-white border border-gray-300 text-gray-900 text-lg rounded-xl focus:ring-blue-500 focus:border-blue-500 block w-full p-4 font-bold shadow-sm text-center"
-                                        >
-                                            {players.map(p => <option key={p} value={p}>{p}</option>)}
-                                        </select>
-                                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
-                                            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
-                                        </div>
-                                    </div>
+                                {stats && (
+                                    <>
+                                        {/* Top Card */}
+                                        <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xl relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+                                            <div className="flex justify-between items-center mb-6 relative z-10">
+                                                <div className="text-left">
+                                                    <div className="text-sm text-slate-400 font-bold uppercase tracking-widest">Current Rank</div>
+                                                    <div className="text-5xl font-black text-white">
+                                                        {stats.isTied ? "T-" : ""}{stats.rank}
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-sm text-slate-400 font-bold uppercase tracking-widest">Wins</div>
+                                                    <div className="text-5xl font-black text-yellow-400">{stats.wins}</div>
+                                                </div>
+                                            </div>
 
-                                    {stats && (
-                                        <>
-                                            {/* Top Card */}
-                                            <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xl relative overflow-hidden">
-                                                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
-                                                <div className="flex justify-between items-center mb-6 relative z-10">
-                                                    <div className="text-left">
-                                                        <div className="text-sm text-slate-400 font-bold uppercase tracking-widest">Current Rank</div>
-                                                        <div className="text-5xl font-black text-white">
-                                                            {stats.isTied ? "T-" : ""}{stats.rank}
+                                            {/* PAST GREATNESS BADGE */}
+                                            {stats.titles > 0 ? (
+                                                <div className="bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border border-yellow-500/30 rounded-lg p-3 flex items-center gap-3 relative z-10">
+                                                    <div className="text-2xl">🏆</div>
+                                                    <div>
+                                                        <div className="text-xs font-bold text-yellow-400 uppercase tracking-widest">Past Greatness</div>
+                                                        <div className="text-white font-bold">
+                                                            {stats.titles}-Time Champion <span className="text-yellow-200/70 text-xs font-normal ml-1">({stats.titleYears})</span>
                                                         </div>
                                                     </div>
-                                                    <div className="text-right">
-                                                        <div className="text-sm text-slate-400 font-bold uppercase tracking-widest">Wins</div>
-                                                        <div className="text-5xl font-black text-yellow-400">{stats.wins}</div>
+                                                </div>
+                                            ) : (
+                                                <div className="bg-white/5 border border-white/10 rounded-lg p-3 flex items-center gap-3 relative z-10 opacity-50">
+                                                    <div className="text-2xl grayscale">🏆</div>
+                                                    <div>
+                                                        <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Past Greatness</div>
+                                                        <div className="text-slate-300 font-bold text-sm">Chasing first title</div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Ceiling Tracker */}
+                                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                                            <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex justify-between items-center">
+                                                <h3 className="text-lg font-bold text-gray-900 font-serif">Ceiling Tracker</h3>
+                                                <span className="text-sm font-bold text-blue-600">{stats.maxPotential} Max Wins</span>
+                                            </div>
+                                            <div className="p-5">
+                                                <div className="relative h-6 bg-gray-100 rounded-full w-full overflow-hidden mb-2">
+                                                    {/* Current Wins */}
+                                                    <div
+                                                        className="absolute top-0 bottom-0 left-0 bg-blue-600 transition-all duration-1000 z-10"
+                                                        style={{ width: `${(stats.wins / stats.totalGameCount) * 100}%` }}
+                                                    ></div>
+                                                    {/* Potential Wins */}
+                                                    <div
+                                                        className="absolute top-0 bottom-0 left-0 bg-blue-200 transition-all duration-1000"
+                                                        style={{ width: `${(stats.maxPotential / stats.totalGameCount) * 100}%` }}
+                                                    ></div>
+                                                    {/* Leader Line */}
+                                                    <div
+                                                        className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 shadow-[0_0_8px_rgba(239,68,68,0.6)]"
+                                                        style={{ left: `${(stats.leaderWins / stats.totalGameCount) * 100}%` }}
+                                                    ></div>
+                                                </div>
+                                                <div className="flex justify-between text-xs font-bold text-gray-400 uppercase tracking-wide">
+                                                    <span>Current: {stats.wins}</span>
+                                                    <span className="text-red-500">Leader: {stats.leaderWins}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* NEW: Extravagant Vitals (Champ ONLY) */}
+                                        <div className="space-y-4">
+                                            <ChampCard teamName={stats.champ} />
+                                        </div>
+
+                                        {/* Relationships (Small Cards) */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <div className="text-xs font-bold text-gray-400 uppercase">Nemesis</div>
+                                                </div>
+                                                <div className="text-lg font-black text-red-600 truncate">{stats.nemesis}</div>
+                                                <div className="text-[10px] text-gray-500 mt-0.5">Most differing picks</div>
+                                            </div>
+                                            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <div className="text-xs font-bold text-gray-400 uppercase">Best Friend</div>
+                                                </div>
+                                                <div className="text-lg font-black text-green-600 truncate">{stats.bff}</div>
+                                                <div className="text-[10px] text-gray-500 mt-0.5">Most shared picks</div>
+                                            </div>
+                                        </div>
+
+                                        {/* Streaks Card */}
+                                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                                            <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
+                                                <h3 className="text-lg font-bold text-gray-900 font-serif">Season Streaks</h3>
+                                            </div>
+                                            <div className="p-4 grid grid-cols-3 gap-2 text-center divide-x divide-gray-100">
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-400 uppercase mb-1">Current</div>
+                                                    <div className={`text-xl font-black ${stats.currentStreak > 0 ? 'text-green-600' : stats.currentStreak < 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                                                        {stats.currentStreak > 0 ? `W${stats.currentStreak}` : stats.currentStreak < 0 ? `L${Math.abs(stats.currentStreak)}` : '-'}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-400 uppercase mb-1">Longest Win</div>
+                                                    <div className="text-xl font-black text-green-600">
+                                                        W{stats.maxWinStreak}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-400 uppercase mb-1">Longest Loss</div>
+                                                    <div className="text-xl font-black text-red-600">
+                                                        L{stats.maxLossStreak}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Signature Win Card */}
+                                        {stats.bestWin && (
+                                            <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 shadow-sm p-5 relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 text-6xl opacity-10 pointer-events-none">🌟</div>
+                                                <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-1">Signature Win</h3>
+                                                <div className="text-lg font-black text-indigo-900 leading-tight mb-2">
+                                                    Picked {stats.bestWin.team} in the {stats.bestWin.bowl}
+                                                </div>
+                                                <div className="inline-block bg-white border border-indigo-200 text-indigo-600 text-xs font-bold px-2 py-1 rounded shadow-sm">
+                                                    {stats.bestWin.count === 1
+                                                        ? "Only player to pick this!"
+                                                        : `Only ${stats.bestWin.count} players picked this`}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Skills Breakdown */}
+                                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                                            <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
+                                                <h3 className="text-lg font-bold text-gray-900 font-serif">Performance Grades</h3>
+                                            </div>
+                                            <div className="p-5 space-y-4">
+                                                <div>
+                                                    <div className="flex justify-between text-sm font-bold mb-1">
+                                                        <span className="text-yellow-700">Playoffs <span className="text-gray-400 font-normal ml-1">({stats.cfp.wins} of {stats.cfp.total})</span></span>
+                                                        <span className="text-yellow-900">{stats.cfp.pct}%</span>
+                                                    </div>
+                                                    <div className="w-full bg-gray-100 rounded-full h-2">
+                                                        <div className="bg-yellow-500 h-2 rounded-full" style={{ width: `${stats.cfp.pct}%` }}></div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div className="flex justify-between text-sm font-bold mb-1">
+                                                        <span className="text-indigo-900">Big Ten conference matchups <span className="text-gray-400 font-normal ml-1">({stats.b1g.wins} of {stats.b1g.total})</span></span>
+                                                        <span className="text-indigo-700">{stats.b1g.pct}%</span>
+                                                    </div>
+                                                    <div className="w-full bg-gray-100 rounded-full h-2">
+                                                        <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${stats.b1g.pct}%` }}></div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div className="flex justify-between text-sm font-bold mb-1">
+                                                        <span className="text-blue-900">SEC conference matchups <span className="text-gray-400 font-normal ml-1">({stats.sec.wins} of {stats.sec.total})</span></span>
+                                                        <span className="text-blue-700">{stats.sec.pct}%</span>
+                                                    </div>
+                                                    <div className="w-full bg-gray-100 rounded-full h-2">
+                                                        <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${stats.sec.pct}%` }}></div>
                                                     </div>
                                                 </div>
 
-                                    {/* PAST GREATNESS BADGE */}
-                                    {stats.titles > 0 ? (
-                                        <div className="bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border border-yellow-500/30 rounded-lg p-3 flex items-center gap-3 relative z-10">
-                                            <div className="text-2xl">🏆</div>
-                                            <div>
-                                                <div className="text-xs font-bold text-yellow-400 uppercase tracking-widest">Past Greatness</div>
-                                                <div className="text-white font-bold">
-                                                    {stats.titles}-Time Champion <span className="text-yellow-200/70 text-xs font-normal ml-1">({stats.titleYears})</span>
+                                                <div className="border-t border-gray-100 pt-4 space-y-4">
+                                                    <div>
+                                                        <div className="flex justify-between text-sm font-bold mb-1">
+                                                            <span className="text-orange-900">Morning Games <span className="text-gray-400 font-normal ml-1">({stats.morning.wins} of {stats.morning.total})</span></span>
+                                                            <span className="text-orange-700">{stats.morning.pct}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-100 rounded-full h-2">
+                                                            <div className="bg-orange-400 h-2 rounded-full" style={{ width: `${stats.morning.pct}%` }}></div>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex justify-between text-sm font-bold mb-1">
+                                                            <span className="text-sky-900">Afternoon Games <span className="text-gray-400 font-normal ml-1">({stats.afternoon.wins} of {stats.afternoon.total})</span></span>
+                                                            <span className="text-sky-700">{stats.afternoon.pct}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-100 rounded-full h-2">
+                                                            <div className="bg-sky-500 h-2 rounded-full" style={{ width: `${stats.afternoon.pct}%` }}></div>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex justify-between text-sm font-bold mb-1">
+                                                            <span className="text-purple-900">Night Games <span className="text-gray-400 font-normal ml-1">({stats.night.wins} of {stats.night.total})</span></span>
+                                                            <span className="text-purple-700">{stats.night.pct}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-100 rounded-full h-2">
+                                                            <div className="bg-purple-600 h-2 rounded-full" style={{ width: `${stats.night.pct}%` }}></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="border-t border-gray-100 pt-4 space-y-4">
+                                                    <div>
+                                                        <div className="flex justify-between text-sm font-bold mb-1">
+                                                            <span className="text-red-900">ESPN <span className="text-gray-400 font-normal ml-1">({stats.espn.wins} of {stats.espn.total})</span></span>
+                                                            <span className="text-red-700">{stats.espn.pct}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-100 rounded-full h-2">
+                                                            <div className="bg-red-600 h-2 rounded-full" style={{ width: `${stats.espn.pct}%` }}></div>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex justify-between text-sm font-bold mb-1">
+                                                            <span className="text-gray-900">ABC <span className="text-gray-400 font-normal ml-1">({stats.abc.wins} of {stats.abc.total})</span></span>
+                                                            <span className="text-gray-700">{stats.abc.pct}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-100 rounded-full h-2">
+                                                            <div className="bg-gray-900 h-2 rounded-full" style={{ width: `${stats.abc.pct}%` }}></div>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex justify-between text-sm font-bold mb-1">
+                                                            <span className="text-blue-900">FOX <span className="text-gray-400 font-normal ml-1">({stats.fox.wins} of {stats.fox.total})</span></span>
+                                                            <span className="text-blue-700">{stats.fox.pct}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-100 rounded-full h-2">
+                                                            <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${stats.fox.pct}%` }}></div>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex justify-between text-sm font-bold mb-1">
+                                                            <span className="text-sky-900">CBS <span className="text-gray-400 font-normal ml-1">({stats.cbs.wins} of {stats.cbs.total})</span></span>
+                                                            <span className="text-sky-700">{stats.cbs.pct}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-100 rounded-full h-2">
+                                                            <div className="bg-sky-500 h-2 rounded-full" style={{ width: `${stats.cbs.pct}%` }}></div>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex justify-between text-sm font-bold mb-1">
+                                                            <span className="text-pink-900">TNT <span className="text-gray-400 font-normal ml-1">({stats.tnt.wins} of {stats.tnt.total})</span></span>
+                                                            <span className="text-pink-700">{stats.tnt.pct}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-100 rounded-full h-2">
+                                                            <div className="bg-pink-600 h-2 rounded-full" style={{ width: `${stats.tnt.pct}%` }}></div>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    ) : (
-                                        <div className="bg-white/5 border border-white/10 rounded-lg p-3 flex items-center gap-3 relative z-10 opacity-50">
-                                            <div className="text-2xl grayscale">🏆</div>
-                                            <div>
-                                                <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Past Greatness</div>
-                                                <div className="text-slate-300 font-bold text-sm">Chasing first title</div>
+
+                                        {/* Style Meter */}
+                                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                                            <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
+                                                <h3 className="text-lg font-bold text-gray-900 font-serif">Style Rating</h3>
+                                            </div>
+                                            <div className="p-5">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <span className="text-sm font-bold text-gray-400 uppercase">🐑 Sheep</span>
+                                                    <span className="text-sm font-bold text-gray-400 uppercase">Maverick 🤠</span>
+                                                </div>
+                                                <div className="relative h-4 bg-gray-100 rounded-full w-full overflow-hidden">
+                                                    <div className="absolute top-0 bottom-0 left-0 bg-blue-500/20 w-full"></div>
+                                                    <div
+                                                        className="absolute top-0 bottom-0 bg-blue-600 w-2 rounded-full shadow-md transition-all duration-500"
+                                                        style={{ left: `${stats.maverickPct}%` }}
+                                                    ></div>
+                                                </div>
+                                                <div className="text-center mt-2 text-sm font-bold text-gray-500">
+                                                    {stats.maverickPct < 20 ? "Follows the Herd" : stats.maverickPct > 40 ? "Lone Wolf" : "Balanced Picker"} ({stats.maverickPct}%)
+                                                </div>
+                                                <p className="text-xs text-gray-400 text-center mt-3 px-2 leading-relaxed">
+                                                    This rating measures how often a player picks with the majority consensus (Sheep) versus picking against the group (Maverick). A lower percentage means you tend to agree with everyone else; a higher percentage means you like to go it alone.
+                                                </p>
                                             </div>
                                         </div>
-                                    )}
-                                </div>
-
-                                {/* Ceiling Tracker */}
-                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                                    <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex justify-between items-center">
-                                        <h3 className="text-lg font-bold text-gray-900 font-serif">Ceiling Tracker</h3>
-                                        <span className="text-sm font-bold text-blue-600">{stats.maxPotential} Max Wins</span>
-                                    </div>
-                                    <div className="p-5">
-                                        <div className="relative h-6 bg-gray-100 rounded-full w-full overflow-hidden mb-2">
-                                            {/* Current Wins */}
-                                            <div
-                                                className="absolute top-0 bottom-0 left-0 bg-blue-600 transition-all duration-1000 z-10"
-                                                style={{ width: `${(stats.wins / stats.totalGameCount) * 100}%` }}
-                                            ></div>
-                                            {/* Potential Wins */}
-                                            <div
-                                                className="absolute top-0 bottom-0 left-0 bg-blue-200 transition-all duration-1000"
-                                                style={{ width: `${(stats.maxPotential / stats.totalGameCount) * 100}%` }}
-                                            ></div>
-                                            {/* Leader Line */}
-                                            <div
-                                                className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 shadow-[0_0_8px_rgba(239,68,68,0.6)]"
-                                                style={{ left: `${(stats.leaderWins / stats.totalGameCount) * 100}%` }}
-                                            ></div>
-                                        </div>
-                                        <div className="flex justify-between text-xs font-bold text-gray-400 uppercase tracking-wide">
-                                            <span>Current: {stats.wins}</span>
-                                            <span className="text-red-500">Leader: {stats.leaderWins}</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Vitals Grid */}
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                                        <div className="text-xs font-bold text-gray-400 uppercase mb-1">Champ Pick</div>
-                                        <div className="text-lg font-black text-blue-900 truncate">{stats.champ}</div>
-                                    </div>
-                                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                                        <div className="text-xs font-bold text-gray-400 uppercase mb-1">Tiebreaker</div>
-                                        <div className="text-lg font-black text-blue-900">{stats.tiebreaker} pts</div>
-                                    </div>
-                                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <div className="text-xs font-bold text-gray-400 uppercase">Nemesis</div>
-                                        </div>
-                                        <div className="text-lg font-black text-red-600 truncate">{stats.nemesis}</div>
-                                        <div className="text-[10px] text-gray-500 mt-0.5">Most differing picks</div>
-                                    </div>
-                                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <div className="text-xs font-bold text-gray-400 uppercase">Best Friend</div>
-                                        </div>
-                                        <div className="text-lg font-black text-green-600 truncate">{stats.bff}</div>
-                                        <div className="text-[10px] text-gray-500 mt-0.5">Most shared picks</div>
-                                    </div>
-                                </div>
-
-                                {/* Streaks Card */}
-                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                                    <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
-                                        <h3 className="text-lg font-bold text-gray-900 font-serif">Season Streaks</h3>
-                                    </div>
-                                    <div className="p-4 grid grid-cols-3 gap-2 text-center divide-x divide-gray-100">
-                                        <div>
-                                            <div className="text-xs font-bold text-gray-400 uppercase mb-1">Current</div>
-                                            <div className={`text-xl font-black ${stats.currentStreak > 0 ? 'text-green-600' : stats.currentStreak < 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                                                {stats.currentStreak > 0 ? `W${stats.currentStreak}` : stats.currentStreak < 0 ? `L${Math.abs(stats.currentStreak)}` : '-'}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div className="text-xs font-bold text-gray-400 uppercase mb-1">Longest Win</div>
-                                            <div className="text-xl font-black text-green-600">
-                                                W{stats.maxWinStreak}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div className="text-xs font-bold text-gray-400 uppercase mb-1">Longest Loss</div>
-                                            <div className="text-xl font-black text-red-600">
-                                                L{stats.maxLossStreak}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Signature Win Card */}
-                                {stats.bestWin && (
-                                    <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 shadow-sm p-5 relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 text-6xl opacity-10 pointer-events-none">🌟</div>
-                                        <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-1">Signature Win</h3>
-                                        <div className="text-lg font-black text-indigo-900 leading-tight mb-2">
-                                            Picked {stats.bestWin.team} in the {stats.bestWin.bowl}
-                                        </div>
-                                        <div className="inline-block bg-white border border-indigo-200 text-indigo-600 text-xs font-bold px-2 py-1 rounded shadow-sm">
-                                            {stats.bestWin.count === 1
-                                                ? "Only player to pick this!"
-                                                : `Only ${stats.bestWin.count} players picked this`}
-                                        </div>
-                                    </div>
+                                    </>
                                 )}
-
-                                {/* Skills Breakdown */}
-                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                                    <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
-                                        <h3 className="text-lg font-bold text-gray-900 font-serif">Performance Grades</h3>
-                                    </div>
-                                    <div className="p-5 space-y-4">
-                                        <div>
-                                            <div className="flex justify-between text-sm font-bold mb-1">
-                                                <span className="text-yellow-700">Playoffs <span className="text-gray-400 font-normal ml-1">({stats.cfp.wins} of {stats.cfp.total})</span></span>
-                                                <span className="text-yellow-900">{stats.cfp.pct}%</span>
-                                            </div>
-                                            <div className="w-full bg-gray-100 rounded-full h-2">
-                                                <div className="bg-yellow-500 h-2 rounded-full" style={{ width: `${stats.cfp.pct}%` }}></div>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div className="flex justify-between text-sm font-bold mb-1">
-                                                <span className="text-indigo-900">Big Ten conference matchups <span className="text-gray-400 font-normal ml-1">({stats.b1g.wins} of {stats.b1g.total})</span></span>
-                                                <span className="text-indigo-700">{stats.b1g.pct}%</span>
-                                            </div>
-                                            <div className="w-full bg-gray-100 rounded-full h-2">
-                                                <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${stats.b1g.pct}%` }}></div>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div className="flex justify-between text-sm font-bold mb-1">
-                                                <span className="text-blue-900">SEC conference matchups <span className="text-gray-400 font-normal ml-1">({stats.sec.wins} of {stats.sec.total})</span></span>
-                                                <span className="text-blue-700">{stats.sec.pct}%</span>
-                                            </div>
-                                            <div className="w-full bg-gray-100 rounded-full h-2">
-                                                <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${stats.sec.pct}%` }}></div>
-                                            </div>
-                                        </div>
-
-                                        <div className="border-t border-gray-100 pt-4 space-y-4">
-                                            <div>
-                                                <div className="flex justify-between text-sm font-bold mb-1">
-                                                    <span className="text-orange-900">Morning Games <span className="text-gray-400 font-normal ml-1">({stats.morning.wins} of {stats.morning.total})</span></span>
-                                                    <span className="text-orange-700">{stats.morning.pct}%</span>
-                                                </div>
-                                                <div className="w-full bg-gray-100 rounded-full h-2">
-                                                    <div className="bg-orange-400 h-2 rounded-full" style={{ width: `${stats.morning.pct}%` }}></div>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div className="flex justify-between text-sm font-bold mb-1">
-                                                    <span className="text-sky-900">Afternoon Games <span className="text-gray-400 font-normal ml-1">({stats.afternoon.wins} of {stats.afternoon.total})</span></span>
-                                                    <span className="text-sky-700">{stats.afternoon.pct}%</span>
-                                                </div>
-                                                <div className="w-full bg-gray-100 rounded-full h-2">
-                                                    <div className="bg-sky-500 h-2 rounded-full" style={{ width: `${stats.afternoon.pct}%` }}></div>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div className="flex justify-between text-sm font-bold mb-1">
-                                                    <span className="text-purple-900">Night Games <span className="text-gray-400 font-normal ml-1">({stats.night.wins} of {stats.night.total})</span></span>
-                                                    <span className="text-purple-700">{stats.night.pct}%</span>
-                                                </div>
-                                                <div className="w-full bg-gray-100 rounded-full h-2">
-                                                    <div className="bg-purple-600 h-2 rounded-full" style={{ width: `${stats.night.pct}%` }}></div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="border-t border-gray-100 pt-4 space-y-4">
-                                            <div>
-                                                <div className="flex justify-between text-sm font-bold mb-1">
-                                                    <span className="text-red-900">ESPN <span className="text-gray-400 font-normal ml-1">({stats.espn.wins} of {stats.espn.total})</span></span>
-                                                    <span className="text-red-700">{stats.espn.pct}%</span>
-                                                </div>
-                                                <div className="w-full bg-gray-100 rounded-full h-2">
-                                                    <div className="bg-red-600 h-2 rounded-full" style={{ width: `${stats.espn.pct}%` }}></div>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div className="flex justify-between text-sm font-bold mb-1">
-                                                    <span className="text-gray-900">ABC <span className="text-gray-400 font-normal ml-1">({stats.abc.wins} of {stats.abc.total})</span></span>
-                                                    <span className="text-gray-700">{stats.abc.pct}%</span>
-                                                </div>
-                                                <div className="w-full bg-gray-100 rounded-full h-2">
-                                                    <div className="bg-gray-900 h-2 rounded-full" style={{ width: `${stats.abc.pct}%` }}></div>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div className="flex justify-between text-sm font-bold mb-1">
-                                                    <span className="text-blue-900">FOX <span className="text-gray-400 font-normal ml-1">({stats.fox.wins} of {stats.fox.total})</span></span>
-                                                    <span className="text-blue-700">{stats.fox.pct}%</span>
-                                                </div>
-                                                <div className="w-full bg-gray-100 rounded-full h-2">
-                                                    <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${stats.fox.pct}%` }}></div>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div className="flex justify-between text-sm font-bold mb-1">
-                                                    <span className="text-sky-900">CBS <span className="text-gray-400 font-normal ml-1">({stats.cbs.wins} of {stats.cbs.total})</span></span>
-                                                    <span className="text-sky-700">{stats.cbs.pct}%</span>
-                                                </div>
-                                                <div className="w-full bg-gray-100 rounded-full h-2">
-                                                    <div className="bg-sky-500 h-2 rounded-full" style={{ width: `${stats.cbs.pct}%` }}></div>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div className="flex justify-between text-sm font-bold mb-1">
-                                                    <span className="text-pink-900">TNT <span className="text-gray-400 font-normal ml-1">({stats.tnt.wins} of {stats.tnt.total})</span></span>
-                                                    <span className="text-pink-700">{stats.tnt.pct}%</span>
-                                                </div>
-                                                <div className="w-full bg-gray-100 rounded-full h-2">
-                                                    <div className="bg-pink-600 h-2 rounded-full" style={{ width: `${stats.tnt.pct}%` }}></div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Style Meter */}
-                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                                    <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
-                                        <h3 className="text-lg font-bold text-gray-900 font-serif">Style Rating</h3>
-                                    </div>
-                                    <div className="p-5">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-sm font-bold text-gray-400 uppercase">🐑 Sheep</span>
-                                            <span className="text-sm font-bold text-gray-400 uppercase">Maverick 🤠</span>
-                                        </div>
-                                        <div className="relative h-4 bg-gray-100 rounded-full w-full overflow-hidden">
-                                            <div className="absolute top-0 bottom-0 left-0 bg-blue-500/20 w-full"></div>
-                                            <div
-                                                className="absolute top-0 bottom-0 bg-blue-600 w-2 rounded-full shadow-md transition-all duration-500"
-                                                style={{ left: `${stats.maverickPct}%` }}
-                                            ></div>
-                                        </div>
-                                        <div className="text-center mt-2 text-sm font-bold text-gray-500">
-                                            {stats.maverickPct < 20 ? "Follows the Herd" : stats.maverickPct > 40 ? "Lone Wolf" : "Balanced Picker"} ({stats.maverickPct}%)
-                                        </div>
-                                        <p className="text-xs text-gray-400 text-center mt-3 px-2 leading-relaxed">
-                                            This rating measures how often a player picks with the majority consensus (Sheep) versus picking against the group (Maverick). A lower percentage means you tend to agree with everyone else; a higher percentage means you like to go it alone.
-                                        </p>
-                                    </div>
-                                </div>
-                            </>
-                        )}
-                    </div>
-                </div>
-            );
-        };
+                            </div>
+                        </div>
+                    );
+                };
 
         // 8. HISTORY PAGE
         const HistoryPage = () => {
