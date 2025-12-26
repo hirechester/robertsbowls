@@ -3212,232 +3212,246 @@
             if (loading) return <LoadingSpinner text="Scouting players..." />;
 
             // --- CALCULATIONS ---
-            const calculateStats = (player) => {
-                if (!player) return null;
-                const pData = picks.find(p => p.Name === player);
-                if (!pData) return null;
+                        const calculateStats = (player) => {
+                            if (!player) return null;
+                            const pData = picks.find(p => p.Name === player);
+                            if (!pData) return null;
 
-                // 1. Current Rank & Wins
-                const leaderboard = picks.map(p => {
-                    let w = 0;
-                    schedule.forEach(g => {
-                        if (g.Winner && p[g.Bowl] && p[g.Bowl].toLowerCase() === g.Winner.toLowerCase()) w++;
-                    });
-                    return { name: p.Name, wins: w };
-                }).sort((a,b) => b.wins - a.wins);
+                            // 1. Current Rank & Wins
+                            const leaderboard = picks.map(p => {
+                                let w = 0;
+                                schedule.forEach(g => {
+                                    if (g.Winner && p[g.Bowl] && p[g.Bowl].toLowerCase() === g.Winner.toLowerCase()) w++;
+                                });
+                                return { name: p.Name, wins: w };
+                            }).sort((a,b) => b.wins - a.wins);
 
-                const rank = leaderboard.findIndex(p => p.name === player) + 1;
-                const wins = leaderboard.find(p => p.name === player).wins;
+                            // Calculate Rank with Ties logic
+                            let currentRank = 1;
+                            for (let i = 0; i < leaderboard.length; i++) {
+                                // If this player has fewer wins than the previous one, update the rank to current index + 1
+                                if (i > 0 && leaderboard[i].wins < leaderboard[i - 1].wins) {
+                                    currentRank = i + 1;
+                                }
+                                leaderboard[i].rank = currentRank;
 
-                // 2. Past Greatness (History)
-                const pastWinsData = history.filter(h => h.Winner && h.Winner.trim().toLowerCase() === player.toLowerCase());
-                const titles = pastWinsData.length;
-                const titleYears = pastWinsData.map(h => h.Year).sort().join(', ');
-
-                // 3. Situationals
-                const getWinStats = (filterFn) => {
-                    const games = schedule.filter(g => g.Winner && filterFn(g));
-                    if (games.length === 0) return { pct: 0, wins: 0, total: 0 };
-                    let w = 0;
-                    games.forEach(g => {
-                        if (pData[g.Bowl] && pData[g.Bowl].toLowerCase() === g.Winner.toLowerCase()) w++;
-                    });
-                    return { pct: Math.round((w / games.length) * 100), wins: w, total: games.length };
-                };
-
-                const getTimeHour = (g) => {
-                    if (!g.Time) return null;
-                    const timeStr = g.Time.trim().toUpperCase();
-                    let [timePart, modifier] = timeStr.split(' ');
-                    if (!modifier) {
-                         if (timeStr.includes('PM')) { modifier = 'PM'; timePart = timeStr.replace('PM',''); }
-                         else if (timeStr.includes('AM')) { modifier = 'AM'; timePart = timeStr.replace('AM',''); }
-                    }
-                    let [hours, minutes] = timePart.split(':').map(Number);
-                    if (modifier === 'PM' && hours !== 12) hours += 12;
-                    if (modifier === 'AM' && hours === 12) hours = 0;
-                    return hours;
-                };
-
-                const cfp = getWinStats(g => g.CFP);
-                const b1g = getWinStats(g => g.B1G);
-                const sec = getWinStats(g => g.SEC);
-
-                const morning = getWinStats(g => {
-                    const h = getTimeHour(g);
-                    return h !== null && h < 12;
-                });
-                const afternoon = getWinStats(g => {
-                    const h = getTimeHour(g);
-                    return h !== null && h >= 12 && h < 19;
-                });
-                const night = getWinStats(g => {
-                    const h = getTimeHour(g);
-                    return h !== null && h >= 19;
-                });
-
-                const espn = getWinStats(g => g.Network && g.Network.toUpperCase().includes('ESPN'));
-                const abc = getWinStats(g => g.Network && g.Network.toUpperCase().includes('ABC'));
-                const fox = getWinStats(g => g.Network && g.Network.toUpperCase().includes('FOX'));
-                const cbs = getWinStats(g => g.Network && g.Network.toUpperCase().includes('CBS'));
-                const tnt = getWinStats(g => g.Network && g.Network.toUpperCase().includes('TNT'));
-
-                // 4. Maverick Rating
-                // Compare picks to majority
-                let maverickScore = 0;
-                let totalGames = 0;
-                schedule.forEach(g => {
-                    if (!g.Bowl) return;
-                    const myPick = pData[g.Bowl];
-                    if (!myPick) return;
-
-                    // Find majority
-                    const counts = {};
-                    picks.forEach(p => {
-                        const pp = p[g.Bowl];
-                        if (pp) counts[pp] = (counts[pp] || 0) + 1;
-                    });
-                    let maxC = 0; let majority = null;
-                    Object.entries(counts).forEach(([pick, count]) => {
-                        if (count > maxC) { maxC = count; majority = pick; }
-                    });
-
-                    totalGames++;
-                    if (myPick !== majority) maverickScore++;
-                });
-                const maverickPct = totalGames > 0 ? Math.round((maverickScore / totalGames) * 100) : 0;
-
-                // 5. Nemesis & BFF
-                let maxDiff = -1; let nemesis = "-";
-                let maxSame = -1; let bff = "-";
-
-                picks.forEach(p => {
-                    if (p.Name === player) return;
-                    let diff = 0; let same = 0;
-                    schedule.forEach(g => {
-                        const myP = pData[g.Bowl];
-                        const theirP = p[g.Bowl];
-                        if (myP && theirP) {
-                            if (myP !== theirP) diff++;
-                            else same++;
-                        }
-                    });
-                    if (diff > maxDiff) { maxDiff = diff; nemesis = p.Name; }
-                    if (same > maxSame) { maxSame = same; bff = p.Name; }
-                });
-
-                // 6. Streaks Calculation
-                const completedGames = schedule
-                    .filter(g => g.Winner && g.Date && g.Time)
-                    .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
-
-                let currentStreak = 0;
-                let maxWinStreak = 0;
-                let maxLossStreak = 0;
-                let tempWin = 0;
-                let tempLoss = 0;
-
-                completedGames.forEach(g => {
-                    const pick = pData[g.Bowl];
-                    const winner = g.Winner;
-
-                    // Note: Treating a missing pick as a loss
-                    if (pick && pick.toLowerCase() === winner.toLowerCase()) {
-                        // Win
-                        tempWin++;
-                        if (tempWin > maxWinStreak) maxWinStreak = tempWin;
-                        tempLoss = 0;
-                        currentStreak = currentStreak >= 0 ? currentStreak + 1 : 1;
-                    } else {
-                        // Loss
-                        tempLoss++;
-                        if (tempLoss > maxLossStreak) maxLossStreak = tempLoss;
-                        tempWin = 0;
-                        currentStreak = currentStreak <= 0 ? currentStreak - 1 : -1;
-                    }
-                });
-
-                // 7. Ceiling Tracker Logic
-                const totalGameCount = schedule.filter(g => g.Bowl && g["Team 1"]).length;
-                const unplayedCount = schedule.filter(g => g.Bowl && g["Team 1"] && !g.Winner).length;
-                const maxPotential = wins + unplayedCount;
-                const leaderWins = Math.max(...leaderboard.map(p => p.wins));
-
-                // 8. Signature Win Logic
-                let bestWin = null;
-                let minWinners = Infinity;
-
-                schedule.forEach(g => {
-                    if (!g.Winner) return;
-                    const myPick = pData[g.Bowl];
-                    if (myPick && myPick.toLowerCase() === g.Winner.toLowerCase()) {
-                        // Check scarcity
-                        let gameWinnerCount = 0;
-                        picks.forEach(p => {
-                            const theirPick = p[g.Bowl];
-                            if (theirPick && theirPick.toLowerCase() === g.Winner.toLowerCase()) {
-                                gameWinnerCount++;
+                                // Check if they are tied with someone else
+                                // A tie exists if the player above OR below has the same win count
+                                const prev = leaderboard[i-1];
+                                const next = leaderboard[i+1];
+                                leaderboard[i].isTied = (prev && prev.wins === leaderboard[i].wins) || (next && next.wins === leaderboard[i].wins);
                             }
-                        });
 
-                        if (gameWinnerCount < minWinners) {
-                            minWinners = gameWinnerCount;
-                            bestWin = {
-                                bowl: g.Bowl,
-                                team: g.Winner,
-                                count: gameWinnerCount // Total people including self
+                            const playerEntry = leaderboard.find(p => p.name === player);
+                            const rank = playerEntry.rank;
+                            const wins = playerEntry.wins;
+                            const isTied = playerEntry.isTied;
+
+                            // 2. Past Greatness (History)
+                            const pastWinsData = history.filter(h => h.Winner && h.Winner.trim().toLowerCase() === player.toLowerCase());
+                            const titles = pastWinsData.length;
+                            const titleYears = pastWinsData.map(h => h.Year).sort().join(', ');
+
+                            // 3. Situationals
+                            const getWinStats = (filterFn) => {
+                                const games = schedule.filter(g => g.Winner && filterFn(g));
+                                if (games.length === 0) return { pct: 0, wins: 0, total: 0 };
+                                let w = 0;
+                                games.forEach(g => {
+                                    if (pData[g.Bowl] && pData[g.Bowl].toLowerCase() === g.Winner.toLowerCase()) w++;
+                                });
+                                return { pct: Math.round((w / games.length) * 100), wins: w, total: games.length };
                             };
-                        }
-                    }
-                });
 
-                return { rank, wins, titles, titleYears, cfp, b1g, sec, morning, afternoon, night, espn, abc, fox, cbs, tnt, maverickPct, nemesis, bff,
-                         champ: pData["National Championship"], tiebreaker: pData["Tiebreaker Score"],
-                         currentStreak, maxWinStreak, maxLossStreak,
-                         maxPotential, totalGameCount, leaderWins, bestWin };
-            };
+                            const getTimeHour = (g) => {
+                                if (!g.Time) return null;
+                                const timeStr = g.Time.trim().toUpperCase();
+                                let [timePart, modifier] = timeStr.split(' ');
+                                if (!modifier) {
+                                     if (timeStr.includes('PM')) { modifier = 'PM'; timePart = timeStr.replace('PM',''); }
+                                     else if (timeStr.includes('AM')) { modifier = 'AM'; timePart = timeStr.replace('AM',''); }
+                                }
+                                let [hours, minutes] = timePart.split(':').map(Number);
+                                if (modifier === 'PM' && hours !== 12) hours += 12;
+                                if (modifier === 'AM' && hours === 12) hours = 0;
+                                return hours;
+                            };
 
-            const stats = calculateStats(selectedPlayer);
+                            const cfp = getWinStats(g => g.CFP);
+                            const b1g = getWinStats(g => g.B1G);
+                            const sec = getWinStats(g => g.SEC);
 
-            return (
-                <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
-                     <div className="bg-white pt-8 pb-4 px-4">
-                        <div className="max-w-4xl mx-auto text-center">
-                            <h2 className="text-3xl text-blue-900 font-bold mb-1">Scouting Report</h2>
-                            <p className="text-gray-600 text-sm">Deep dive analytics into your favorite people.</p>
-                        </div>
-                    </div>
+                            const morning = getWinStats(g => {
+                                const h = getTimeHour(g);
+                                return h !== null && h < 12;
+                            });
+                            const afternoon = getWinStats(g => {
+                                const h = getTimeHour(g);
+                                return h !== null && h >= 12 && h < 19;
+                            });
+                            const night = getWinStats(g => {
+                                const h = getTimeHour(g);
+                                return h !== null && h >= 19;
+                            });
 
-                    <div className="px-4 max-w-xl mx-auto w-full flex flex-col gap-6">
-                        {/* Selector */}
-                        <div className="relative">
-                            <select
-                                value={selectedPlayer}
-                                onChange={(e) => setSelectedPlayer(e.target.value)}
-                                className="appearance-none bg-white border border-gray-300 text-gray-900 text-lg rounded-xl focus:ring-blue-500 focus:border-blue-500 block w-full p-4 font-bold shadow-sm text-center"
-                            >
-                                {players.map(p => <option key={p} value={p}>{p}</option>)}
-                            </select>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
-                                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
-                            </div>
-                        </div>
+                            const espn = getWinStats(g => g.Network && g.Network.toUpperCase().includes('ESPN'));
+                            const abc = getWinStats(g => g.Network && g.Network.toUpperCase().includes('ABC'));
+                            const fox = getWinStats(g => g.Network && g.Network.toUpperCase().includes('FOX'));
+                            const cbs = getWinStats(g => g.Network && g.Network.toUpperCase().includes('CBS'));
+                            const tnt = getWinStats(g => g.Network && g.Network.toUpperCase().includes('TNT'));
 
-                        {stats && (
-                            <>
-                                {/* Top Card */}
-                                <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xl relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
-                                    <div className="flex justify-between items-center mb-6 relative z-10">
-                                        <div className="text-left">
-                                            <div className="text-sm text-slate-400 font-bold uppercase tracking-widest">Current Rank</div>
-                                            <div className="text-5xl font-black text-white">#{stats.rank}</div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-sm text-slate-400 font-bold uppercase tracking-widest">Wins</div>
-                                            <div className="text-5xl font-black text-yellow-400">{stats.wins}</div>
+                            // 4. Maverick Rating
+                            let maverickScore = 0;
+                            let totalGames = 0;
+                            schedule.forEach(g => {
+                                if (!g.Bowl) return;
+                                const myPick = pData[g.Bowl];
+                                if (!myPick) return;
+
+                                const counts = {};
+                                picks.forEach(p => {
+                                    const pp = p[g.Bowl];
+                                    if (pp) counts[pp] = (counts[pp] || 0) + 1;
+                                });
+                                let maxC = 0; let majority = null;
+                                Object.entries(counts).forEach(([pick, count]) => {
+                                    if (count > maxC) { maxC = count; majority = pick; }
+                                });
+
+                                totalGames++;
+                                if (myPick !== majority) maverickScore++;
+                            });
+                            const maverickPct = totalGames > 0 ? Math.round((maverickScore / totalGames) * 100) : 0;
+
+                            // 5. Nemesis & BFF
+                            let maxDiff = -1; let nemesis = "-";
+                            let maxSame = -1; let bff = "-";
+
+                            picks.forEach(p => {
+                                if (p.Name === player) return;
+                                let diff = 0; let same = 0;
+                                schedule.forEach(g => {
+                                    const myP = pData[g.Bowl];
+                                    const theirP = p[g.Bowl];
+                                    if (myP && theirP) {
+                                        if (myP !== theirP) diff++;
+                                        else same++;
+                                    }
+                                });
+                                if (diff > maxDiff) { maxDiff = diff; nemesis = p.Name; }
+                                if (same > maxSame) { maxSame = same; bff = p.Name; }
+                            });
+
+                            // 6. Streaks Calculation
+                            const completedGames = schedule
+                                .filter(g => g.Winner && g.Date && g.Time)
+                                .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
+
+                            let currentStreak = 0;
+                            let maxWinStreak = 0;
+                            let maxLossStreak = 0;
+                            let tempWin = 0;
+                            let tempLoss = 0;
+
+                            completedGames.forEach(g => {
+                                const pick = pData[g.Bowl];
+                                const winner = g.Winner;
+
+                                if (pick && pick.toLowerCase() === winner.toLowerCase()) {
+                                    tempWin++;
+                                    if (tempWin > maxWinStreak) maxWinStreak = tempWin;
+                                    tempLoss = 0;
+                                    currentStreak = currentStreak >= 0 ? currentStreak + 1 : 1;
+                                } else {
+                                    tempLoss++;
+                                    if (tempLoss > maxLossStreak) maxLossStreak = tempLoss;
+                                    tempWin = 0;
+                                    currentStreak = currentStreak <= 0 ? currentStreak - 1 : -1;
+                                }
+                            });
+
+                            // 7. Ceiling Tracker Logic
+                            const totalGameCount = schedule.filter(g => g.Bowl && g["Team 1"]).length;
+                            const unplayedCount = schedule.filter(g => g.Bowl && g["Team 1"] && !g.Winner).length;
+                            const maxPotential = wins + unplayedCount;
+                            const leaderWins = Math.max(...leaderboard.map(p => p.wins));
+
+                            // 8. Signature Win Logic
+                            let bestWin = null;
+                            let minWinners = Infinity;
+
+                            schedule.forEach(g => {
+                                if (!g.Winner) return;
+                                const myPick = pData[g.Bowl];
+                                if (myPick && myPick.toLowerCase() === g.Winner.toLowerCase()) {
+                                    let gameWinnerCount = 0;
+                                    picks.forEach(p => {
+                                        const theirPick = p[g.Bowl];
+                                        if (theirPick && theirPick.toLowerCase() === g.Winner.toLowerCase()) {
+                                            gameWinnerCount++;
+                                        }
+                                    });
+
+                                    if (gameWinnerCount < minWinners) {
+                                        minWinners = gameWinnerCount;
+                                        bestWin = {
+                                            bowl: g.Bowl,
+                                            team: g.Winner,
+                                            count: gameWinnerCount
+                                        };
+                                    }
+                                }
+                            });
+
+                            return { rank, isTied, wins, titles, titleYears, cfp, b1g, sec, morning, afternoon, night, espn, abc, fox, cbs, tnt, maverickPct, nemesis, bff,
+                                     champ: pData["National Championship"], tiebreaker: pData["Tiebreaker Score"],
+                                     currentStreak, maxWinStreak, maxLossStreak,
+                                     maxPotential, totalGameCount, leaderWins, bestWin };
+                        };
+
+                        const stats = calculateStats(selectedPlayer);
+
+                        return (
+                            <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
+                                 <div className="bg-white pt-8 pb-4 px-4">
+                                    <div className="max-w-4xl mx-auto text-center">
+                                        <h2 className="text-3xl text-blue-900 font-bold mb-1">Scouting Report</h2>
+                                        <p className="text-gray-600 text-sm">Deep dive analytics into your favorite people.</p>
+                                    </div>
+                                </div>
+
+                                <div className="px-4 max-w-xl mx-auto w-full flex flex-col gap-6">
+                                    {/* Selector */}
+                                    <div className="relative">
+                                        <select
+                                            value={selectedPlayer}
+                                            onChange={(e) => setSelectedPlayer(e.target.value)}
+                                            className="appearance-none bg-white border border-gray-300 text-gray-900 text-lg rounded-xl focus:ring-blue-500 focus:border-blue-500 block w-full p-4 font-bold shadow-sm text-center"
+                                        >
+                                            {players.map(p => <option key={p} value={p}>{p}</option>)}
+                                        </select>
+                                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
+                                            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
                                         </div>
                                     </div>
+
+                                    {stats && (
+                                        <>
+                                            {/* Top Card */}
+                                            <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xl relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+                                                <div className="flex justify-between items-center mb-6 relative z-10">
+                                                    <div className="text-left">
+                                                        <div className="text-sm text-slate-400 font-bold uppercase tracking-widest">Current Rank</div>
+                                                        <div className="text-5xl font-black text-white">
+                                                            {stats.isTied ? "T-" : ""}{stats.rank}
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-sm text-slate-400 font-bold uppercase tracking-widest">Wins</div>
+                                                        <div className="text-5xl font-black text-yellow-400">{stats.wins}</div>
+                                                    </div>
+                                                </div>
 
                                     {/* PAST GREATNESS BADGE */}
                                     {stats.titles > 0 ? (
