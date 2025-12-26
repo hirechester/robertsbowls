@@ -3499,283 +3499,285 @@
                                 </div>
 
                                 {stats && (
-                                    <>
-                                        {/* Top Card */}
-                                        <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xl relative overflow-hidden">
-                                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
-                                            <div className="flex justify-between items-center mb-6 relative z-10">
-                                                <div className="text-left">
-                                                    <div className="text-sm text-slate-400 font-bold uppercase tracking-widest">Current Rank</div>
-                                                    <div className="text-5xl font-black text-white">
-                                                        {stats.isTied ? "T-" : ""}{stats.rank}
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="text-sm text-slate-400 font-bold uppercase tracking-widest">Wins</div>
-                                                    <div className="text-5xl font-black text-yellow-400">{stats.wins}</div>
-                                                </div>
-                                            </div>
+                                                            <>
+                                                                {/* Top Card */}
+                                                                <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xl relative overflow-hidden">
+                                                                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+                                                                    <div className="flex justify-between items-center mb-6 relative z-10">
+                                                                        <div className="text-left">
+                                                                            <div className="text-sm text-slate-400 font-bold uppercase tracking-widest">Current Rank</div>
+                                                                            <div className="text-5xl font-black text-white">
+                                                                                {stats.isTied ? "T-" : ""}{stats.rank}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="text-right">
+                                                                            <div className="text-sm text-slate-400 font-bold uppercase tracking-widest">Wins</div>
+                                                                            <div className="text-5xl font-black text-yellow-400">{stats.wins}</div>
+                                                                        </div>
+                                                                    </div>
 
-                                            {/* PAST GREATNESS BADGE */}
-                                            {stats.titles > 0 ? (
-                                                <div className="bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border border-yellow-500/30 rounded-lg p-3 flex items-center gap-3 relative z-10">
-                                                    <div className="text-2xl">🏆</div>
-                                                    <div>
-                                                        <div className="text-xs font-bold text-yellow-400 uppercase tracking-widest">Past Greatness</div>
-                                                        <div className="text-white font-bold">
-                                                            {stats.titles}-Time Champion <span className="text-yellow-200/70 text-xs font-normal ml-1">({stats.titleYears})</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="bg-white/5 border border-white/10 rounded-lg p-3 flex items-center gap-3 relative z-10 opacity-50">
-                                                    <div className="text-2xl grayscale">🏆</div>
-                                                    <div>
-                                                        <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Past Greatness</div>
-                                                        <div className="text-slate-300 font-bold text-sm">Chasing first title</div>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
+                                                                    {/* PAST GREATNESS BADGE - Fixed Height Container */}
+                                                                    <div className="min-h-[80px] flex items-center">
+                                                                        {stats.titles > 0 ? (
+                                                                            <div className="bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border border-yellow-500/30 rounded-lg p-3 flex items-center gap-3 relative z-10 w-full">
+                                                                                <div className="text-2xl flex-shrink-0">🏆</div>
+                                                                                <div>
+                                                                                    <div className="text-xs font-bold text-yellow-400 uppercase tracking-widest">Past Greatness</div>
+                                                                                    <div className="text-white font-bold">
+                                                                                        {stats.titles}-Time Champion <span className="text-yellow-200/70 text-xs font-normal ml-1">({stats.titleYears})</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="bg-white/5 border border-white/10 rounded-lg p-3 flex items-center gap-3 relative z-10 opacity-50 w-full">
+                                                                                <div className="text-2xl grayscale flex-shrink-0">🏆</div>
+                                                                                <div>
+                                                                                    <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Past Greatness</div>
+                                                                                    <div className="text-slate-300 font-bold text-sm">Chasing first title</div>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
 
-                                        {/* Ceiling Tracker */}
-                                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                                            <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex justify-between items-center">
-                                                <h3 className="text-lg font-bold text-gray-900 font-serif">Ceiling Tracker</h3>
-                                                <span className="text-sm font-bold text-blue-600">{stats.maxPotential} Max Wins</span>
-                                            </div>
-                                            <div className="p-5">
-                                                <div className="relative h-6 bg-gray-100 rounded-full w-full overflow-hidden mb-2">
-                                                    {/* Current Wins */}
-                                                    <div
-                                                        className="absolute top-0 bottom-0 left-0 bg-blue-600 transition-all duration-1000 z-10"
-                                                        style={{ width: `${(stats.wins / stats.totalGameCount) * 100}%` }}
-                                                    ></div>
-                                                    {/* Potential Wins */}
-                                                    <div
-                                                        className="absolute top-0 bottom-0 left-0 bg-blue-200 transition-all duration-1000"
-                                                        style={{ width: `${(stats.maxPotential / stats.totalGameCount) * 100}%` }}
-                                                    ></div>
-                                                    {/* Leader Line */}
-                                                    <div
-                                                        className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 shadow-[0_0_8px_rgba(239,68,68,0.6)]"
-                                                        style={{ left: `${(stats.leaderWins / stats.totalGameCount) * 100}%` }}
-                                                    ></div>
-                                                </div>
-                                                <div className="flex justify-between text-xs font-bold text-gray-400 uppercase tracking-wide">
-                                                    <span>Current: {stats.wins}</span>
-                                                    <span className="text-red-500">Leader: {stats.leaderWins}</span>
-                                                </div>
-                                            </div>
-                                        </div>
+                                                                {/* Ceiling Tracker */}
+                                                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                                                                    <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex justify-between items-center">
+                                                                        <h3 className="text-lg font-bold text-gray-900 font-serif">Ceiling Tracker</h3>
+                                                                        <span className="text-sm font-bold text-blue-600">{stats.maxPotential} Max Wins</span>
+                                                                    </div>
+                                                                    <div className="p-5">
+                                                                        <div className="relative h-6 bg-gray-100 rounded-full w-full overflow-hidden mb-2">
+                                                                            {/* Current Wins */}
+                                                                            <div
+                                                                                className="absolute top-0 bottom-0 left-0 bg-blue-600 transition-all duration-1000 z-10"
+                                                                                style={{ width: `${(stats.wins / stats.totalGameCount) * 100}%` }}
+                                                                            ></div>
+                                                                            {/* Potential Wins */}
+                                                                            <div
+                                                                                className="absolute top-0 bottom-0 left-0 bg-blue-200 transition-all duration-1000"
+                                                                                style={{ width: `${(stats.maxPotential / stats.totalGameCount) * 100}%` }}
+                                                                            ></div>
+                                                                            {/* Leader Line */}
+                                                                            <div
+                                                                                className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 shadow-[0_0_8px_rgba(239,68,68,0.6)]"
+                                                                                style={{ left: `${(stats.leaderWins / stats.totalGameCount) * 100}%` }}
+                                                                            ></div>
+                                                                        </div>
+                                                                        <div className="flex justify-between text-xs font-bold text-gray-400 uppercase tracking-wide">
+                                                                            <span>Current: {stats.wins}</span>
+                                                                            <span className="text-red-500">Leader: {stats.leaderWins}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
 
-                                        {/* NEW: Extravagant Vitals (Champ ONLY) */}
-                                        <div className="space-y-4">
-                                            <ChampCard teamName={stats.champ} />
-                                        </div>
+                                                                {/* NEW: Extravagant Vitals (Champ ONLY) */}
+                                                                <div className="space-y-4">
+                                                                    <ChampCard teamName={stats.champ} />
+                                                                </div>
 
-                                        {/* Relationships (Small Cards) */}
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <div className="text-xs font-bold text-gray-400 uppercase">Nemesis</div>
-                                                </div>
-                                                <div className="text-lg font-black text-red-600 truncate">{stats.nemesis}</div>
-                                                <div className="text-[10px] text-gray-500 mt-0.5">Most differing picks</div>
-                                            </div>
-                                            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <div className="text-xs font-bold text-gray-400 uppercase">Best Friend</div>
-                                                </div>
-                                                <div className="text-lg font-black text-green-600 truncate">{stats.bff}</div>
-                                                <div className="text-[10px] text-gray-500 mt-0.5">Most shared picks</div>
-                                            </div>
-                                        </div>
+                                                                {/* Relationships (Small Cards) */}
+                                                                <div className="grid grid-cols-2 gap-3">
+                                                                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                                                                        <div className="flex justify-between items-center mb-1">
+                                                                            <div className="text-xs font-bold text-gray-400 uppercase">Nemesis</div>
+                                                                        </div>
+                                                                        <div className="text-lg font-black text-red-600 truncate">{stats.nemesis}</div>
+                                                                        <div className="text-[10px] text-gray-500 mt-0.5">Most differing picks</div>
+                                                                    </div>
+                                                                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                                                                        <div className="flex justify-between items-center mb-1">
+                                                                            <div className="text-xs font-bold text-gray-400 uppercase">Best Friend</div>
+                                                                        </div>
+                                                                        <div className="text-lg font-black text-green-600 truncate">{stats.bff}</div>
+                                                                        <div className="text-[10px] text-gray-500 mt-0.5">Most shared picks</div>
+                                                                    </div>
+                                                                </div>
 
-                                        {/* Streaks Card */}
-                                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                                            <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
-                                                <h3 className="text-lg font-bold text-gray-900 font-serif">Season Streaks</h3>
-                                            </div>
-                                            <div className="p-4 grid grid-cols-3 gap-2 text-center divide-x divide-gray-100">
-                                                <div>
-                                                    <div className="text-xs font-bold text-gray-400 uppercase mb-1">Current</div>
-                                                    <div className={`text-xl font-black ${stats.currentStreak > 0 ? 'text-green-600' : stats.currentStreak < 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                                                        {stats.currentStreak > 0 ? `W${stats.currentStreak}` : stats.currentStreak < 0 ? `L${Math.abs(stats.currentStreak)}` : '-'}
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <div className="text-xs font-bold text-gray-400 uppercase mb-1">Longest Win</div>
-                                                    <div className="text-xl font-black text-green-600">
-                                                        W{stats.maxWinStreak}
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <div className="text-xs font-bold text-gray-400 uppercase mb-1">Longest Loss</div>
-                                                    <div className="text-xl font-black text-red-600">
-                                                        L{stats.maxLossStreak}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
+                                                                {/* Streaks Card */}
+                                                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                                                                    <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
+                                                                        <h3 className="text-lg font-bold text-gray-900 font-serif">Season Streaks</h3>
+                                                                    </div>
+                                                                    <div className="p-4 grid grid-cols-3 gap-2 text-center divide-x divide-gray-100">
+                                                                        <div>
+                                                                            <div className="text-xs font-bold text-gray-400 uppercase mb-1">Current</div>
+                                                                            <div className={`text-xl font-black ${stats.currentStreak > 0 ? 'text-green-600' : stats.currentStreak < 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                                                                                {stats.currentStreak > 0 ? `W${stats.currentStreak}` : stats.currentStreak < 0 ? `L${Math.abs(stats.currentStreak)}` : '-'}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="text-xs font-bold text-gray-400 uppercase mb-1">Longest Win</div>
+                                                                            <div className="text-xl font-black text-green-600">
+                                                                                W{stats.maxWinStreak}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="text-xs font-bold text-gray-400 uppercase mb-1">Longest Loss</div>
+                                                                            <div className="text-xl font-black text-red-600">
+                                                                                L{stats.maxLossStreak}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
 
-                                        {/* Signature Win Card */}
-                                        {stats.bestWin && (
-                                            <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 shadow-sm p-5 relative overflow-hidden">
-                                                <div className="absolute top-0 right-0 text-6xl opacity-10 pointer-events-none">🌟</div>
-                                                <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-1">Signature Win</h3>
-                                                <div className="text-lg font-black text-indigo-900 leading-tight mb-2">
-                                                    Picked {stats.bestWin.team} in the {stats.bestWin.bowl}
-                                                </div>
-                                                <div className="inline-block bg-white border border-indigo-200 text-indigo-600 text-xs font-bold px-2 py-1 rounded shadow-sm">
-                                                    {stats.bestWin.count === 1
-                                                        ? "Only player to pick this!"
-                                                        : `Only ${stats.bestWin.count} players picked this`}
-                                                </div>
-                                            </div>
-                                        )}
+                                                                {/* Signature Win Card */}
+                                                                {stats.bestWin && (
+                                                                    <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 shadow-sm p-5 relative overflow-hidden">
+                                                                        <div className="absolute top-0 right-0 text-6xl opacity-10 pointer-events-none">🌟</div>
+                                                                        <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-1">Signature Win</h3>
+                                                                        <div className="text-lg font-black text-indigo-900 leading-tight mb-2">
+                                                                            Picked {stats.bestWin.team} in the {stats.bestWin.bowl}
+                                                                        </div>
+                                                                        <div className="inline-block bg-white border border-indigo-200 text-indigo-600 text-xs font-bold px-2 py-1 rounded shadow-sm">
+                                                                            {stats.bestWin.count === 1
+                                                                                ? "Only player to pick this!"
+                                                                                : `Only ${stats.bestWin.count} players picked this`}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
 
-                                        {/* Skills Breakdown */}
-                                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                                            <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
-                                                <h3 className="text-lg font-bold text-gray-900 font-serif">Performance Grades</h3>
-                                            </div>
-                                            <div className="p-5 space-y-4">
-                                                <div>
-                                                    <div className="flex justify-between text-sm font-bold mb-1">
-                                                        <span className="text-yellow-700">Playoffs <span className="text-gray-400 font-normal ml-1">({stats.cfp.wins} of {stats.cfp.total})</span></span>
-                                                        <span className="text-yellow-900">{stats.cfp.pct}%</span>
-                                                    </div>
-                                                    <div className="w-full bg-gray-100 rounded-full h-2">
-                                                        <div className="bg-yellow-500 h-2 rounded-full" style={{ width: `${stats.cfp.pct}%` }}></div>
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <div className="flex justify-between text-sm font-bold mb-1">
-                                                        <span className="text-indigo-900">Big Ten conference matchups <span className="text-gray-400 font-normal ml-1">({stats.b1g.wins} of {stats.b1g.total})</span></span>
-                                                        <span className="text-indigo-700">{stats.b1g.pct}%</span>
-                                                    </div>
-                                                    <div className="w-full bg-gray-100 rounded-full h-2">
-                                                        <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${stats.b1g.pct}%` }}></div>
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <div className="flex justify-between text-sm font-bold mb-1">
-                                                        <span className="text-blue-900">SEC conference matchups <span className="text-gray-400 font-normal ml-1">({stats.sec.wins} of {stats.sec.total})</span></span>
-                                                        <span className="text-blue-700">{stats.sec.pct}%</span>
-                                                    </div>
-                                                    <div className="w-full bg-gray-100 rounded-full h-2">
-                                                        <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${stats.sec.pct}%` }}></div>
-                                                    </div>
-                                                </div>
+                                                                {/* Skills Breakdown */}
+                                                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                                                                    <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
+                                                                        <h3 className="text-lg font-bold text-gray-900 font-serif">Performance Grades</h3>
+                                                                    </div>
+                                                                    <div className="p-5 space-y-4">
+                                                                        <div>
+                                                                            <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                <span className="text-yellow-700">Playoffs <span className="text-gray-400 font-normal ml-1">({stats.cfp.wins} of {stats.cfp.total})</span></span>
+                                                                                <span className="text-yellow-900">{stats.cfp.pct}%</span>
+                                                                            </div>
+                                                                            <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                <div className="bg-yellow-500 h-2 rounded-full" style={{ width: `${stats.cfp.pct}%` }}></div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                <span className="text-indigo-900">Big Ten conference matchups <span className="text-gray-400 font-normal ml-1">({stats.b1g.wins} of {stats.b1g.total})</span></span>
+                                                                                <span className="text-indigo-700">{stats.b1g.pct}%</span>
+                                                                            </div>
+                                                                            <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${stats.b1g.pct}%` }}></div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                <span className="text-blue-900">SEC conference matchups <span className="text-gray-400 font-normal ml-1">({stats.sec.wins} of {stats.sec.total})</span></span>
+                                                                                <span className="text-blue-700">{stats.sec.pct}%</span>
+                                                                            </div>
+                                                                            <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${stats.sec.pct}%` }}></div>
+                                                                            </div>
+                                                                        </div>
 
-                                                <div className="border-t border-gray-100 pt-4 space-y-4">
-                                                    <div>
-                                                        <div className="flex justify-between text-sm font-bold mb-1">
-                                                            <span className="text-orange-900">Morning Games <span className="text-gray-400 font-normal ml-1">({stats.morning.wins} of {stats.morning.total})</span></span>
-                                                            <span className="text-orange-700">{stats.morning.pct}%</span>
-                                                        </div>
-                                                        <div className="w-full bg-gray-100 rounded-full h-2">
-                                                            <div className="bg-orange-400 h-2 rounded-full" style={{ width: `${stats.morning.pct}%` }}></div>
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <div className="flex justify-between text-sm font-bold mb-1">
-                                                            <span className="text-sky-900">Afternoon Games <span className="text-gray-400 font-normal ml-1">({stats.afternoon.wins} of {stats.afternoon.total})</span></span>
-                                                            <span className="text-sky-700">{stats.afternoon.pct}%</span>
-                                                        </div>
-                                                        <div className="w-full bg-gray-100 rounded-full h-2">
-                                                            <div className="bg-sky-500 h-2 rounded-full" style={{ width: `${stats.afternoon.pct}%` }}></div>
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <div className="flex justify-between text-sm font-bold mb-1">
-                                                            <span className="text-purple-900">Night Games <span className="text-gray-400 font-normal ml-1">({stats.night.wins} of {stats.night.total})</span></span>
-                                                            <span className="text-purple-700">{stats.night.pct}%</span>
-                                                        </div>
-                                                        <div className="w-full bg-gray-100 rounded-full h-2">
-                                                            <div className="bg-purple-600 h-2 rounded-full" style={{ width: `${stats.night.pct}%` }}></div>
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                                                        <div className="border-t border-gray-100 pt-4 space-y-4">
+                                                                            <div>
+                                                                                <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                    <span className="text-orange-900">Morning Games <span className="text-gray-400 font-normal ml-1">({stats.morning.wins} of {stats.morning.total})</span></span>
+                                                                                    <span className="text-orange-700">{stats.morning.pct}%</span>
+                                                                                </div>
+                                                                                <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                    <div className="bg-orange-400 h-2 rounded-full" style={{ width: `${stats.morning.pct}%` }}></div>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div>
+                                                                                <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                    <span className="text-sky-900">Afternoon Games <span className="text-gray-400 font-normal ml-1">({stats.afternoon.wins} of {stats.afternoon.total})</span></span>
+                                                                                    <span className="text-sky-700">{stats.afternoon.pct}%</span>
+                                                                                </div>
+                                                                                <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                    <div className="bg-sky-500 h-2 rounded-full" style={{ width: `${stats.afternoon.pct}%` }}></div>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div>
+                                                                                <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                    <span className="text-purple-900">Night Games <span className="text-gray-400 font-normal ml-1">({stats.night.wins} of {stats.night.total})</span></span>
+                                                                                    <span className="text-purple-700">{stats.night.pct}%</span>
+                                                                                </div>
+                                                                                <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                    <div className="bg-purple-600 h-2 rounded-full" style={{ width: `${stats.night.pct}%` }}></div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
 
-                                                <div className="border-t border-gray-100 pt-4 space-y-4">
-                                                    <div>
-                                                        <div className="flex justify-between text-sm font-bold mb-1">
-                                                            <span className="text-red-900">ESPN <span className="text-gray-400 font-normal ml-1">({stats.espn.wins} of {stats.espn.total})</span></span>
-                                                            <span className="text-red-700">{stats.espn.pct}%</span>
-                                                        </div>
-                                                        <div className="w-full bg-gray-100 rounded-full h-2">
-                                                            <div className="bg-red-600 h-2 rounded-full" style={{ width: `${stats.espn.pct}%` }}></div>
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <div className="flex justify-between text-sm font-bold mb-1">
-                                                            <span className="text-gray-900">ABC <span className="text-gray-400 font-normal ml-1">({stats.abc.wins} of {stats.abc.total})</span></span>
-                                                            <span className="text-gray-700">{stats.abc.pct}%</span>
-                                                        </div>
-                                                        <div className="w-full bg-gray-100 rounded-full h-2">
-                                                            <div className="bg-gray-900 h-2 rounded-full" style={{ width: `${stats.abc.pct}%` }}></div>
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <div className="flex justify-between text-sm font-bold mb-1">
-                                                            <span className="text-blue-900">FOX <span className="text-gray-400 font-normal ml-1">({stats.fox.wins} of {stats.fox.total})</span></span>
-                                                            <span className="text-blue-700">{stats.fox.pct}%</span>
-                                                        </div>
-                                                        <div className="w-full bg-gray-100 rounded-full h-2">
-                                                            <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${stats.fox.pct}%` }}></div>
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <div className="flex justify-between text-sm font-bold mb-1">
-                                                            <span className="text-sky-900">CBS <span className="text-gray-400 font-normal ml-1">({stats.cbs.wins} of {stats.cbs.total})</span></span>
-                                                            <span className="text-sky-700">{stats.cbs.pct}%</span>
-                                                        </div>
-                                                        <div className="w-full bg-gray-100 rounded-full h-2">
-                                                            <div className="bg-sky-500 h-2 rounded-full" style={{ width: `${stats.cbs.pct}%` }}></div>
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <div className="flex justify-between text-sm font-bold mb-1">
-                                                            <span className="text-pink-900">TNT <span className="text-gray-400 font-normal ml-1">({stats.tnt.wins} of {stats.tnt.total})</span></span>
-                                                            <span className="text-pink-700">{stats.tnt.pct}%</span>
-                                                        </div>
-                                                        <div className="w-full bg-gray-100 rounded-full h-2">
-                                                            <div className="bg-pink-600 h-2 rounded-full" style={{ width: `${stats.tnt.pct}%` }}></div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
+                                                                        <div className="border-t border-gray-100 pt-4 space-y-4">
+                                                                            <div>
+                                                                                <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                    <span className="text-red-900">ESPN <span className="text-gray-400 font-normal ml-1">({stats.espn.wins} of {stats.espn.total})</span></span>
+                                                                                    <span className="text-red-700">{stats.espn.pct}%</span>
+                                                                                </div>
+                                                                                <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                    <div className="bg-red-600 h-2 rounded-full" style={{ width: `${stats.espn.pct}%` }}></div>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div>
+                                                                                <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                    <span className="text-gray-900">ABC <span className="text-gray-400 font-normal ml-1">({stats.abc.wins} of {stats.abc.total})</span></span>
+                                                                                    <span className="text-gray-700">{stats.abc.pct}%</span>
+                                                                                </div>
+                                                                                <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                    <div className="bg-gray-900 h-2 rounded-full" style={{ width: `${stats.abc.pct}%` }}></div>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div>
+                                                                                <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                    <span className="text-blue-900">FOX <span className="text-gray-400 font-normal ml-1">({stats.fox.wins} of {stats.fox.total})</span></span>
+                                                                                    <span className="text-blue-700">{stats.fox.pct}%</span>
+                                                                                </div>
+                                                                                <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                    <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${stats.fox.pct}%` }}></div>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div>
+                                                                                <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                    <span className="text-sky-900">CBS <span className="text-gray-400 font-normal ml-1">({stats.cbs.wins} of {stats.cbs.total})</span></span>
+                                                                                    <span className="text-sky-700">{stats.cbs.pct}%</span>
+                                                                                </div>
+                                                                                <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                    <div className="bg-sky-500 h-2 rounded-full" style={{ width: `${stats.cbs.pct}%` }}></div>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div>
+                                                                                <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                    <span className="text-pink-900">TNT <span className="text-gray-400 font-normal ml-1">({stats.tnt.wins} of {stats.tnt.total})</span></span>
+                                                                                    <span className="text-pink-700">{stats.tnt.pct}%</span>
+                                                                                </div>
+                                                                                <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                    <div className="bg-pink-600 h-2 rounded-full" style={{ width: `${stats.tnt.pct}%` }}></div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
 
-                                        {/* Style Meter */}
-                                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                                            <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
-                                                <h3 className="text-lg font-bold text-gray-900 font-serif">Style Rating</h3>
-                                            </div>
-                                            <div className="p-5">
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <span className="text-sm font-bold text-gray-400 uppercase">🐑 Sheep</span>
-                                                    <span className="text-sm font-bold text-gray-400 uppercase">Maverick 🤠</span>
-                                                </div>
-                                                <div className="relative h-4 bg-gray-100 rounded-full w-full overflow-hidden">
-                                                    <div className="absolute top-0 bottom-0 left-0 bg-blue-500/20 w-full"></div>
-                                                    <div
-                                                        className="absolute top-0 bottom-0 bg-blue-600 w-2 rounded-full shadow-md transition-all duration-500"
-                                                        style={{ left: `${stats.maverickPct}%` }}
-                                                    ></div>
-                                                </div>
-                                                <div className="text-center mt-2 text-sm font-bold text-gray-500">
-                                                    {stats.maverickPct < 20 ? "Follows the Herd" : stats.maverickPct > 40 ? "Lone Wolf" : "Balanced Picker"} ({stats.maverickPct}%)
-                                                </div>
-                                                <p className="text-xs text-gray-400 text-center mt-3 px-2 leading-relaxed">
-                                                    This rating measures how often a player picks with the majority consensus (Sheep) versus picking against the group (Maverick). A lower percentage means you tend to agree with everyone else; a higher percentage means you like to go it alone.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
+                                                                {/* Style Meter */}
+                                                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                                                                    <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
+                                                                        <h3 className="text-lg font-bold text-gray-900 font-serif">Style Rating</h3>
+                                                                    </div>
+                                                                    <div className="p-5">
+                                                                        <div className="flex justify-between items-center mb-2">
+                                                                            <span className="text-sm font-bold text-gray-400 uppercase">🐑 Sheep</span>
+                                                                            <span className="text-sm font-bold text-gray-400 uppercase">Maverick 🤠</span>
+                                                                        </div>
+                                                                        <div className="relative h-4 bg-gray-100 rounded-full w-full overflow-hidden">
+                                                                            <div className="absolute top-0 bottom-0 left-0 bg-blue-500/20 w-full"></div>
+                                                                            <div
+                                                                                className="absolute top-0 bottom-0 bg-blue-600 w-2 rounded-full shadow-md transition-all duration-500"
+                                                                                style={{ left: `${stats.maverickPct}%` }}
+                                                                            ></div>
+                                                                        </div>
+                                                                        <div className="text-center mt-2 text-sm font-bold text-gray-500">
+                                                                            {stats.maverickPct < 20 ? "Follows the Herd" : stats.maverickPct > 40 ? "Lone Wolf" : "Balanced Picker"} ({stats.maverickPct}%)
+                                                                        </div>
+                                                                        <p className="text-xs text-gray-400 text-center mt-3 px-2 leading-relaxed">
+                                                                            This rating measures how often a player picks with the majority consensus (Sheep) versus picking against the group (Maverick). A lower percentage means you tend to agree with everyone else; a higher percentage means you like to go it alone.
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </>
+                                                        )}
                             </div>
                         </div>
                     );
