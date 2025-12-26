@@ -112,6 +112,11 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
+        // Global namespace for shared code + pages
+        window.RB = window.RB || {};
+        window.RB.pages = window.RB.pages || {};
+        const RB = window.RB;
+
         // --- CONFIGURATION ---
         const SCHEDULE_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR6DAHasgDxAIJfV8r9PnD7Y1Z2UqfwhQeFqnk_iMnQISf7dlvjgNiGYq6Bk6R7BPg8Ipm5AnNVjfGM/pub?gid=0&single=true&output=csv";
         const PICKS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR6DAHasgDxAIJfV8r9PnD7Y1Z2UqfwhQeFqnk_iMnQISf7dlvjgNiGYq6Bk6R7BPg8Ipm5AnNVjfGM/pub?gid=1948765269&single=true&output=csv";
