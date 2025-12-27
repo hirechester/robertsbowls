@@ -1,13 +1,10 @@
-/* Roberts Cup - Shared league data loader (schedule/picks/history/teams)
-   Goal: fetch & parse published Google Sheets CSVs once and share across pages.
-   Loaded as: <script src="js/rc-data.js"></script>
-*/
+/* Roberts Cup - Shared league data loader (schedule/picks/history/teams/bowlGames)
+Goal: fetch & parse published Google Sheets CSVs once and share across pages.
+Loaded as:  */
 (() => {
   window.RC = window.RC || {};
   const RC = window.RC;
-
   RC.data = RC.data || {};
-
   const { useState, useEffect, useCallback } = React;
 
   // Lightweight CSV parser (handles quotes, commas, and newlines)
@@ -22,7 +19,8 @@
       const next = text[i + 1];
 
       if (inQuotes) {
-        if (ch === '"' && next === '"') { // escaped quote
+        if (ch === '"' && next === '"') {
+          // escaped quote
           cur += '"';
           i++;
         } else if (ch === '"') {
@@ -96,8 +94,8 @@
 
   // Simple in-memory cache shared across the whole SPA session
   const cache = {
-    status: "idle",      // "idle" | "loading" | "ready" | "error"
-    data: null,          // { schedule, picks, history, teams }
+    status: "idle", // "idle" | "loading" | "ready" | "error"
+    data: null,     // { schedule, picks, history, teams, bowlGames }
     error: null,
     promise: null,
     ts: null
@@ -109,31 +107,39 @@
     }
 
     const hasTeams = !!RC.TEAMS_URL;
+    const hasBowlGames = !!RC.BOWL_GAMES_URL;
 
-    const [scheduleRes, picksRes, historyRes, teamsRes] = await Promise.all([
+    const [scheduleRes, picksRes, historyRes, teamsRes, bowlGamesRes] = await Promise.all([
       fetch(RC.SCHEDULE_URL, { cache: "no-store" }),
       fetch(RC.PICKS_URL, { cache: "no-store" }),
       fetch(RC.HISTORY_URL, { cache: "no-store" }),
-      hasTeams ? fetch(RC.TEAMS_URL, { cache: "no-store" }) : Promise.resolve(null)
+      hasTeams ? fetch(RC.TEAMS_URL, { cache: "no-store" }) : Promise.resolve(null),
+      hasBowlGames ? fetch(RC.BOWL_GAMES_URL, { cache: "no-store" }) : Promise.resolve(null),
     ]);
 
-    const [scheduleText, picksText, historyText, teamsText] = await Promise.all([
+    const [scheduleText, picksText, historyText, teamsText, bowlGamesText] = await Promise.all([
       scheduleRes.text(),
       picksRes.text(),
       historyRes.text(),
-      hasTeams && teamsRes ? teamsRes.text() : Promise.resolve("")
+      hasTeams && teamsRes ? teamsRes.text() : Promise.resolve(""),
+      hasBowlGames && bowlGamesRes ? bowlGamesRes.text() : Promise.resolve(""),
     ]);
 
     const schedule = RC.csvToJson(scheduleText);
     const picks = RC.csvToJson(picksText).filter(p => p && p.Name);
     const history = RC.csvToJson(historyText);
 
-    // Teams tab is optional (Stage B). If TEAMS_URL is blank, teams is []
+    // Teams tab is optional. If TEAMS_URL is blank, teams is []
     const teams = hasTeams
       ? RC.csvToJson(teamsText).filter(t => t && (t["School Name"] || t.School || t.Team || t.Name))
       : [];
 
-    return { schedule, picks, history, teams };
+    // Bowl Games tab is optional (new). If BOWL_GAMES_URL is blank, bowlGames is []
+    const bowlGames = hasBowlGames
+      ? RC.csvToJson(bowlGamesText).filter(r => r && Object.keys(r).length)
+      : [];
+
+    return { schedule, picks, history, teams, bowlGames };
   }
 
   function loadOnce() {
@@ -142,6 +148,7 @@
 
     cache.status = "loading";
     cache.error = null;
+
     cache.promise = fetchAndParseAll()
       .then((data) => {
         cache.status = "ready";
@@ -169,6 +176,7 @@
       picks: cache.data?.picks || null,
       history: cache.data?.history || null,
       teams: cache.data?.teams || null,
+      bowlGames: cache.data?.bowlGames || null,
       loading: cache.status === "loading" || cache.status === "idle",
       error: cache.error || null,
       lastUpdated: cache.ts
@@ -191,6 +199,7 @@
           picks: data.picks,
           history: data.history,
           teams: data.teams,
+          bowlGames: data.bowlGames,
           loading: false,
           error: null,
           lastUpdated: cache.ts
@@ -210,6 +219,7 @@
           picks: cache.data.picks,
           history: cache.data.history,
           teams: cache.data.teams,
+          bowlGames: cache.data.bowlGames,
           loading: false,
           error: null,
           lastUpdated: cache.ts
@@ -218,6 +228,7 @@
       }
 
       setState((s) => ({ ...s, loading: true, error: null }));
+
       loadOnce()
         .then((data) => {
           if (!alive) return;
@@ -226,6 +237,7 @@
             picks: data.picks,
             history: data.history,
             teams: data.teams,
+            bowlGames: data.bowlGames,
             loading: false,
             error: null,
             lastUpdated: cache.ts
@@ -246,6 +258,7 @@
       picks: state.picks,
       history: state.history,
       teams: state.teams,
+      bowlGames: state.bowlGames,
       loading: state.loading,
       error: state.error,
       refresh,
