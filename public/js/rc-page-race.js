@@ -9,11 +9,10 @@
   const RC = window.RC;
 
   // Local aliases so the moved code stays unchanged
-  const { SCHEDULE_URL, PICKS_URL, csvToJson } = RC;
 
   // --- RACE PAGE ---
           const RacePage = () => {
-              const [loading, setLoading] = useState(true);
+              const { schedule, picks, loading, error, refresh } = RC.data.useLeagueData();
               const [chartData, setChartData] = useState({ series: [], maxWins: 0, gameCount: 0 });
               const [hoveredPlayer, setHoveredPlayer] = useState(null);
               const [selectedPlayer, setSelectedPlayer] = useState(null);
@@ -38,63 +37,51 @@
               const getColor = (idx) => COLORS[idx % COLORS.length];
 
               useEffect(() => {
-                  const init = async () => {
-                      try {
-                          const [scheduleRes, picksRes] = await Promise.all([
-                              fetch(SCHEDULE_URL),
-                              fetch(PICKS_URL)
-                          ]);
-                          const scheduleText = await scheduleRes.text();
-                          const picksText = await picksRes.text();
-                          const schedule = csvToJson(scheduleText);
-                          const picks = csvToJson(picksText).filter(p => p.Name);
+                  // Build the race view from shared league data (loaded once by rc-data.js)
+                  if (!Array.isArray(schedule) || !Array.isArray(picks)) return;
+                  try {
+                      // Process Schedule - Get completed games strictly ordered by time
+                      const sortedSchedule = schedule
+                          .filter(g => g.Date && g.Time && g.Winner)
+                          .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
 
-                          // Process Schedule - Get completed games strictly ordered by time
-                          const sortedSchedule = schedule
-                              .filter(g => g.Date && g.Time && g.Winner)
-                              .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
+                      const players = picks.map(p => p.Name);
+                      // Initialize history with 0 wins at start (game 0)
+                      const history = {};
+                      players.forEach(p => history[p] = [0]);
 
-                          const players = picks.map(p => p.Name);
-                          // Initialize history with 0 wins at start (game 0)
-                          const history = {};
-                          players.forEach(p => history[p] = [0]);
-
-                          sortedSchedule.forEach(game => {
-                              players.forEach(playerObj => {
-                                  const playerPicks = picks.find(p => p.Name === playerObj);
-                                  const pick = playerPicks[game.Bowl];
-                                  const currentWins = history[playerObj][history[playerObj].length - 1];
-                                  // If pick matches winner, increment, else keep same
-                                  const isWin = pick && pick.toLowerCase() === game.Winner.toLowerCase();
-                                  history[playerObj].push(currentWins + (isWin ? 1 : 0));
-                              });
+                      sortedSchedule.forEach(game => {
+                          players.forEach(playerObj => {
+                              const playerPicks = picks.find(p => p.Name === playerObj);
+                              const pick = playerPicks[game.Bowl];
+                              const currentWins = history[playerObj][history[playerObj].length - 1];
+                              // If pick matches winner, increment, else keep same
+                              const isWin = pick && pick.toLowerCase() === game.Winner.toLowerCase();
+                              history[playerObj].push(currentWins + (isWin ? 1 : 0));
                           });
+                      });
 
-                          const series = players.map((p, idx) => ({
-                              name: p,
-                              data: history[p],
-                              color: getColor(idx)
-                          }));
+                      const series = players.map((p, idx) => ({
+                          name: p,
+                          data: history[p],
+                          color: getColor(idx)
+                      }));
 
-                          const gameCount = sortedSchedule.length;
-                          const maxWins = Math.max(...series.map(s => s.data[s.data.length - 1]));
+                      const gameCount = sortedSchedule.length;
+                      const maxWins = Math.max(...series.map(s => s.data[s.data.length - 1]));
 
-                          // Table data (current standing)
-                          const tData = players.map((p, idx) => {
-                              const wins = history[p][history[p].length - 1];
-                              return { name: p, wins, color: getColor(idx) };
-                          }).sort((a, b) => b.wins - a.wins);
+                      // Table data (current standing)
+                      const tData = players.map((p, idx) => {
+                          const wins = history[p][history[p].length - 1];
+                          return { name: p, wins, color: getColor(idx) };
+                      }).sort((a, b) => b.wins - a.wins);
 
-                          setChartData({ series, maxWins, gameCount });
-                          setTableData(tData);
-                          setLoading(false);
-                      } catch (e) {
-                          console.error(e);
-                          setLoading(false);
-                      }
-                  };
-                  init();
-              }, []);
+                      setChartData({ series, maxWins, gameCount });
+                      setTableData(tData);
+                  } catch (e) {
+                      console.error(e);
+                  }
+              }, [schedule, picks]);
 
               const activePlayer = selectedPlayer || hoveredPlayer;
 
@@ -111,6 +98,7 @@
               };
 
               if (loading) return <LoadingSpinner text="Analyzing the race..." />;
+              if (error) return <ErrorMessage message={(error && (error.message || String(error))) || "Failed to load race data"} />;
 
               // Chart Dimensions
               const VIEWBOX_WIDTH = 1000;

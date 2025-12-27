@@ -1,28 +1,33 @@
 (() => {
-  const { useState, useEffect, useMemo } = React;
+  const { useMemo } = React;
   window.RC = window.RC || {};
   window.RC.pages = window.RC.pages || {};
   const RC = window.RC;
 
   // 8. HISTORY PAGE
   const HistoryPage = () => {
-              const [historyData, setHistoryData] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(null);
-              useEffect(() => {
-                  const fetchHistory = async () => {
-                      try {
-                          const response = await fetch(HISTORY_URL); if (!response.ok) throw new Error("Failed to fetch History data");
-                          const text = await response.text(); const rawData = csvToJson(text);
-                          const sortedAsc = rawData.filter(r => r.Year && r.Winner).sort((a, b) => parseInt(a.Year) - parseInt(b.Year));
-                          const winCounts = {};
-                          setHistoryData(sortedAsc.map(entry => {
-                              const winner = entry.Winner.trim(); winCounts[winner] = (winCounts[winner] || 0) + 1;
-                              return { ...entry, winNumber: winCounts[winner] };
-                          }).reverse());
-                      } catch (err) { console.error(err); setError(err.message); } finally { setLoading(false); }
-                  };
-                  fetchHistory();
-              }, []);
-              if (loading) return <LoadingSpinner text="Loading History..." />;
+    // Shared league data (loaded once per session by rc-data.js)
+    const { history, loading, error } = RC.data.useLeagueData();
+
+    // Transform history into newest-first list and annotate each winner with winNumber (1st, 2nd, ...)
+    const historyData = useMemo(() => {
+      if (!Array.isArray(history)) return [];
+      const sortedAsc = history
+        .filter(r => r && r.Year && r.Winner)
+        .slice()
+        .sort((a, b) => parseInt(a.Year) - parseInt(b.Year));
+
+      const winCounts = {};
+      return sortedAsc
+        .map(entry => {
+          const winner = String(entry.Winner || "").trim();
+          winCounts[winner] = (winCounts[winner] || 0) + 1;
+          return { ...entry, winNumber: winCounts[winner] };
+        })
+        .reverse();
+    }, [history]);
+
+if (loading) return <LoadingSpinner text="Loading History..." />;
               if (error) return <ErrorMessage message={error} />;
               return (
                   <div className="flex flex-col min-h-screen bg-white font-sans pb-24">

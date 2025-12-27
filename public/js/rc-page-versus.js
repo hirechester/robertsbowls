@@ -1,71 +1,51 @@
 (() => {
-  const { useState, useEffect } = React;
+  const { useState, useEffect, useMemo } = React;
   window.RC = window.RC || {};
   window.RC.pages = window.RC.pages || {};
   const RC = window.RC;
-  const { SCHEDULE_URL, PICKS_URL, csvToJson } = RC;
 
-// 5. VERSUS PAGE
-        const VersusPage = () => {
-            const [players, setPlayers] = useState([]);
-            const [schedule, setSchedule] = useState([]);
-            const [picks, setPicks] = useState([]);
-            const [selectedP1, setSelectedP1] = useState("");
-            const [selectedP2, setSelectedP2] = useState("");
-            const [loading, setLoading] = useState(true);
+  // 5. VERSUS PAGE (Stage 19: uses shared RC.data.useLeagueData())
+  const VersusPage = () => {
+    const { schedule, picks, loading, error } = RC.data.useLeagueData();
 
-            useEffect(() => {
-                const init = async () => {
-                    try {
-                        const [scheduleRes, picksRes] = await Promise.all([
-                            fetch(SCHEDULE_URL),
-                            fetch(PICKS_URL)
-                        ]);
-                        const scheduleText = await scheduleRes.text();
-                        const picksText = await picksRes.text();
+    const players = useMemo(() => {
+      if (!Array.isArray(picks)) return [];
+      return picks.map(p => p.Name).filter(Boolean).sort();
+    }, [picks]);
 
-                        const scheduleData = csvToJson(scheduleText);
-                        const sortedSchedule = scheduleData
-                            .filter(g => g.Date && g.Time)
-                            .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
+    const scheduleSorted = useMemo(() => {
+      if (!Array.isArray(schedule)) return [];
+      return schedule
+        .filter(g => g && g.Date && g.Time)
+        .slice()
+        .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
+    }, [schedule]);
 
-                        const picksData = csvToJson(picksText).filter(p => p.Name);
+    const [selectedP1, setSelectedP1] = useState("");
+    const [selectedP2, setSelectedP2] = useState("");
 
-                        setSchedule(sortedSchedule);
-                        setPicks(picksData);
+    useEffect(() => {
+      if (players.length < 2) return;
+      const p1Valid = selectedP1 && players.includes(selectedP1);
+      const p2Valid = selectedP2 && players.includes(selectedP2);
+      if (!p1Valid || !p2Valid || selectedP1 === selectedP2) {
+        let idx1 = Math.floor(Math.random() * players.length);
+        let idx2 = Math.floor(Math.random() * players.length);
+        while (idx1 === idx2) idx2 = Math.floor(Math.random() * players.length);
+        setSelectedP1(players[idx1]);
+        setSelectedP2(players[idx2]);
+      }
+    }, [players]);
 
-                        const names = picksData.map(p => p.Name).sort();
-                        setPlayers(names);
+    if (loading) return <LoadingSpinner text="Loading Rivalry Mode..." />;
+    if (error) return <ErrorMessage message={(error && (error.message || String(error))) || "Failed to load data"} />;
 
-                        if (names.length >= 2) {
-                            // Randomize initial selection
-                            let idx1 = Math.floor(Math.random() * names.length);
-                            let idx2 = Math.floor(Math.random() * names.length);
-
-                            // Ensure they are different
-                            while (idx1 === idx2) {
-                                idx2 = Math.floor(Math.random() * names.length);
-                            }
-
-                            setSelectedP1(names[idx1]);
-                            setSelectedP2(names[idx2]);
-                        }
-                        setLoading(false);
-                    } catch (e) {
-                        console.error(e);
-                        setLoading(false);
-                    }
-                };
-                init();
-            }, []);
-
-            if (loading) return <LoadingSpinner text="Loading Rivalry Mode..." />;
 
             const getStats = (playerName) => {
                 const p = picks.find(x => x.Name === playerName);
                 if (!p) return { wins: 0, losses: 0, streak: 0 };
                 let wins = 0; let losses = 0; let currentStreak = 0;
-                schedule.forEach(g => {
+                scheduleSorted.forEach(g => {
                     if (g.Winner) {
                         const pick = p[g.Bowl];
                         if (pick && pick.toLowerCase() === g.Winner.toLowerCase()) {
@@ -89,7 +69,7 @@
             if (selectedP1 && selectedP2) {
                 const p1Data = picks.find(x => x.Name === selectedP1);
                 const p2Data = picks.find(x => x.Name === selectedP2);
-                schedule.forEach(g => {
+                scheduleSorted.forEach(g => {
                     const pick1 = p1Data[g.Bowl];
                     const pick2 = p2Data[g.Bowl];
                     if (pick1 && pick2 && pick1.toLowerCase() !== pick2.toLowerCase()) {
@@ -248,5 +228,6 @@
                 </div>
             );
         };
+
   RC.pages.VersusPage = VersusPage;
 })();
