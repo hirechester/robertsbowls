@@ -7,8 +7,9 @@
   const RC = (global.RC = global.RC || {});
 
   // Published Google Sheets CSV endpoints (single sheet, multiple tabs)
-  RC.SCHEDULE_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR6DAHasgDxAIJfV8r9PnD7Y1Z2UqfwhQeFqnk_iMnQISf7dlvjgNiGYq6Bk6R7BPg8Ipm5AnNVjfGM/pub?gid=0&single=true&output=csv";
+  // NOTE: Schedule is now derived from Bowl Games, so SCHEDULE_URL is an alias.
   RC.BOWL_GAMES_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR6DAHasgDxAIJfV8r9PnD7Y1Z2UqfwhQeFqnk_iMnQISf7dlvjgNiGYq6Bk6R7BPg8Ipm5AnNVjfGM/pub?gid=235453281&single=true&output=csv";
+  RC.SCHEDULE_URL = RC.BOWL_GAMES_URL; // legacy alias (retire the old Schedule tab)
   RC.PICKS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR6DAHasgDxAIJfV8r9PnD7Y1Z2UqfwhQeFqnk_iMnQISf7dlvjgNiGYq6Bk6R7BPg8Ipm5AnNVjfGM/pub?gid=1948765269&single=true&output=csv";
   RC.HISTORY_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR6DAHasgDxAIJfV8r9PnD7Y1Z2UqfwhQeFqnk_iMnQISf7dlvjgNiGYq6Bk6R7BPg8Ipm5AnNVjfGM/pub?gid=1391791324&single=true&output=csv";
   RC.TEAMS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR6DAHasgDxAIJfV8r9PnD7Y1Z2UqfwhQeFqnk_iMnQISf7dlvjgNiGYq6Bk6R7BPg8Ipm5AnNVjfGM/pub?gid=1148947895&single=true&output=csv";
@@ -54,9 +55,9 @@
     const rows = RC.parseCSV(csvText);
     const headers = rows[0] || [];
     const data = rows.slice(1).map(row => {
-      let obj = {};
+      const obj = {};
       headers.forEach((header, index) => {
-        obj[header] = row[index] || "";
+        obj[String(header || "").trim()] = (row[index] || "").toString().trim();
       });
       return obj;
     });
