@@ -1,4 +1,4 @@
-/* Roberts Cup - Shared league data loader (schedule/picks/history)
+/* Roberts Cup - Shared league data loader (schedule/picks/history/teams)
    Goal: fetch & parse published Google Sheets CSVs once and share across pages.
    Loaded as: <script src="js/rc-data.js"></script>
 */
@@ -10,36 +10,130 @@
 
   const { useState, useEffect, useCallback } = React;
 
+  // Lightweight CSV parser (handles quotes, commas, and newlines)
+  function parseCSV(text) {
+    const rows = [];
+    let row = [];
+    let cur = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      const next = text[i + 1];
+
+      if (inQuotes) {
+        if (ch === '"' && next === '"') { // escaped quote
+          cur += '"';
+          i++;
+        } else if (ch === '"') {
+          inQuotes = false;
+        } else {
+          cur += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ',') {
+          row.push(cur);
+          cur = "";
+        } else if (ch === '\n') {
+          row.push(cur);
+          cur = "";
+          // trim trailing \r from last cell if present
+          if (row.length && typeof row[row.length - 1] === "string") {
+            row[row.length - 1] = row[row.length - 1].replace(/\r$/, "");
+          }
+          // ignore fully-empty trailing lines
+          if (row.some(c => String(c || "").trim() !== "")) rows.push(row);
+          row = [];
+        } else {
+          cur += ch;
+        }
+      }
+    }
+
+    // last cell / row
+    row.push(cur);
+    if (row.length && typeof row[row.length - 1] === "string") {
+      row[row.length - 1] = row[row.length - 1].replace(/\r$/, "");
+    }
+    if (row.some(c => String(c || "").trim() !== "")) rows.push(row);
+
+    return rows;
+  }
+
+  // Convert CSV -> array of objects
+  RC.csvToJson = function csvToJson(csvText) {
+    if (!csvText) return [];
+    const rows = parseCSV(csvText);
+    if (!rows.length) return [];
+
+    const headersRaw = rows[0].map(h => String(h || "").trim());
+    const headers = [];
+    const seen = {};
+    headersRaw.forEach((h) => {
+      const key = h || "Column";
+      if (!seen[key]) {
+        seen[key] = 1;
+        headers.push(key);
+      } else {
+        seen[key] += 1;
+        headers.push(`${key} (${seen[key]})`);
+      }
+    });
+
+    const out = [];
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      const obj = {};
+      for (let c = 0; c < headers.length; c++) {
+        obj[headers[c]] = (r[c] !== undefined ? String(r[c]).trim() : "");
+      }
+      out.push(obj);
+    }
+    return out;
+  };
+
   // Simple in-memory cache shared across the whole SPA session
   const cache = {
     status: "idle",      // "idle" | "loading" | "ready" | "error"
-    data: null,          // { schedule, picks, history }
+    data: null,          // { schedule, picks, history, teams }
     error: null,
     promise: null,
     ts: null
   };
 
   async function fetchAndParseAll() {
-    if (!RC.csvToJson) throw new Error("RC.csvToJson is not available (rc-config.js must load first).");
-    if (!RC.SCHEDULE_URL || !RC.PICKS_URL || !RC.HISTORY_URL) throw new Error("One or more data URLs are missing on RC.*");
+    if (!RC.SCHEDULE_URL || !RC.PICKS_URL || !RC.HISTORY_URL) {
+      throw new Error("One or more required data URLs are missing on RC.*");
+    }
 
-    const [scheduleRes, picksRes, historyRes] = await Promise.all([
-      fetch(RC.SCHEDULE_URL),
-      fetch(RC.PICKS_URL),
-      fetch(RC.HISTORY_URL)
+    const hasTeams = !!RC.TEAMS_URL;
+
+    const [scheduleRes, picksRes, historyRes, teamsRes] = await Promise.all([
+      fetch(RC.SCHEDULE_URL, { cache: "no-store" }),
+      fetch(RC.PICKS_URL, { cache: "no-store" }),
+      fetch(RC.HISTORY_URL, { cache: "no-store" }),
+      hasTeams ? fetch(RC.TEAMS_URL, { cache: "no-store" }) : Promise.resolve(null)
     ]);
 
-    const [scheduleText, picksText, historyText] = await Promise.all([
+    const [scheduleText, picksText, historyText, teamsText] = await Promise.all([
       scheduleRes.text(),
       picksRes.text(),
-      historyRes.text()
+      historyRes.text(),
+      hasTeams && teamsRes ? teamsRes.text() : Promise.resolve("")
     ]);
 
     const schedule = RC.csvToJson(scheduleText);
     const picks = RC.csvToJson(picksText).filter(p => p && p.Name);
     const history = RC.csvToJson(historyText);
 
-    return { schedule, picks, history };
+    // Teams tab is optional (Stage B). If TEAMS_URL is blank, teams is []
+    const teams = hasTeams
+      ? RC.csvToJson(teamsText).filter(t => t && (t["School Name"] || t.School || t.Team || t.Name))
+      : [];
+
+    return { schedule, picks, history, teams };
   }
 
   function loadOnce() {
@@ -48,17 +142,17 @@
 
     cache.status = "loading";
     cache.error = null;
-
     cache.promise = fetchAndParseAll()
       .then((data) => {
-        cache.data = data;
         cache.status = "ready";
+        cache.data = data;
         cache.ts = Date.now();
         return data;
       })
       .catch((err) => {
-        cache.error = err;
         cache.status = "error";
+        cache.error = err;
+        cache.data = null;
         throw err;
       })
       .finally(() => {
@@ -68,83 +162,94 @@
     return cache.promise;
   }
 
-  RC.data.prefetch = () => loadOnce().catch(() => {});
-  RC.data.refresh = async () => {
-    cache.status = "idle";
-    cache.data = null;
-    cache.error = null;
-    cache.ts = null;
-    return loadOnce();
-  };
-
-  // React hook pages can call to get shared data
+  // Public hook: shared across all pages
   RC.data.useLeagueData = function useLeagueData() {
     const [state, setState] = useState(() => ({
       schedule: cache.data?.schedule || null,
       picks: cache.data?.picks || null,
       history: cache.data?.history || null,
-      loading: cache.status !== "ready",
+      teams: cache.data?.teams || null,
+      loading: cache.status === "loading" || cache.status === "idle",
       error: cache.error || null,
       lastUpdated: cache.ts
     }));
 
-    useEffect(() => {
-      let cancelled = false;
+    const refresh = useCallback(async () => {
+      // Force a refetch
+      cache.data = null;
+      cache.error = null;
+      cache.status = "idle";
+      cache.ts = null;
+      cache.promise = null;
 
-      // Fast-path: already loaded
-      if (cache.data && cache.status === "ready") {
+      setState((s) => ({ ...s, loading: true, error: null }));
+
+      try {
+        const data = await loadOnce();
         setState({
-          schedule: cache.data.schedule,
-          picks: cache.data.picks,
-          history: cache.data.history,
+          schedule: data.schedule,
+          picks: data.picks,
+          history: data.history,
+          teams: data.teams,
           loading: false,
           error: null,
           lastUpdated: cache.ts
         });
+      } catch (e) {
+        setState((s) => ({ ...s, loading: false, error: e, lastUpdated: cache.ts }));
+      }
+    }, []);
+
+    useEffect(() => {
+      let alive = true;
+
+      if (cache.data && cache.status === "ready") {
+        setState((s) => ({
+          ...s,
+          schedule: cache.data.schedule,
+          picks: cache.data.picks,
+          history: cache.data.history,
+          teams: cache.data.teams,
+          loading: false,
+          error: null,
+          lastUpdated: cache.ts
+        }));
         return;
       }
 
       setState((s) => ({ ...s, loading: true, error: null }));
-
       loadOnce()
         .then((data) => {
-          if (cancelled) return;
+          if (!alive) return;
           setState({
             schedule: data.schedule,
             picks: data.picks,
             history: data.history,
+            teams: data.teams,
             loading: false,
             error: null,
             lastUpdated: cache.ts
           });
         })
-        .catch((err) => {
-          if (cancelled) return;
-          setState((s) => ({ ...s, loading: false, error: err }));
+        .catch((e) => {
+          if (!alive) return;
+          setState((s) => ({ ...s, loading: false, error: e, lastUpdated: cache.ts }));
         });
 
       return () => {
-        cancelled = true;
+        alive = false;
       };
     }, []);
 
-    const refresh = useCallback(async () => {
-      try {
-        setState((s) => ({ ...s, loading: true, error: null }));
-        const data = await RC.data.refresh();
-        setState({
-          schedule: data.schedule,
-          picks: data.picks,
-          history: data.history,
-          loading: false,
-          error: null,
-          lastUpdated: cache.ts
-        });
-      } catch (err) {
-        setState((s) => ({ ...s, loading: false, error: err }));
-      }
-    }, []);
-
-    return { ...state, refresh };
+    return {
+      schedule: state.schedule,
+      picks: state.picks,
+      history: state.history,
+      teams: state.teams,
+      loading: state.loading,
+      error: state.error,
+      refresh,
+      lastUpdated: state.lastUpdated
+    };
   };
 })();
