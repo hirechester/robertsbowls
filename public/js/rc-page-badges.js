@@ -3,7 +3,6 @@
   window.RC = window.RC || {};
   window.RC.pages = window.RC.pages || {};
   const RC = window.RC;
-  const { SCHEDULE_URL, PICKS_URL, HISTORY_URL, csvToJson } = RC;
 
 // 4. BADGES PAGE (New)
         const BadgeCard = ({ emoji, title, winners, description, colorTheme }) => {

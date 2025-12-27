@@ -9,7 +9,6 @@
   const RC = window.RC;
 
   // Local aliases (so the moved code stays unchanged)
-  const { SCHEDULE_URL, PICKS_URL, csvToJson } = RC;
 
   // --- HOME PAGE ---
   const HomePage = () => {
@@ -35,7 +34,6 @@
                 try {
                     const schedule = scheduleData;
                     const picks = picksData;
-
 
                         // 1. Process Schedule
                         const sortedSchedule = schedule
