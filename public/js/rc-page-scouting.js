@@ -14,26 +14,34 @@
   const ScoutingReportPage = () => {
                       const [selectedPlayer, setSelectedPlayer] = useState("");
                       const [players, setPlayers] = useState([]);
-    const { schedule, picks, history, loading, error, refresh, lastUpdated } = RC.data.useLeagueData();
-  
-                      // TEAM DATA FROM CSV
-                      // Reference: School Export - Teams.csv
-                      const TEAM_DATA = {
-                          "Ohio State": { hex: "#BB0000", image: "images/helmets/OhioState.gif", nickname: "Buckeyes" },
-                          "Georgia": { hex: "#BA0C2F", image: "images/helmets/Georgia.gif", nickname: "Bulldogs" },
-                          "Texas Tech": { hex: "#CC0000", image: "images/helmets/TexasTech.gif", nickname: "Red Raiders" },
-                          "Oregon": { hex: "#154734", image: "images/helmets/Oregon.gif", nickname: "Ducks" },
-                          "Texas A&M": { hex: "#500000", image: "images/helmets/TexasAM.gif", nickname: "Aggies" },
-                          "James Madison": { hex: "#450084", image: "images/helmets/JamesMadison.gif", nickname: "Dukes" },
-                          "Alabama": { hex: "#8E001C", image: "images/helmets/Alabama.gif", nickname: "Crimson Tide" },
-                          "Oklahoma": { hex: "#841617", image: "images/helmets/Oklahoma.gif", nickname: "Sooners" },
-                          "Indiana": { hex: "#990000", image: "images/helmets/Indiana.gif", nickname: "Hoosiers" },
-                          "Tulane": { hex: "#006747", image: "images/helmets/Tulane.gif", nickname: "Green Wave" },
-                          "Ole Miss": { hex: "#182B49", image: "images/helmets/OleMiss.gif", nickname: "Rebels" },
-                          "Miami (FL)": { hex: "#F47321", image: "images/helmets/MiamiFL.gif", nickname: "Hurricanes" }
-                      };
-  
-    useEffect(() => {
+    const { schedule, picks, history, teams, loading, error, refresh, lastUpdated } = RC.data.useLeagueData();
+// TEAM DATA (from Teams tab in the main Google Sheet)
+    // Expected columns: "School Name", "Team Nickname", "Primary Hex", "Logo"
+    const normalizeTeamKey = (name) => {
+      return (name || "")
+        .replace(/#\d+\s*/g, "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "");
+    };
+
+    const TEAM_INDEX = useMemo(() => {
+      const idx = {};
+      if (!Array.isArray(teams)) return idx;
+      teams.forEach((row) => {
+        const school = String(row["School Name"] || row.School || row.Team || row.Name || "").trim();
+        if (!school) return;
+        const nickname = String(row["Team Nickname"] || row.Nickname || "").trim();
+        const hex = String(row["Primary Hex"] || row.Hex || row.Color || "").trim();
+        const logo = String(row.Logo || row["Logo URL"] || row["Logo Url"] || row.LogoUrl || "").trim();
+        const entry = { school, nickname, hex, logo };
+        idx[normalizeTeamKey(school)] = entry;
+        if (nickname) idx[normalizeTeamKey(nickname)] = entry;
+      });
+      return idx;
+    }, [teams]);
+
+useEffect(() => {
         // Initialize player list from shared picks data
         if (!Array.isArray(picks)) return;
         const names = picks.map(p => p.Name).filter(Boolean).sort();
@@ -246,52 +254,36 @@
   
                       // Helper component for Team Card
                       const ChampCard = ({ teamName }) => {
-                          // Remove seed from name for lookup (e.g. "#5 Indiana" -> "Indiana")
-                          // And trim just in case
-                          const cleanName = teamName ? teamName.replace(/#\d+\s*/g, '').trim() : "";
-  
-                          // Lookup data from constant (case-insensitive key check if needed, but strict here)
-                          const data = TEAM_DATA[cleanName];
-  
-                          // If not found in our list, use generic fallback
-                          if (!data) {
-                              return (
-                                   <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 relative overflow-hidden">
-                                      <div className="text-xs font-bold text-gray-400 uppercase mb-1 relative z-10">National Championship Pick</div>
-                                      <div className="text-2xl font-black text-gray-900 truncate relative z-10">{teamName || "-"}</div>
-                                      <div className="absolute right-[-10px] bottom-[-10px] text-6xl opacity-5 pointer-events-none">🏆</div>
-                                  </div>
-                              );
-                          }
-  
-                          return (
-                              <div
-                                  className="rounded-xl shadow-md p-4 relative overflow-hidden border-l-4"
-                                  style={{
-                                      backgroundColor: 'white',
-                                      borderColor: data.hex,
-                                  }}
-                              >
-                                   {/* Background Tint */}
-                                   <div className="absolute inset-0 opacity-5" style={{ backgroundColor: data.hex }}></div>
-  
-                                   <div className="flex justify-between items-center relative z-10">
-                                      <div>
-                                          <div className="text-xs font-bold uppercase mb-1" style={{ color: data.hex }}>National Championship Pick</div>
-                                          <div className="text-3xl font-black text-gray-900 leading-none">{cleanName}</div>
-                                          <div className="text-sm font-bold text-gray-400 mt-1">{data.nickname}</div>
-                                      </div>
-                                      <div className="flex-shrink-0 w-20 h-20 -mr-2">
-                                          <img
-                                              src={data.image}
-                                              alt={cleanName}
-                                              className="w-full h-full object-contain drop-shadow-md transform hover:scale-110 transition-transform duration-300"
-                                          />
-                                      </div>
-                                   </div>
-                              </div>
-                          );
-                      };
+      const cleanName = teamName ? teamName.replace(/#\d+\s*/g, "").trim() : "";
+      const key = normalizeTeamKey(cleanName);
+      const data = TEAM_INDEX[key];
+
+      const hexRaw = data && data.hex ? String(data.hex).trim() : "";
+      const hex = hexRaw ? (hexRaw.startsWith("#") ? hexRaw : "#" + hexRaw.replace(/^#/, "")) : "#1D4ED8";
+      const nickname = data && data.nickname ? data.nickname : "";
+      const logo = data && data.logo ? data.logo : "";
+      const school = data && data.school ? data.school : (cleanName || "-");
+
+      return (
+        <div className="rounded-2xl border shadow-sm overflow-hidden relative" style={{ borderColor: hex }}>
+          <div className="absolute inset-0 opacity-10" style={{ backgroundColor: hex }} />
+          <div className="relative p-5 flex items-center gap-4">
+            <div className="w-16 h-16 rounded-xl bg-white/80 ring-1 ring-black/5 flex items-center justify-center overflow-hidden">
+              {logo ? (
+                <img src={logo} alt={school} className="w-14 h-14 object-contain drop-shadow" loading="lazy" />
+              ) : (
+                <div className="text-2xl">🏆</div>
+              )}
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">National Championship Pick</div>
+              <div className="text-2xl font-black text-gray-900 truncate">{school}</div>
+              {nickname ? <div className="text-sm text-gray-700 font-semibold truncate">{nickname}</div> : null}
+            </div>
+          </div>
+        </div>
+      );
+    };
   
                       return (
                           <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
