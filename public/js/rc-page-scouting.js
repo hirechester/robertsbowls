@@ -276,7 +276,7 @@ useEffect(() => {
               )}
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">National Championship Pick</div>
+              <div className="text-xs font-bold uppercase tracking-wider" style={hex ? { color: hex } : undefined}>National Championship Pick</div>
               <div className="text-2xl font-black text-gray-900 truncate">{school}</div>
               {nickname ? <div className="text-sm text-gray-700 font-semibold truncate">{nickname}</div> : null}
             </div>
