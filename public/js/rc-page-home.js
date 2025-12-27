@@ -17,48 +17,25 @@
             const [slateGames, setSlateGames] = useState([]);
             const [loading, setLoading] = useState(true);
 
-            // Static Bank
-            const STATIC_HEADLINES = [
-                { type: "STATIC", Emoji: "👮‍♂️", Headline: "League Office Update", Content: "The Commissioner has issued a formal warning: trash talk is mandatory, accuracy is optional." },
-                { type: "STATIC", Emoji: "📉", Headline: "Market Crash", Content: "Confidence points are plummeting faster than crypto. Who bet the house on that 6-6 MAC team?" },
-                { type: "STATIC", Emoji: "🦃", Headline: "Family Feud", Content: "Thanksgiving was weeks ago, but the real family drama is happening on the leaderboard right now." },
-                { type: "STATIC", Emoji: "🥶", Headline: "Ice Cold", Content: "A chilly wind blows through the bottom of the standings. Better bundle up, it's freezing down there." },
-                { type: "STATIC", Emoji: "👀", Headline: "Sleeping Giant", Content: "They started slow, but the analytics (and their ego) say a comeback is statistically probable." },
-                { type: "STATIC", Emoji: "🥔", Headline: "Bowl SZN", Content: "Nothing says 'Happy Holidays' like sweating out a meaningless 4th quarter in the Famous Idaho Potato Bowl." },
-                { type: "STATIC", Emoji: "📊", Headline: "The Analytics", Content: "The numbers don't lie, but they might hurt your feelings. Check the probability charts if you dare." },
-                { type: "STATIC", Emoji: "👑", Headline: "Heavy is the Head", Content: "The leader looks comfortable, but the chasing pack is hungry. Can they hold the Iron Throne?" },
-                { type: "STATIC", Emoji: "🤔", Headline: "Questionable Call", Content: "That pick was... bold. Let's see if it pays off big or ends in total, hilarious tragedy." },
-                { type: "STATIC", Emoji: "🚑", Headline: "Critical Condition", Content: "The elimination line is creeping closer. Time to make a move or start planning your concession speech." },
-                { type: "STATIC", Emoji: "🎲", Headline: "Rolling the Dice", Content: "High risk, high reward. Someone is swinging for the fences while everyone else plays it safe." },
-                { type: "STATIC", Emoji: "📺", Headline: "Glued to the Screen", Content: "4 games, 3 screens, 1 champion. The remote control is the true MVP of the Roberts Cup." },
-                { type: "STATIC", Emoji: "💔", Headline: "Heartbreaker", Content: "That sure-thing lock just lost on a last-second field goal. There goes the perfect weekend." },
-                { type: "STATIC", Emoji: "📈", Headline: "Stock Rising", Content: "Moving up the leaderboard like a rocket. The dark horse has officially entered the chat." },
-                { type: "STATIC", Emoji: "🔮", Headline: "Crystal Ball", Content: "Predicted the upset perfectly. Are they a football genius or a time traveler from 2026?" },
-                { type: "STATIC", Emoji: "🧂", Headline: "Salty", Content: "The group chat is getting spicy. Rivalries are heating up as the games wind down." },
-                { type: "STATIC", Emoji: "🏆", Headline: "Eye on the Prize", Content: "The Roberts Cup is gleaming. Polish your shelf, or prepare your excuses." },
-                { type: "STATIC", Emoji: "🏹", Headline: "Chaos Theory", Content: "Absolute mayhem in the late games. No lead is safe when the Pac-12 (RIP) plays after dark." },
-                { type: "STATIC", Emoji: "🐢", Headline: "Slow and Steady", Content: "Picking favorites might be boring, but it might just win the race. Don't be a hero." },
-                { type: "STATIC", Emoji: "🦁", Headline: "King of the Jungle", Content: "A dominant performance so far. Is this the start of a dynasty, or a fluke?" },
-                { type: "STATIC", Emoji: "🏚️", Headline: "Rebuilding Year", Content: "\"I'm just playing for fun this year.\" — Every loser, ever." },
-                { type: "STATIC", Emoji: "⚡", Headline: "Shock the World", Content: "The pick nobody saw coming just cashed. The standings are in shambles." },
-                { type: "STATIC", Emoji: "🎯", Headline: "Bullseye", Content: "Precision picking. While others panic, the leader stays cool under pressure." },
-                { type: "STATIC", Emoji: "📉", Headline: "Fading Fast", Content: "Started strong, now fading down the stretch. Can they stop the bleeding before it's too late?" },
-                { type: "STATIC", Emoji: "🍿", Headline: "Get the Popcorn", Content: "The tiebreaker scenarios are getting wild. We might need a NASA supercomputer for this finish." }
-            ];
+            // Shared league data (fetched once per session by rc-data.js)
+            const { schedule: scheduleData, picks: picksData, loading: dataLoading, error: dataError } = RC.data.useLeagueData();
 
             useEffect(() => {
-                const generateData = async () => {
-                    try {
-                        const [scheduleRes, picksRes] = await Promise.all([
-                            fetch(SCHEDULE_URL),
-                            fetch(PICKS_URL)
-                        ]);
+                if (dataLoading) {
+                    setLoading(true);
+                    return;
+                }
+                if (dataError) {
+                    console.error("HomePage: failed to load league data", dataError);
+                    setLoading(false);
+                    return;
+                }
+                if (!scheduleData || !picksData) return;
 
-                        const scheduleText = await scheduleRes.text();
-                        const picksText = await picksRes.text();
+                try {
+                    const schedule = scheduleData;
+                    const picks = picksData;
 
-                        const schedule = csvToJson(scheduleText);
-                        const picks = csvToJson(picksText).filter(p => p.Name);
 
                         // 1. Process Schedule
                         const sortedSchedule = schedule
@@ -214,15 +191,40 @@
 
                         setHeadlines(finalHeadlines);
                         setLoading(false);
+                } catch (error) {
+                    console.error("HomePage: error building home data", error);
+                    setLoading(false);
+                }
+            }, [dataLoading, dataError, scheduleData, picksData]);
 
-                    } catch (err) {
-                        console.error(err);
-                        setLoading(false);
-                    }
-                };
-
-                generateData();
-            }, []);
+            // Static Bank
+            const STATIC_HEADLINES = [
+                { type: "STATIC", Emoji: "👮‍♂️", Headline: "League Office Update", Content: "The Commissioner has issued a formal warning: trash talk is mandatory, accuracy is optional." },
+                { type: "STATIC", Emoji: "📉", Headline: "Market Crash", Content: "Confidence points are plummeting faster than crypto. Who bet the house on that 6-6 MAC team?" },
+                { type: "STATIC", Emoji: "🦃", Headline: "Family Feud", Content: "Thanksgiving was weeks ago, but the real family drama is happening on the leaderboard right now." },
+                { type: "STATIC", Emoji: "🥶", Headline: "Ice Cold", Content: "A chilly wind blows through the bottom of the standings. Better bundle up, it's freezing down there." },
+                { type: "STATIC", Emoji: "👀", Headline: "Sleeping Giant", Content: "They started slow, but the analytics (and their ego) say a comeback is statistically probable." },
+                { type: "STATIC", Emoji: "🥔", Headline: "Bowl SZN", Content: "Nothing says 'Happy Holidays' like sweating out a meaningless 4th quarter in the Famous Idaho Potato Bowl." },
+                { type: "STATIC", Emoji: "📊", Headline: "The Analytics", Content: "The numbers don't lie, but they might hurt your feelings. Check the probability charts if you dare." },
+                { type: "STATIC", Emoji: "👑", Headline: "Heavy is the Head", Content: "The leader looks comfortable, but the chasing pack is hungry. Can they hold the Iron Throne?" },
+                { type: "STATIC", Emoji: "🤔", Headline: "Questionable Call", Content: "That pick was... bold. Let's see if it pays off big or ends in total, hilarious tragedy." },
+                { type: "STATIC", Emoji: "🚑", Headline: "Critical Condition", Content: "The elimination line is creeping closer. Time to make a move or start planning your concession speech." },
+                { type: "STATIC", Emoji: "🎲", Headline: "Rolling the Dice", Content: "High risk, high reward. Someone is swinging for the fences while everyone else plays it safe." },
+                { type: "STATIC", Emoji: "📺", Headline: "Glued to the Screen", Content: "4 games, 3 screens, 1 champion. The remote control is the true MVP of the Roberts Cup." },
+                { type: "STATIC", Emoji: "💔", Headline: "Heartbreaker", Content: "That sure-thing lock just lost on a last-second field goal. There goes the perfect weekend." },
+                { type: "STATIC", Emoji: "📈", Headline: "Stock Rising", Content: "Moving up the leaderboard like a rocket. The dark horse has officially entered the chat." },
+                { type: "STATIC", Emoji: "🔮", Headline: "Crystal Ball", Content: "Predicted the upset perfectly. Are they a football genius or a time traveler from 2026?" },
+                { type: "STATIC", Emoji: "🧂", Headline: "Salty", Content: "The group chat is getting spicy. Rivalries are heating up as the games wind down." },
+                { type: "STATIC", Emoji: "🏆", Headline: "Eye on the Prize", Content: "The Roberts Cup is gleaming. Polish your shelf, or prepare your excuses." },
+                { type: "STATIC", Emoji: "🏹", Headline: "Chaos Theory", Content: "Absolute mayhem in the late games. No lead is safe when the Pac-12 (RIP) plays after dark." },
+                { type: "STATIC", Emoji: "🐢", Headline: "Slow and Steady", Content: "Picking favorites might be boring, but it might just win the race. Don't be a hero." },
+                { type: "STATIC", Emoji: "🦁", Headline: "King of the Jungle", Content: "A dominant performance so far. Is this the start of a dynasty, or a fluke?" },
+                { type: "STATIC", Emoji: "🏚️", Headline: "Rebuilding Year", Content: "\"I'm just playing for fun this year.\" — Every loser, ever." },
+                { type: "STATIC", Emoji: "⚡", Headline: "Shock the World", Content: "The pick nobody saw coming just cashed. The standings are in shambles." },
+                { type: "STATIC", Emoji: "🎯", Headline: "Bullseye", Content: "Precision picking. While others panic, the leader stays cool under pressure." },
+                { type: "STATIC", Emoji: "📉", Headline: "Fading Fast", Content: "Started strong, now fading down the stretch. Can they stop the bleeding before it's too late?" },
+                { type: "STATIC", Emoji: "🍿", Headline: "Get the Popcorn", Content: "The tiebreaker scenarios are getting wild. We might need a NASA supercomputer for this finish." }
+            ];
 
             if (loading) return <LoadingSpinner text="Loading your home experience..." />;
 
