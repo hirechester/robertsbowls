@@ -1,7 +1,6 @@
 const { useState, useEffect, useMemo } = React;
 
 // --- CONFIGURATION + HELPERS (loaded from /js/rc-config.js) ---
-const { SCHEDULE_URL, PICKS_URL, HISTORY_URL, parseCSV, csvToJson } = window.RC;
 
 // --- COMPONENTS ---
 
@@ -11,8 +10,6 @@ const { LoadingSpinner, ErrorMessage, StatusPill } = (window.RC && window.RC.ui)
 const { Navigation } = window.RC;
 
 // --- PAGES ---
-
-
 
 // 0. HOME PAGE (loaded from js/rc-page-home.js)
 window.RC.pages = window.RC.pages || {};

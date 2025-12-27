@@ -9,7 +9,6 @@
   const RC = window.RC;
 
   // Local aliases (so the moved code stays unchanged)
-  const { SCHEDULE_URL, PICKS_URL, csvToJson } = RC;
 
   // --- STANDINGS PAGE ---
   const StandingsPage = () => {
@@ -254,7 +253,6 @@
         </div>
     );
 };
-
 
   // Export
   RC.pages.StandingsPage = StandingsPage;
