@@ -2,50 +2,19 @@
    Loaded as: <script type="text/babel" src="js/rc-page-simulator.js"></script>
 */
 (() => {
-  const { useState, useEffect, useMemo } = React;
+  const { useState, useMemo } = React;
 
   window.RC = window.RC || {};
   window.RC.pages = window.RC.pages || {};
   const RC = window.RC;
 
-  // Local aliases (so the moved code stays unchanged)
-  const { SCHEDULE_URL, PICKS_URL, csvToJson } = RC;
 
   // --- SIMULATOR PAGE ---
   const SimulatorPage = () => {
-      const [loading, setLoading] = useState(true);
-      const [schedule, setSchedule] = useState([]);
-      const [picks, setPicks] = useState([]);
+      // Shared league data (loaded once via rc-data.js)
+      const { schedule, picks, history, loading, error, refresh } = RC.data.useLeagueData();
       const [simulatedWinners, setSimulatedWinners] = useState({});
 
-      useEffect(() => {
-          const init = async () => {
-              try {
-                  const [scheduleRes, picksRes] = await Promise.all([
-                      fetch(SCHEDULE_URL),
-                      fetch(PICKS_URL)
-                  ]);
-                  const scheduleText = await scheduleRes.text();
-                  const picksText = await picksRes.text();
-
-                  const scheduleData = csvToJson(scheduleText);
-                  // Filter for UNPLAYED games (no winner yet) for the toggles
-                  const unplayed = scheduleData.filter(g => !g.Winner && g.Bowl && g["Team 1"]);
-                  // Sort by date/time
-                  unplayed.sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
-
-                  const picksData = csvToJson(picksText).filter(p => p.Name);
-
-                  setSchedule(scheduleData); // Need full schedule for calculations
-                  setPicks(picksData);
-                  setLoading(false);
-              } catch (e) {
-                  console.error(e);
-                  setLoading(false);
-              }
-          };
-          init();
-      }, []);
 
       const toggleWinner = (bowl, team) => {
           setSimulatedWinners(prev => {
@@ -88,6 +57,7 @@
       }, [picks, schedule, simulatedWinners]);
 
       if (loading) return <LoadingSpinner text="Booting up The Oracle..." />;
+      if (error) return <ErrorMessage message={(error && (error.message || String(error))) || "Failed to load data"} />;
 
       const unplayedGames = schedule.filter(g => !g.Winner && g.Bowl && g["Team 1"]).sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
 

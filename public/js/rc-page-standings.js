@@ -13,22 +13,14 @@
 
   // --- STANDINGS PAGE ---
   const StandingsPage = () => {
+    const { schedule, picks, history, loading, error, refresh, lastUpdated } = RC.data.useLeagueData();
     const [standings, setStandings] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
     const [sortConfig, setSortConfig] = useState({ key: 'wins', direction: 'descending' });
 
     useEffect(() => {
-        const calculateStandings = async () => {
-            try {
-                const [scheduleRes, picksRes] = await Promise.all([
-                    fetch(SCHEDULE_URL),
-                    fetch(PICKS_URL)
-                ]);
-                const scheduleText = await scheduleRes.text();
-                const picksText = await picksRes.text();
-                const schedule = csvToJson(scheduleText);
-                const picks = csvToJson(picksText).filter(p => p.Name);
+        // Standings are computed from shared league data (loaded once in rc-data.js).
+        if (!Array.isArray(schedule) || !Array.isArray(picks)) return;
+        try {
                 const sortedSchedule = schedule.filter(g => g.Date && g.Time).sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
                 const unplayedGames = sortedSchedule.filter(g => !g.Winner);
                 const SIMULATIONS = 2000;
@@ -103,10 +95,10 @@
                     stats[i].status = status;
                 }
                 setStandings(stats);
-            } catch (err) { console.error(err); setError(err.message); } finally { setLoading(false); }
-        };
-        calculateStandings();
-    }, []);
+        } catch (err) {
+            console.error(err);
+        }
+    }, [schedule, picks]);
 
     const sortedData = useMemo(() => {
         let sortableItems = [...standings];
@@ -197,7 +189,7 @@
     };
 
     if (loading) return <LoadingSpinner text="Loading Standings..." />;
-    if (error) return <ErrorMessage message={error} />;
+    if (error) return <ErrorMessage message={(error && (error.message || String(error))) || "Unknown error"} />;
 
     return (
         <div className="flex flex-col min-h-screen bg-white font-sans pb-24">

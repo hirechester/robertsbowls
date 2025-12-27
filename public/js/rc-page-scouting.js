@@ -9,16 +9,12 @@
   const RC = window.RC;
 
   // Local aliases (so the moved code stays unchanged)
-  const { SCHEDULE_URL, PICKS_URL, HISTORY_URL, parseCSV, csvToJson } = RC;
 
   // --- SCOUTING REPORT PAGE ---
   const ScoutingReportPage = () => {
                       const [selectedPlayer, setSelectedPlayer] = useState("");
                       const [players, setPlayers] = useState([]);
-                      const [schedule, setSchedule] = useState([]);
-                      const [picks, setPicks] = useState([]);
-                      const [history, setHistory] = useState([]);
-                      const [loading, setLoading] = useState(true);
+    const { schedule, picks, history, loading, error, refresh, lastUpdated } = RC.data.useLeagueData();
   
                       // TEAM DATA FROM CSV
                       // Reference: School Export - Teams.csv
@@ -37,35 +33,19 @@
                           "Miami (FL)": { hex: "#F47321", image: "images/helmets/MiamiFL.gif", nickname: "Hurricanes" }
                       };
   
-                      useEffect(() => {
-                          const init = async () => {
-                              try {
-                                  const [schedRes, picksRes, histRes] = await Promise.all([
-                                      fetch(SCHEDULE_URL), fetch(PICKS_URL), fetch(HISTORY_URL)
-                                  ]);
-                                  const schedText = await schedRes.text();
-                                  const picksText = await picksRes.text();
-                                  const histText = await histRes.text();
-  
-                                  const sData = csvToJson(schedText);
-                                  const pData = csvToJson(picksText).filter(p => p.Name);
-                                  const hData = csvToJson(histText);
-  
-                                  setSchedule(sData);
-                                  setPicks(pData);
-                                  setHistory(hData);
-  
-                                  const names = pData.map(p => p.Name).sort();
-                                  setPlayers(names);
-                                  if (names.length > 0) setSelectedPlayer(names[0]);
-  
-                                  setLoading(false);
-                              } catch (e) { console.error(e); setLoading(false); }
-                          };
-                          init();
-                      }, []);
+    useEffect(() => {
+        // Initialize player list from shared picks data
+        if (!Array.isArray(picks)) return;
+        const names = picks.map(p => p.Name).filter(Boolean).sort();
+        setPlayers(names);
+        if (!selectedPlayer && names.length > 0) setSelectedPlayer(names[0]);
+        if (selectedPlayer && names.length > 0 && !names.includes(selectedPlayer)) {
+            setSelectedPlayer(names[0]);
+        }
+    }, [picks]);
   
                       if (loading) return <LoadingSpinner text="Scouting players..." />;
+    if (error) return <ErrorMessage message={(error && (error.message || String(error))) || "Failed to load data"} />;
   
                       // --- CALCULATIONS ---
                       const calculateStats = (player) => {
