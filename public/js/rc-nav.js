@@ -21,7 +21,19 @@ const Navigation = ({ activeTab, setActiveTab }) => {
         { id: 'simulator', label: 'Simulator', icon: <><circle cx="12" cy="10" r="8" /><path d="M12 6a4 4 0 0 1 4 4" /><path d="M8 22h8" /><path d="M12 18v4" /></> },
         { id: 'scouting', label: 'Scouting', icon: <><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></> },
         { id: 'history', label: 'History', icon: <><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></> }
-    ];
+    ,
+        { id: 'rules', label: 'Rules', icon: <>
+          {/* Scroll icon (SVG Repo) */}
+          <path
+            d="M24,19V7c0-1.657-1.343-3-3-3H7C5.343,4,4,5.343,4,7v5h4v12c0,1.657,1.343,3,3,3h14
+	c1.657,0,3-1.343,3-3v-5H24z M8,10H6V7c0-0.551,0.449-1,1-1c0.552,0,1,0.448,1,1V10z M10,24V7c0-0.35-0.06-0.687-0.171-1H21
+	c0.551,0,1,0.449,1,1v12H12v5c0,0.552-0.448,1-1,1C10.449,25,10,24.551,10,24z M26,24c0,0.551-0.449,1-1,1H13.829
+	C13.94,24.687,14,24.35,14,24v-3h12V24z M20,12h-8v-2h8V12z M20,16h-8v-2h8V16z"
+            fill="currentColor"
+            stroke="none"
+            transform="scale(0.75)"
+          />
+        </> },];
 
     const handleNav = (id) => {
         setActiveTab(id);
