@@ -8,6 +8,8 @@
   const RC = window.RC;
   RC.pages = RC.pages || {};
 
+  const RULES_FONT = "'IM Fell English', serif";
+
   const RulesPage = () => {
     const paragraphs = useMemo(
       () => [
@@ -24,16 +26,18 @@
       <div
         className="min-h-[calc(100vh-5rem)] px-4 sm:px-6 py-8"
         style={{
+          fontFamily: RULES_FONT,
+          lineHeight: 1.7,
           background:
             "radial-gradient(circle at 20% 10%, rgba(255,247,214,0.95), rgba(252,231,158,0.75) 45%, rgba(254,243,199,0.9) 100%)"
         }}
       >
         <div className="mx-auto max-w-5xl">
           <div className="mb-6">
-            <h1 className="text-3xl sm:text-4xl font-semibold tracking-wide text-amber-950" style={{ fontFamily: "serif" }}>
+            <h1 className="text-3xl sm:text-4xl font-semibold tracking-wide text-amber-950" style={{ fontFamily: RULES_FONT }}>
               Rules of the Roberts Cup
             </h1>
-            <p className="mt-2 text-sm sm:text-base text-amber-900/80" style={{ fontFamily: "serif" }}>
+            <p className="mt-2 text-base sm:text-base text-amber-900/80" style={{ fontFamily: RULES_FONT }}>
               A highly official document of questionable authority.
             </p>
           </div>
@@ -69,21 +73,21 @@
               <div className="px-6 sm:px-10 py-10 sm:py-12">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <div className="text-xs uppercase tracking-[0.30em] text-amber-900/70" style={{ fontFamily: "serif" }}>
+                    <div className="text-sm uppercase tracking-[0.30em] text-amber-900/70" style={{ fontFamily: RULES_FONT }}>
                       Roberts Cup Charter
                     </div>
-                    <div className="mt-1 text-lg sm:text-xl font-semibold text-amber-950" style={{ fontFamily: "serif" }}>
+                    <div className="mt-1 text-lg sm:text-xl font-semibold text-amber-950" style={{ fontFamily: RULES_FONT }}>
                       The Official Rules
                     </div>
                   </div>
-                  <div className="hidden sm:block text-xs text-amber-900/60" style={{ fontFamily: "serif" }}>
+                  <div className="hidden sm:block text-sm text-amber-900/60" style={{ fontFamily: RULES_FONT }}>
                     Version: Draft • For family use only
                   </div>
                 </div>
 
                 <hr className="my-6 border-amber-900/20" />
 
-                <div className="space-y-5 text-[15px] leading-7 text-amber-950/90" style={{ fontFamily: "serif" }}>
+                <div className="space-y-5 text-[15px] leading-7 text-amber-950/90" style={{ fontFamily: RULES_FONT }}>
                   {paragraphs.map((p, i) => (
                     <p key={i}>{p}</p>
                   ))}
@@ -93,10 +97,10 @@
 
                 {/* Signers */}
                 <div>
-                  <div className="text-sm font-semibold text-amber-950" style={{ fontFamily: "serif" }}>
+                  <div className="text-base font-semibold text-amber-950" style={{ fontFamily: RULES_FONT }}>
                     Signers
                   </div>
-                  <p className="mt-1 text-xs text-amber-900/70" style={{ fontFamily: "serif" }}>
+                  <p className="mt-1 text-sm text-amber-900/70" style={{ fontFamily: RULES_FONT }}>
                     Witnessed, approved, and occasionally argued about.
                   </p>
 
@@ -109,7 +113,7 @@
                         >
                           {name}
                         </div>
-                        <div className="mt-1 text-[11px] text-amber-900/60" style={{ fontFamily: "serif" }}>
+                        <div className="mt-1 text-[11px] text-amber-900/60" style={{ fontFamily: RULES_FONT }}>
                           Original signer
                         </div>
                       </div>
@@ -137,12 +141,12 @@
                         />
                         <div
                           className="absolute inset-0 flex items-center justify-center text-amber-50 font-bold tracking-widest"
-                          style={{ fontFamily: "serif" }}
+                          style={{ fontFamily: RULES_FONT }}
                         >
                           RC
                         </div>
                       </div>
-                      <div className="mt-2 text-center text-[11px] text-amber-950/70" style={{ fontFamily: "serif" }}>
+                      <div className="mt-2 text-center text-[11px] text-amber-950/70" style={{ fontFamily: RULES_FONT }}>
                         Sealed with questionable authority
                       </div>
                     </div>
@@ -152,7 +156,7 @@
             </div>
           </div>
 
-          <div className="mt-8 text-center text-xs text-amber-950/60" style={{ fontFamily: "serif" }}>
+          <div className="mt-8 text-center text-sm text-amber-950/60" style={{ fontFamily: RULES_FONT }}>
             Tip: When you have the real rules text, we’ll swap it in without changing the vibe.
           </div>
         </div>
