@@ -99,9 +99,85 @@ const BadgeCard = ({ emoji, title, winners, description, colorTheme }) => {
           themeHint: "amber",
           compute: () => ({
             winners: ["Nana"],
-            description: "The heart of the league (and the family). Official Queen of the Roberts Cup."
+            description: "The heart of the Roberts Cup (and the family). Win or lose, she\'s still the favorite."
           })
         },
+
+
+
+// Badge #3: King Slayer (individual)
+{
+  id: "king-slayer",
+  emoji: "👑",
+  title: "King Slayer",
+  themeHint: "amber",
+  compute: ({ schedule, picksIds }) => {
+    const players = picksIds.filter(p => p && p.Name);
+    const playerByName = {};
+    players.forEach(p => { playerByName[p.Name] = p; });
+
+    const completed = schedule.filter(g => {
+      const bowlId = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
+      const winnerId = (g && g["Winner ID"] !== undefined && g["Winner ID"] !== null) ? String(g["Winner ID"]).trim() : "";
+      return Boolean(bowlId && winnerId);
+    });
+
+    if (!completed.length || !players.length) {
+      return { winners: [], description: "Waiting on completed games." };
+    }
+
+    // 1) Current leaders (Top Dawg logic)
+    const winsByPlayer = {};
+    players.forEach(p => { winsByPlayer[p.Name] = 0; });
+
+    completed.forEach(g => {
+      const bowlId = String(g["Bowl ID"]).trim();
+      const winnerId = String(g["Winner ID"]).trim();
+
+      players.forEach(p => {
+        const pickId = (p[bowlId] !== undefined && p[bowlId] !== null) ? String(p[bowlId]).trim() : "";
+        if (pickId && pickId === winnerId) winsByPlayer[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(winsByPlayer));
+    const leaders = Object.keys(winsByPlayer).filter(n => winsByPlayer[n] === maxWins);
+
+    // 2) King Slayer points: correct picks on bowls where any leader missed
+    const ksByPlayer = {};
+    players.forEach(p => { ksByPlayer[p.Name] = 0; });
+
+    completed.forEach(g => {
+      const bowlId = String(g["Bowl ID"]).trim();
+      const winnerId = String(g["Winner ID"]).trim();
+
+      const leaderStumbled = leaders.some(ln => {
+        const lp = playerByName[ln];
+        if (!lp) return false;
+        const lPick = (lp[bowlId] !== undefined && lp[bowlId] !== null) ? String(lp[bowlId]).trim() : "";
+        return Boolean(lPick) && lPick !== winnerId;
+      });
+
+      if (!leaderStumbled) return;
+
+      players.forEach(p => {
+        const pickId = (p[bowlId] !== undefined && p[bowlId] !== null) ? String(p[bowlId]).trim() : "";
+        if (pickId && pickId === winnerId) ksByPlayer[p.Name] += 1;
+      });
+    });
+
+    const maxKs = Math.max(...Object.values(ksByPlayer));
+    const winners = maxKs > 0
+      ? Object.keys(ksByPlayer).filter(n => ksByPlayer[n] === maxKs).sort((a,b) => a.localeCompare(b))
+      : [];
+
+    const description = maxKs > 0
+      ? `Takes down the giants. Won ${maxKs} game${maxKs === 1 ? "" : "s"} where the leader(s) stumbled.`
+      : "No leader stumbles yet — check back after an upset!";
+
+    return { winners, description };
+  }
+},
 
         // Badge #1 (sanity): Top Dawg (ID-native scoring)
         {
