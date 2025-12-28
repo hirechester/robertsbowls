@@ -2,7 +2,7 @@
    Loaded as: <script type="text/babel" src="js/rc-page-scouting.js"></script>
 */
 (() => {
-  const { useState, useEffect, useMemo } = React;
+  const { useState, useEffect, useMemo, useRef } = React;
 
   window.RC = window.RC || {};
   window.RC.pages = window.RC.pages || {};
@@ -13,7 +13,8 @@
   // --- SCOUTING REPORT PAGE ---
   const ScoutingReportPage = () => {
                       const [selectedPlayer, setSelectedPlayer] = useState("");
-                      const [players, setPlayers] = useState([]);
+    const initialPlayerRef = useRef(null);
+const [players, setPlayers] = useState([]);
     const { schedule, picksIds, history, teams, teamById, loading, error, refresh, lastUpdated } = RC.data.useLeagueData();
 // TEAM DATA (from Teams tab in the main Google Sheet)
     // Expected columns: "School Name", "Team Nickname", "Primary Hex", "Logo"
@@ -46,9 +47,19 @@ useEffect(() => {
         if (!Array.isArray(picksIds)) return;
         const names = picksIds.map(p => p.Name).filter(Boolean).sort();
         setPlayers(names);
-        if (!selectedPlayer && names.length > 0) setSelectedPlayer(names[0]);
+        if (!selectedPlayer && names.length > 0) {
+          // Pick a random player on first load (stable for the session)
+          if (!initialPlayerRef.current || !names.includes(initialPlayerRef.current)) {
+            initialPlayerRef.current = names[Math.floor(Math.random() * names.length)];
+          }
+          setSelectedPlayer(initialPlayerRef.current);
+        }
         if (selectedPlayer && names.length > 0 && !names.includes(selectedPlayer)) {
-            setSelectedPlayer(names[0]);
+          // If a previously-selected name disappears, fall back to the initial random pick (or first)
+          const fallback = (initialPlayerRef.current && names.includes(initialPlayerRef.current))
+            ? initialPlayerRef.current
+            : names[0];
+          setSelectedPlayer(fallback);
         }
     }, [picksIds]);
   
@@ -529,18 +540,19 @@ useEffect(() => {
                                                                       const row = (teamById && stats.bestWin.teamId != null) ? teamById[String(stats.bestWin.teamId)] : null;
                                                                       const sigHex = normalizeHex(row && (row["Primary Hex"] || row.Hex || row.Color));
                                                                       const sigBorder = sigHex + "55";
-                                                                      const sigBg = sigHex + "18";
+      const sigBg = sigHex + "18";
+      const sigNickname = String(row && (row["Team Nickname"] || row["Nickname"] || row.Nickname || "") || "").trim();
                                                                       return (
                                                                           <div className="bg-gray-50 rounded-2xl border shadow-sm p-5 relative overflow-hidden" style={{ borderColor: sigBorder }}>
                                                                               <div className="absolute top-0 right-0 text-6xl opacity-10 pointer-events-none">🌟</div>
-                                                                              <h3 className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: sigHex }}>Signature Win</h3>
-                                                                              <div className="text-lg font-black leading-tight mb-2 text-gray-900">
+                                                                              <div className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: sigHex }}>Signature Win</div>
+                                                                              <div className="text-xl font-black leading-tight mb-2 text-gray-900">
                                                                                   Picked <span style={{ color: sigHex }}>{stats.bestWin.team}</span> in the {stats.bestWin.bowl}
                                                                               </div>
                                                                               <div className="inline-block text-xs font-bold px-2 py-1 rounded shadow-sm border" style={{ borderColor: sigBorder, color: sigHex, backgroundColor: sigBg }}>
                                                                                   {stats.bestWin.count === 1
-                                                                                      ? "Only player to pick this!"
-                                                                                      : `Only ${stats.bestWin.count} players got this right`}
+                    ? `Only player to pick the ${sigNickname || stats.bestWin.team}!`
+                    : `Only ${stats.bestWin.count} players got the ${(sigNickname || stats.bestWin.team)} right`}
                                                                               </div>
                                                                           </div>
                                                                       );
