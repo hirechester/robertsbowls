@@ -56,7 +56,13 @@ useEffect(() => {
     if (error) return <ErrorMessage message={(error && (error.message || String(error))) || "Failed to load data"} />;
   
                       // --- CALCULATIONS ---
-                      const calculateStats = (player) => {
+                      const normalizeHex = (v, fallback = "#4F46E5") => {
+      const raw = String(v || "").trim();
+      const m = raw.match(/^#?([0-9a-fA-F]{6})$/);
+      return m ? ("#" + m[1].toUpperCase()) : fallback;
+    };
+
+    const calculateStats = (player) => {
       if (!player) return null;
       const pData = Array.isArray(picksIds) ? picksIds.find(p => p.Name === player) : null;
     const nattyGame = Array.isArray(schedule)
@@ -302,7 +308,7 @@ useEffect(() => {
 
         if (gameWinnerCount < minWinners) {
           minWinners = gameWinnerCount;
-          bestWin = { bowl: g.Bowl, team: teamNameById(wId) || (g.Winner || wId), count: gameWinnerCount };
+          bestWin = { bowl: g.Bowl, teamId: wId, team: teamNameById(wId) || (g.Winner || wId), count: gameWinnerCount };
         }
       });
 
@@ -519,20 +525,27 @@ useEffect(() => {
                                                                   </div>
   
                                                                   {/* Signature Win Card */}
-                                                                  {stats.bestWin && (
-                                                                      <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 shadow-sm p-5 relative overflow-hidden">
-                                                                          <div className="absolute top-0 right-0 text-6xl opacity-10 pointer-events-none">🌟</div>
-                                                                          <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-1">Signature Win</h3>
-                                                                          <div className="text-lg font-black text-indigo-900 leading-tight mb-2">
-                                                                              Picked {stats.bestWin.team} in the {stats.bestWin.bowl}
+                                                                  {stats.bestWin && (() => {
+                                                                      const row = (teamById && stats.bestWin.teamId != null) ? teamById[String(stats.bestWin.teamId)] : null;
+                                                                      const sigHex = normalizeHex(row && (row["Primary Hex"] || row.Hex || row.Color));
+                                                                      const sigBorder = sigHex + "55";
+                                                                      const sigBg = sigHex + "18";
+                                                                      return (
+                                                                          <div className="bg-gray-50 rounded-2xl border shadow-sm p-5 relative overflow-hidden" style={{ borderColor: sigBorder }}>
+                                                                              <div className="absolute top-0 right-0 text-6xl opacity-10 pointer-events-none">🌟</div>
+                                                                              <h3 className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: sigHex }}>Signature Win</h3>
+                                                                              <div className="text-lg font-black leading-tight mb-2 text-gray-900">
+                                                                                  Picked <span style={{ color: sigHex }}>{stats.bestWin.team}</span> in the {stats.bestWin.bowl}
+                                                                              </div>
+                                                                              <div className="inline-block text-xs font-bold px-2 py-1 rounded shadow-sm border" style={{ borderColor: sigBorder, color: sigHex, backgroundColor: sigBg }}>
+                                                                                  {stats.bestWin.count === 1
+                                                                                      ? "Only player to pick this!"
+                                                                                      : `Only ${stats.bestWin.count} players got this right`}
+                                                                              </div>
                                                                           </div>
-                                                                          <div className="inline-block bg-white border border-indigo-200 text-indigo-600 text-xs font-bold px-2 py-1 rounded shadow-sm">
-                                                                              {stats.bestWin.count === 1
-                                                                                  ? "Only player to pick this!"
-                                                                                  : `Only ${stats.bestWin.count} players picked this`}
-                                                                          </div>
-                                                                      </div>
-                                                                  )}
+                                                                      );
+                                                                  })()}
+
   
                                                                   {/* Skills Breakdown */}
                                                                   <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
