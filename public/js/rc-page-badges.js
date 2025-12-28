@@ -2046,6 +2046,160 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #26: Cover Artist (individual)
+{
+  id: "cover-artist",
+  emoji: "🎸",
+  title: "Cover Artist",
+  themeHint: "red",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const toNum = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return NaN;
+      const n = parseFloat(s.replace(/[^0-9.\-]/g, ""));
+      return Number.isFinite(n) ? n : NaN;
+    };
+
+    const completedCoverGames = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      const favId = normId(g && (g["Favorite ID"] ?? g["FavoriteID"] ?? g["Fav ID"] ?? g["FavID"]));
+      const spreadRaw = g && (g["Spread"] ?? g["Line"] ?? g["Vegas Spread"]);
+      const spread = toNum(spreadRaw);
+
+      const homeId = normId(g && (g["Home ID"] ?? g["HomeID"]));
+      const awayId = normId(g && (g["Away ID"] ?? g["AwayID"]));
+      const homePts = toNum(g && (g["Home Pts"] ?? g["HomePts"] ?? g["Home Points"]));
+      const awayPts = toNum(g && (g["Away Pts"] ?? g["AwayPts"] ?? g["Away Points"]));
+
+      if (!bowlId || !winnerId || !favId) return false;
+      if (!Number.isFinite(spread)) return false;
+      if (!homeId || !awayId) return false;
+      if (!Number.isFinite(homePts) || !Number.isFinite(awayPts)) return false;
+
+      // Favorite must actually win
+      if (winnerId !== favId) return false;
+
+      // Determine favorite margin
+      const favIsHome = favId === homeId;
+      const favPts = favIsHome ? homePts : awayPts;
+      const dogPts = favIsHome ? awayPts : homePts;
+      const margin = favPts - dogPts;
+
+      // Spread might be stored as -3.5 or 3.5 — we care about magnitude.
+      const spreadAbs = Math.abs(spread);
+
+      // "Covered" = win by MORE than the spread (strictly greater).
+      return margin > spreadAbs;
+    });
+
+    if (!completedCoverGames.length) {
+      return { winners: [], description: "No covers logged yet — the band’s still tuning up." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    completedCoverGames.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+      const favId = normId(g["Favorite ID"] ?? g["FavoriteID"] ?? g["Fav ID"] ?? g["FavID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        // Count only if they picked the favorite AND the favorite covered (and won).
+        if (pickId && pickId === winnerId && pickId === favId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most correct picks where the favorite covered (${maxWins}). Vegas called it — they played it loud.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #27: Under Taker (individual)
+{
+  id: "under-taker",
+  emoji: "🪦",
+  title: "Under Taker",
+  themeHint: "light gray",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const toNum = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return NaN;
+      const n = parseFloat(s.replace(/[^0-9.\-]/g, ""));
+      return Number.isFinite(n) ? n : NaN;
+    };
+
+    const underGames = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+
+      const homePts = toNum(g && (g["Home Pts"] ?? g["HomePts"] ?? g["Home Points"]));
+      const awayPts = toNum(g && (g["Away Pts"] ?? g["AwayPts"] ?? g["Away Points"]));
+      const ou = toNum(g && (g["O/U"] ?? g["OU"] ?? g["Over/Under"] ?? g["Total"]));
+
+      if (!Number.isFinite(homePts) || !Number.isFinite(awayPts) || !Number.isFinite(ou)) return false;
+
+      const total = homePts + awayPts;
+      return total < ou;
+    });
+
+    if (!underGames.length) {
+      return { winners: [], description: "No unders have hit yet — the defenses haven’t clocked in." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    underGames.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most correct picks on UNDER games (${maxWins}). Low scores, cold hearts, and clean reads.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
