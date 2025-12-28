@@ -695,6 +695,79 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #11: Alphabet Soup (individual)
+{
+  id: "alphabet-soup",
+  emoji: "🥫",
+  title: "Alphabet Soup",
+  themeHint: "rose",
+  compute: ({ bowlGames, picksIds, teamById }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const nameForTeamId = (tid) => {
+      const t = teamById && tid ? teamById[normId(tid)] : null;
+      const n = t && (t["School Name"] ?? t["School"] ?? t["Team"] ?? t["Name"]);
+      return String(n ?? "").trim();
+    };
+
+    const completed = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      const homeId = normId(g && (g["Home ID"] ?? g["HomeID"]));
+      const awayId = normId(g && (g["Away ID"] ?? g["AwayID"]));
+      return Boolean(bowlId && winnerId && homeId && awayId);
+    });
+
+    if (!completed.length) {
+      return { winners: [], description: "No completed bowls yet — the alphabet hasn’t decided anything (yet)." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    completed.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+      const homeId = normId(g["Home ID"] ?? g["HomeID"]);
+      const awayId = normId(g["Away ID"] ?? g["AwayID"]);
+
+      const homeName = nameForTeamId(homeId);
+      const awayName = nameForTeamId(awayId);
+
+      // If we can't resolve both names, skip to avoid bogus counts
+      if (!homeName || !awayName) return;
+
+      const firstTeamId = (awayName.localeCompare(homeName, undefined, { sensitivity: "base" }) <= 0) ? awayId : homeId;
+
+      // Only award points when the alphabetical-first team actually won,
+      // AND the player picked that winning team.
+      if (winnerId !== firstTeamId) return;
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId && pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most wins when the alphabet wins (${maxWins}). If it comes first in the dictionary, it comes first on their scoreboard.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
