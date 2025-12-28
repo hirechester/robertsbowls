@@ -22,7 +22,20 @@
     <link rel="apple-touch-icon" href="images/web/apple-touch-icon.png">
 
     <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+  // Suppress Tailwind Play CDN production warning (we know; keeping no-build setup for now)
+  (function () {
+    const _warn = console.warn;
+    console.warn = function (...args) {
+      try {
+        const msg = args && args[0];
+        if (typeof msg === "string" && msg.includes("cdn.tailwindcss.com should not be used in production")) return;
+      } catch (e) {}
+      return _warn.apply(console, args);
+    };
+  })();
+</script>
+<script src="https://cdn.tailwindcss.com"></script>
 
     <!-- Tailwind Config to Enforce Global Fonts -->
     <script>
