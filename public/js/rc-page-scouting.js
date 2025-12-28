@@ -194,11 +194,17 @@ useEffect(() => {
       const afternoon = getWinStats(g => { const h = getTimeHour(g); return h !== null && h >= 12 && h < 19; });
       const night = getWinStats(g => { const h = getTimeHour(g); return h !== null && h >= 19; });
 
-      const espn = getWinStats(g => g.Network && g.Network.toUpperCase().includes('ESPN'));
-      const abc = getWinStats(g => g.Network && g.Network.toUpperCase().includes('ABC'));
-      const fox = getWinStats(g => g.Network && g.Network.toUpperCase().includes('FOX'));
-      const cbs = getWinStats(g => g.Network && g.Network.toUpperCase().includes('CBS'));
-      const tnt = getWinStats(g => g.Network && g.Network.toUpperCase().includes('TNT'));
+      const tvNorm = (g) => String((g && (g.Network || g.TV || "")) || "").trim().toUpperCase().replace(/\s+/g, " ");
+
+      const espn = getWinStats(g => {
+        const tv = tvNorm(g);
+        return tv === "ESPN" || tv === "ESPN2";
+      });
+      const abc = getWinStats(g => tvNorm(g) === "ABC");
+      const fox = getWinStats(g => tvNorm(g) === "FOX");
+      const cbs = getWinStats(g => tvNorm(g) === "CBS");
+      const hbomax = getWinStats(g => tvNorm(g) === "HBO MAX");
+      const cw = getWinStats(g => tvNorm(g) === "THE CW NETWORK");
 
       // 4) Maverick Rating (ID-based)
       let maverickScore = 0;
@@ -304,7 +310,7 @@ useEffect(() => {
         rank, isTied, wins,
         titles, titleYears,
         cfp, b1g, sec, b12, acc, g6, morning, afternoon, night,
-        espn, abc, fox, cbs, tnt,
+        espn, abc, fox, cbs, hbomax, cw,
         maverickPct, nemesis, bff,
         champ: (nattyBowlId && pData && pData[nattyBowlId]) ? String(pData[nattyBowlId]).trim() : (pData && (pData["National Championship"] || pData["National Championship Pick"] || pData["Championship"] || "")),
         tiebreaker: pData["Tiebreaker Score"],
@@ -624,47 +630,61 @@ useEffect(() => {
                                                                           <div className="border-t border-gray-100 pt-4 space-y-4">
                                                                               <div>
                                                                                   <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                      <span className="text-red-900">ESPN <span className="text-gray-400 font-normal ml-1">({stats.espn.wins} of {stats.espn.total})</span></span>
-                                                                                      <span className="text-red-700">{stats.espn.pct}%</span>
+                                                                                      <span style={{ color: "#e52534" }}>ESPN Broadcast Games <span className="text-gray-400 font-normal ml-1">({stats.espn.wins} of {stats.espn.total})</span></span>
+                                                                                      <span style={{ color: "#e52534" }}>{stats.espn.pct}%</span>
                                                                                   </div>
                                                                                   <div className="w-full bg-gray-100 rounded-full h-2">
-                                                                                      <div className="bg-red-600 h-2 rounded-full" style={{ width: `${stats.espn.pct}%` }}></div>
+                                                                                      <div className="h-2 rounded-full" style={{ width: `${stats.espn.pct}%`, backgroundColor: "#e52534" }}></div>
                                                                                   </div>
                                                                               </div>
+
                                                                               <div>
                                                                                   <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                      <span className="text-gray-900">ABC <span className="text-gray-400 font-normal ml-1">({stats.abc.wins} of {stats.abc.total})</span></span>
-                                                                                      <span className="text-gray-700">{stats.abc.pct}%</span>
+                                                                                      <span style={{ color: "#000000" }}>ABC Broadcast Games <span className="text-gray-400 font-normal ml-1">({stats.abc.wins} of {stats.abc.total})</span></span>
+                                                                                      <span style={{ color: "#000000" }}>{stats.abc.pct}%</span>
                                                                                   </div>
                                                                                   <div className="w-full bg-gray-100 rounded-full h-2">
-                                                                                      <div className="bg-gray-900 h-2 rounded-full" style={{ width: `${stats.abc.pct}%` }}></div>
+                                                                                      <div className="h-2 rounded-full" style={{ width: `${stats.abc.pct}%`, backgroundColor: "#000000" }}></div>
                                                                                   </div>
                                                                               </div>
+
                                                                               <div>
                                                                                   <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                      <span className="text-blue-900">FOX <span className="text-gray-400 font-normal ml-1">({stats.fox.wins} of {stats.fox.total})</span></span>
-                                                                                      <span className="text-blue-700">{stats.fox.pct}%</span>
+                                                                                      <span style={{ color: "#000000" }}>FOX Broadcast Games <span className="text-gray-400 font-normal ml-1">({stats.fox.wins} of {stats.fox.total})</span></span>
+                                                                                      <span style={{ color: "#000000" }}>{stats.fox.pct}%</span>
                                                                                   </div>
                                                                                   <div className="w-full bg-gray-100 rounded-full h-2">
-                                                                                      <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${stats.fox.pct}%` }}></div>
+                                                                                      <div className="h-2 rounded-full" style={{ width: `${stats.fox.pct}%`, backgroundColor: "#000000" }}></div>
                                                                                   </div>
                                                                               </div>
+
                                                                               <div>
                                                                                   <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                      <span className="text-sky-900">CBS <span className="text-gray-400 font-normal ml-1">({stats.cbs.wins} of {stats.cbs.total})</span></span>
-                                                                                      <span className="text-sky-700">{stats.cbs.pct}%</span>
+                                                                                      <span style={{ color: "#014ace" }}>CBS Broadcast Games <span className="text-gray-400 font-normal ml-1">({stats.cbs.wins} of {stats.cbs.total})</span></span>
+                                                                                      <span style={{ color: "#014ace" }}>{stats.cbs.pct}%</span>
                                                                                   </div>
                                                                                   <div className="w-full bg-gray-100 rounded-full h-2">
-                                                                                      <div className="bg-sky-500 h-2 rounded-full" style={{ width: `${stats.cbs.pct}%` }}></div>
+                                                                                      <div className="h-2 rounded-full" style={{ width: `${stats.cbs.pct}%`, backgroundColor: "#014ace" }}></div>
                                                                                   </div>
                                                                               </div>
+
                                                                               <div>
                                                                                   <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                      <span className="text-pink-900">TNT <span className="text-gray-400 font-normal ml-1">({stats.tnt.wins} of {stats.tnt.total})</span></span>
-                                                                                      <span className="text-pink-700">{stats.tnt.pct}%</span>
+                                                                                      <span style={{ color: "#002BE7" }}>HBO Max Broadcast Games <span className="text-gray-400 font-normal ml-1">({stats.hbomax.wins} of {stats.hbomax.total})</span></span>
+                                                                                      <span style={{ color: "#002BE7" }}>{stats.hbomax.pct}%</span>
                                                                                   </div>
                                                                                   <div className="w-full bg-gray-100 rounded-full h-2">
-                                                                                      <div className="bg-pink-600 h-2 rounded-full" style={{ width: `${stats.tnt.pct}%` }}></div>
+                                                                                      <div className="h-2 rounded-full" style={{ width: `${stats.hbomax.pct}%`, backgroundColor: "#002BE7" }}></div>
+                                                                                  </div>
+                                                                              </div>
+
+                                                                              <div>
+                                                                                  <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                      <span style={{ color: "#FF4500" }}>CW Network Broadcast Games <span className="text-gray-400 font-normal ml-1">({stats.cw.wins} of {stats.cw.total})</span></span>
+                                                                                      <span style={{ color: "#FF4500" }}>{stats.cw.pct}%</span>
+                                                                                  </div>
+                                                                                  <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                      <div className="h-2 rounded-full" style={{ width: `${stats.cw.pct}%`, backgroundColor: "#FF4500" }}></div>
                                                                                   </div>
                                                                               </div>
                                                                           </div>
