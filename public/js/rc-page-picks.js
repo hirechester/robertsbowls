@@ -6,7 +6,7 @@
    With this file (rename to rc-page-picks.js).
 */
 (() => {
-  const { useMemo } = React;
+const { useMemo, useEffect, useRef } = React;
 
   window.RC = window.RC || {};
   window.RC.pages = window.RC.pages || {};
@@ -16,11 +16,39 @@
   const PicksPage = () => {
     // Shared league data (fetched once per session by rc-data.js)
     const { schedule, picksIds, teamById, loading, error } = RC.data.useLeagueData();
+    const tableScrollRef = useRef(null);
+    const mostRecentThRef = useRef(null);
+    const didAutoScrollRef = useRef(false);
+
 
     const scheduleRows = useMemo(() => {
       if (!Array.isArray(schedule)) return [];
       return schedule.filter(g => g.Bowl && g.Date);
     }, [schedule]);
+
+    // Auto-scroll to the most recently completed game (keeps bowl order intact)
+    const mostRecentCompletedIdx = useMemo(() => {
+      let bestIdx = -1;
+      let bestTs = -1;
+      scheduleRows.forEach((g, idx) => {
+        const winnerId = String(g && (g['Winner ID'] ?? g.WinnerID ?? g.WinnerId ?? g.winnerId ?? g.winnerID ?? '')).trim();
+        if (!winnerId) return;
+        const dateStr = String(g && (g.Date ?? g['Date'] ?? '')).trim();
+        const timeStr = String(g && (g.Time ?? g['Time'] ?? '')).trim();
+        let ts = -1;
+        if (dateStr) {
+          const d = new Date(dateStr + (timeStr ? ` ${timeStr}` : ''));
+          ts = d.getTime();
+        }
+        if (!Number.isFinite(ts) || ts <= 0) ts = idx;
+        if (ts >= bestTs) {
+          bestTs = ts;
+          bestIdx = idx;
+        }
+      });
+      return bestIdx;
+    }, [scheduleRows]);
+
 
     const pickRows = useMemo(() => {
       if (!Array.isArray(picksIds)) return [];
@@ -72,6 +100,34 @@
     if (loading) return <LoadingSpinner text="Loading Picks..." />;
     if (error) return <ErrorMessage message={(error && (error.message || String(error))) || "Failed to load picks data"} />;
 
+
+    useEffect(() => {
+      if (didAutoScrollRef.current) return;
+      if (mostRecentCompletedIdx < 0) return;
+      const container = tableScrollRef.current;
+      if (!container) return;
+
+      requestAnimationFrame(() => {
+        const th = mostRecentThRef.current;
+        if (!th) return;
+        const cRect = container.getBoundingClientRect();
+        const tRect = th.getBoundingClientRect();
+
+        // Align the target column so it is fully visible (not tucked under the sticky Name column).
+        // If we find a sticky header cell, use its right edge as the "pinned" boundary.
+        const stickyTh = container.querySelector("thead th.sticky");
+        const stickyRect = stickyTh ? stickyTh.getBoundingClientRect() : null;
+
+        const gap = 16; // breathing room between sticky area and the target column
+        const desiredLeft = stickyRect ? (stickyRect.right + gap) : (cRect.left + 24);
+
+        const delta = (tRect.left - desiredLeft);
+        container.scrollLeft += delta;
+
+        didAutoScrollRef.current = true;
+      });
+    }, [mostRecentCompletedIdx]);
+
     return (
       <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
         <div className="bg-white pt-8 pb-8 px-4">
@@ -83,7 +139,7 @@
 
         <div className="px-2 md:px-6 flex flex-col items-center">
           <div className="w-full max-w-[98%] md:max-w-[90%] shadow-2xl border border-gray-100 rounded-xl bg-white overflow-hidden">
-            <div className="overflow-x-auto w-full">
+            <div ref={tableScrollRef} className="overflow-x-auto w-full">
               <table className="min-w-max border-collapse w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 text-gray-800">
@@ -94,6 +150,7 @@
                     {scheduleRows.map((game, idx) => (
                       <th
                         key={idx}
+                        ref={idx === mostRecentCompletedIdx ? mostRecentThRef : null}
                         className="bg-gray-50 p-2 font-bold border-r border-b border-gray-100 whitespace-nowrap min-w-[220px] text-center shadow-sm"
                       >
                         <div className="flex flex-col gap-0.5">
