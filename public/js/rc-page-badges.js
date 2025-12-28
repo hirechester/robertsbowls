@@ -365,7 +365,7 @@ const [badges, setBadges] = useState([]);
   id: "mortal-enemies",
   emoji: "⚔️",
   title: "Mortal Enemies",
-  themeHint: "slate",
+  themeHint: "dark gray",
   compute: ({ schedule, picksIds }) => {
     const players = picksIds.filter(p => p && p.Name);
     if (!players.length) return { winners: [], description: "Waiting on picks." };
@@ -1320,11 +1320,152 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #18: Sub-Zero (individual)
+{
+  id: "sub-zero",
+  emoji: "🥶",
+  title: "Sub-Zero",
+  themeHint: "light blue",
+  compute: ({ bowlGames, schedule, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const parseTimeToMinutes = (timeStr) => {
+      const raw = String(timeStr ?? "").trim();
+      if (!raw) return NaN;
+      const m = raw.match(/^(\d{1,2})\s*:\s*(\d{2})\s*(AM|PM)$/i);
+      if (!m) return NaN;
+      let hh = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      const ap = m[3].toUpperCase();
+      if (ap === "AM") {
+        if (hh === 12) hh = 0;
+      } else {
+        if (hh !== 12) hh += 12;
+      }
+      return hh * 60 + mm;
+    };
+
+    const parseDateToDay = (dateStr) => {
+      const raw = String(dateStr ?? "").trim();
+      if (!raw) return NaN;
+
+      const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (iso) {
+        const y = parseInt(iso[1], 10);
+        const mo = parseInt(iso[2], 10) - 1;
+        const d = parseInt(iso[3], 10);
+        return Date.UTC(y, mo, d);
+      }
+
+      const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (us) {
+        const mo = parseInt(us[1], 10) - 1;
+        const d = parseInt(us[2], 10);
+        let y = parseInt(us[3], 10);
+        if (y < 100) y += 2000;
+        return Date.UTC(y, mo, d);
+      }
+
+      const parsed = Date.parse(raw);
+      return Number.isFinite(parsed) ? parsed : NaN;
+    };
+
+    // Ordered list of completed bowls (for streak logic)
+    const completedOrdered = (() => {
+      const rows = Array.isArray(bowlGames) && bowlGames.length ? bowlGames : (Array.isArray(schedule) ? schedule : []);
+      const items = [];
+
+      rows.forEach((g, idx) => {
+        const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+        const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+        if (!bowlId || !winnerId) return;
+
+        const day = parseDateToDay(g && (g["Date"] ?? g["Game Date"] ?? g["Day"]));
+        const mins = parseTimeToMinutes(g && (g["Time"] ?? g["Start Time"] ?? g["Kickoff"] ?? g["Kickoff Time"]));
+        items.push({ bowlId, winnerId, day, mins, idx });
+      });
+
+      items.sort((a, b) => {
+        const ad = Number.isFinite(a.day) ? a.day : Infinity;
+        const bd = Number.isFinite(b.day) ? b.day : Infinity;
+        if (ad !== bd) return ad - bd;
+
+        const at = Number.isFinite(a.mins) ? a.mins : Infinity;
+        const bt = Number.isFinite(b.mins) ? b.mins : Infinity;
+        if (at !== bt) return at - bt;
+
+        return a.idx - b.idx;
+      });
+
+      // De-dupe by bowlId in case of duplicates
+      const seen = new Set();
+      return items.filter(it => {
+        if (seen.has(it.bowlId)) return false;
+        seen.add(it.bowlId);
+        return true;
+      });
+    })();
+
+    if (!completedOrdered.length) {
+      return { winners: [], description: "No winners logged yet — nobody’s cold until the games start ending." };
+    }
+
+    const losingStreaks = {}; // max losing streak per player
+    const current = {};       // current streak while scanning chronologically
+
+    players.forEach(p => {
+      losingStreaks[p.Name] = 0;
+      current[p.Name] = 0;
+    });
+
+    completedOrdered.forEach(g => {
+      const bid = g.bowlId;
+      const wid = g.winnerId;
+
+      players.forEach(p => {
+        const pickId = normId(p[bid]);
+
+        // If somehow missing, break streak (but league says always picked)
+        if (!pickId) {
+          current[p.Name] = 0;
+          return;
+        }
+
+        const isLoss = (pickId !== wid);
+        if (isLoss) {
+          current[p.Name] += 1;
+          if (current[p.Name] > losingStreaks[p.Name]) losingStreaks[p.Name] = current[p.Name];
+        } else {
+          current[p.Name] = 0;
+        }
+      });
+    });
+
+    const maxStreak = Math.max(...Object.values(losingStreaks));
+    const winners = Object.keys(losingStreaks)
+      .filter(n => losingStreaks[n] === maxStreak)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Longest losing streak (${maxStreak}). The picks froze solid — somebody’s living in the icebox.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
         if (!hint) return THEMES[Math.floor(Math.random() * THEMES.length)];
         const key = String(hint).toLowerCase();
+        if (key.includes("light blue") || key.includes("lightblue") || key.includes("sky")) return { bg: "bg-sky-200", text: "text-sky-900", border: "border-sky-400" };
         if (key.includes("dark") || key.includes("charcoal")) return { bg: "bg-slate-300", text: "text-slate-900", border: "border-slate-500" };
         if (key.includes("brown") || key.includes("tan")) return { bg: "bg-amber-200", text: "text-amber-900", border: "border-amber-400" };
         if (key.includes("yellow") || key.includes("amber") || key.includes("gold")) return THEMES[2];
