@@ -1,11 +1,16 @@
+/* Roberts Bowls - Badges Reset (Stage Badges-Reset v6)
+   - Uses the *exact* BadgeCard component styling/hover from your live main Badges page
+   - Fixes the page-level return markup (previous v5 accidentally returned BadgeCard JSX directly)
+   - Still includes ONE sanity badge (Top Dawg) computed ID-native (picksIds + Bowl ID + Winner ID)
+*/
 (() => {
   const { useState, useEffect, useMemo } = React;
+
   window.RC = window.RC || {};
   window.RC.pages = window.RC.pages || {};
   const RC = window.RC;
 
-// 4. BADGES PAGE (New)
-        const BadgeCard = ({ emoji, title, winners, description, colorTheme }) => {
+const BadgeCard = ({ emoji, title, winners, description, colorTheme }) => {
             const [showList, setShowList] = useState(false);
             const isTie = winners.length > 1;
 
@@ -52,1511 +57,2587 @@
             );
         };
 
-        const BadgesPage = () => {
-            const { schedule, picks, history, loading, error, refresh } = RC.data.useLeagueData();
-            const [badges, setBadges] = useState([]);
+  const BadgesPage = () => {
+    const { schedule, bowlGames, picksIds, teamById, teams, history, loading, error } = RC.data.useLeagueData();
+const [badges, setBadges] = useState([]);
 
-            // Theme palette for random assignment
-            const THEMES = useMemo(() => [
-                { bg: "bg-indigo-100", text: "text-indigo-800", border: "border-indigo-300" },
-                { bg: "bg-emerald-100", text: "text-emerald-800", border: "border-emerald-300" },
-                { bg: "bg-amber-100", text: "text-amber-800", border: "border-amber-300" },
-                { bg: "bg-rose-100", text: "text-rose-800", border: "border-rose-300" },
-                { bg: "bg-cyan-100", text: "text-cyan-800", border: "border-cyan-300" },
-                { bg: "bg-violet-100", text: "text-violet-800", border: "border-violet-300" },
-            ], []);
-            useEffect(() => {
-                // Badges are computed from shared league data (loaded once in rc-data.js).
-                if (loading || error) return;
-                if (!Array.isArray(schedule) || !Array.isArray(picks) || !Array.isArray(history)) return;
-                try {
-                const calculatedBadges = [];
-                
-                // ----------------------------------------------------
-                // BADGE 1: NIGHT OWL
-                // Most wins in games starting 7 PM or later
-                // ----------------------------------------------------
-                try {
-                    const nightGames = schedule.filter(g => {
-                        if (!g.Winner || !g.Time) return false;
-                        const timeStr = g.Time.trim().toUpperCase();
-                        let [timePart, modifier] = timeStr.split(' ');
-                        if (!modifier) {
-                            if (timeStr.includes('PM')) { modifier = 'PM'; timePart = timeStr.replace('PM',''); }
-                            else if (timeStr.includes('AM')) { modifier = 'AM'; timePart = timeStr.replace('AM',''); }
-                        }
-                        let [hours, minutes] = timePart.split(':').map(Number);
-                        if (modifier === 'PM' && hours !== 12) hours += 12;
-                        if (modifier === 'AM' && hours === 12) hours = 0;
-                        return hours >= 19;
-                    });
-                
-                    if (nightGames.length > 0) {
-                        const playerWins = {};
-                        picks.forEach(p => playerWins[p.Name] = 0);
-                        nightGames.forEach(g => {
-                            picks.forEach(p => {
-                                const pick = p[g.Bowl];
-                                if (pick && pick.toLowerCase() === g.Winner.toLowerCase()) playerWins[p.Name]++;
-                            });
-                        });
-                        let maxWins = -1;
-                        Object.values(playerWins).forEach(w => { if(w > maxWins) maxWins = w; });
-                        let winners = maxWins > 0 ? Object.keys(playerWins).filter(name => playerWins[name] === maxWins) : [];
-                        calculatedBadges.push({
-                            emoji: "🦉",
-                            title: "Night Owl",
-                            winners: winners,
-                            description: `Thrives in the dark. Most wins (${maxWins}) in games starting 7 PM or later.`,
-                            colorTheme: { bg: "bg-indigo-100", text: "text-indigo-800", border: "border-indigo-300" }
-                        });
-                    } else {
-                        calculatedBadges.push({
-                            emoji: "🦉",
-                            title: "Night Owl",
-                            winners: [],
-                            description: "Thrives in the dark. Most wins in games starting 7 PM or later.",
-                            colorTheme: { bg: "bg-indigo-100", text: "text-indigo-800", border: "border-indigo-300" }
-                        });
-                    }
-                } catch (e) { console.error("Night Owl Error", e); }
-                
-                // ----------------------------------------------------
-                // BADGE 2: EARLY RISER
-                // Most wins in games starting 2 PM (14:00) or earlier
-                // ----------------------------------------------------
-                try {
-                    const earlyGames = schedule.filter(g => {
-                        if (!g.Winner || !g.Time) return false;
-                        const timeStr = g.Time.trim().toUpperCase();
-                        let [timePart, modifier] = timeStr.split(' ');
-                        if (!modifier) {
-                            if (timeStr.includes('PM')) { modifier = 'PM'; timePart = timeStr.replace('PM',''); }
-                            else if (timeStr.includes('AM')) { modifier = 'AM'; timePart = timeStr.replace('AM',''); }
-                        }
-                        let [hours, minutes] = timePart.split(':').map(Number);
-                        if (modifier === 'PM' && hours !== 12) hours += 12;
-                        if (modifier === 'AM' && hours === 12) hours = 0;
-                
-                        // 14:00 is 2 PM
-                        return (hours < 14) || (hours === 14 && minutes === 0);
-                    });
-                
-                    if (earlyGames.length > 0) {
-                        const playerWins = {};
-                        picks.forEach(p => playerWins[p.Name] = 0);
-                        earlyGames.forEach(g => {
-                            picks.forEach(p => {
-                                const pick = p[g.Bowl];
-                                if (pick && pick.toLowerCase() === g.Winner.toLowerCase()) playerWins[p.Name]++;
-                            });
-                        });
-                        let maxWins = -1;
-                        Object.values(playerWins).forEach(w => { if(w > maxWins) maxWins = w; });
-                        let winners = maxWins > 0 ? Object.keys(playerWins).filter(name => playerWins[name] === maxWins) : [];
-                        calculatedBadges.push({
-                            emoji: "🌅",
-                            title: "Early Riser",
-                            winners: winners,
-                            description: `Catches the worm. Most wins (${maxWins}) in games starting 2 PM or earlier.`,
-                            colorTheme: { bg: "bg-orange-100", text: "text-orange-900", border: "border-orange-300" }
-                        });
-                    } else {
-                        calculatedBadges.push({
-                            emoji: "🌅",
-                            title: "Early Riser",
-                            winners: [],
-                            description: "Catches the worm. Most wins in games starting 2 PM or earlier.",
-                            colorTheme: { bg: "bg-orange-100", text: "text-orange-900", border: "border-orange-300" }
-                        });
-                    }
-                } catch (e) { console.error("Early Riser Error", e); }
-                
-                // ----------------------------------------------------
-                // BADGE 3: THE TWINS
-                // Longest streak of identical picks between 2 players
-                // ----------------------------------------------------
-                try {
-                    // 1. Sort Schedule Chronologically
-                    const chronoSchedule = schedule
-                        .filter(g => g.Date && g.Time)
-                        .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
-                
-                    let maxTwinStreak = 0;
-                    let twinWinners = []; // Array of strings like "Alice & Bob"
-                    const playerNames = picks.map(p => p.Name);
-                
-                    // 2. Iterate all unique pairs
-                    for (let i = 0; i < playerNames.length; i++) {
-                        for (let j = i + 1; j < playerNames.length; j++) {
-                            const p1 = playerNames[i];
-                            const p2 = playerNames[j];
-                            const p1Picks = picks.find(p => p.Name === p1);
-                            const p2Picks = picks.find(p => p.Name === p2);
-                
-                            let currentStreak = 0;
-                            let pairMax = 0;
-                
-                            chronoSchedule.forEach(game => {
-                                const pick1 = p1Picks[game.Bowl];
-                                const pick2 = p2Picks[game.Bowl];
-                
-                                // Check if both made a pick and they are identical (case-insensitive)
-                                if (pick1 && pick2 && pick1.trim().toLowerCase() === pick2.trim().toLowerCase()) {
-                                    currentStreak++;
-                                } else {
-                                    if (currentStreak > pairMax) pairMax = currentStreak;
-                                    currentStreak = 0;
-                                }
-                            });
-                            // Final check
-                            if (currentStreak > pairMax) pairMax = currentStreak;
-                
-                            // Update global stats
-                            if (pairMax > maxTwinStreak) {
-                                maxTwinStreak = pairMax;
-                                twinWinners = [`${p1} & ${p2}`];
-                            } else if (pairMax === maxTwinStreak && pairMax > 0) {
-                                twinWinners.push(`${p1} & ${p2}`);
-                            }
-                        }
-                    }
-                
-                    calculatedBadges.push({
-                        emoji: "👯",
-                        title: "The Twins",
-                        winners: twinWinners.length > 0 ? twinWinners : [],
-                        description: `In sync. Longest streak of identical picks (${maxTwinStreak > 0 ? maxTwinStreak : 0} games).`,
-                        colorTheme: { bg: "bg-purple-100", text: "text-purple-800", border: "border-purple-300" }
-                    });
-                
-                } catch (e) {
-                    console.error("The Twins Error", e);
-                    calculatedBadges.push({
-                        emoji: "👯",
-                        title: "The Twins",
-                        winners: [],
-                        description: "In sync. Longest streak of identical picks.",
-                        colorTheme: { bg: "bg-purple-100", text: "text-purple-800", border: "border-purple-300" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 4: THE JINX
-                // Most shared losses on identical picks between 2 players
-                // ----------------------------------------------------
-                try {
-                     let maxSharedLosses = 0;
-                     let jinxWinners = [];
-                     const playerNames = picks.map(p => p.Name);
-                
-                     // Iterate all unique pairs
-                     for (let i = 0; i < playerNames.length; i++) {
-                         for (let j = i + 1; j < playerNames.length; j++) {
-                             const p1 = playerNames[i];
-                             const p2 = playerNames[j];
-                             const p1Picks = picks.find(p => p.Name === p1);
-                             const p2Picks = picks.find(p => p.Name === p2);
-                
-                             let currentSharedLosses = 0;
-                
-                             schedule.forEach(game => {
-                                 // Only count if game is finished
-                                 if (!game.Winner) return;
-                
-                                 const pick1 = p1Picks[game.Bowl];
-                                 const pick2 = p2Picks[game.Bowl];
-                                 const winner = game.Winner;
-                
-                                 // Check if identical picks and both lost
-                                 if (pick1 && pick2 &&
-                                     pick1.trim().toLowerCase() === pick2.trim().toLowerCase() &&
-                                     pick1.trim().toLowerCase() !== winner.trim().toLowerCase()) {
-                                     currentSharedLosses++;
-                                 }
-                             });
-                
-                             if (currentSharedLosses > maxSharedLosses) {
-                                 maxSharedLosses = currentSharedLosses;
-                                 jinxWinners = [`${p1} & ${p2}`];
-                             } else if (currentSharedLosses === maxSharedLosses && maxSharedLosses > 0) {
-                                 jinxWinners.push(`${p1} & ${p2}`);
-                             }
-                         }
-                     }
-                
-                     calculatedBadges.push({
-                         emoji: "🐈‍⬛",
-                         title: "The Jinx",
-                         winners: jinxWinners.length > 0 ? jinxWinners : [],
-                         description: `Misery loves company. Most shared losses on identical picks (${maxSharedLosses} games).`,
-                         colorTheme: { bg: "bg-slate-200", text: "text-slate-800", border: "border-slate-400" }
-                     });
-                
-                } catch (e) {
-                    console.error("The Jinx Error", e);
-                    calculatedBadges.push({
-                         emoji: "🐈‍⬛",
-                         title: "The Jinx",
-                         winners: [],
-                         description: "Misery loves company. Most shared losses on identical picks.",
-                         colorTheme: { bg: "bg-slate-200", text: "text-slate-800", border: "border-slate-400" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 5: THE HEATER
-                // Longest winning streak of the season
-                // ----------------------------------------------------
-                try {
-                    // Get strictly chronological completed games
-                    const completedSchedule = schedule
-                        .filter(g => g.Date && g.Time && g.Winner)
-                        .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
-                
-                    let globalMaxStreak = 0;
-                    const playerMaxStreaks = {}; // name -> maxStreak
-                
-                    picks.forEach(player => {
-                        let currentStreak = 0;
-                        let maxStreak = 0;
-                
-                        completedSchedule.forEach(game => {
-                            const pick = player[game.Bowl];
-                            const winner = game.Winner;
-                
-                            if (pick && pick.toLowerCase() === winner.toLowerCase()) {
-                                currentStreak++;
-                            } else {
-                                // Streak broken
-                                if (currentStreak > maxStreak) maxStreak = currentStreak;
-                                currentStreak = 0;
-                            }
-                        });
-                        // Check if streak was active at the end
-                        if (currentStreak > maxStreak) maxStreak = currentStreak;
-                
-                        playerMaxStreaks[player.Name] = maxStreak;
-                        if (maxStreak > globalMaxStreak) globalMaxStreak = maxStreak;
-                    });
-                
-                    const winners = Object.keys(playerMaxStreaks).filter(name => playerMaxStreaks[name] === globalMaxStreak && globalMaxStreak > 0);
-                
-                    calculatedBadges.push({
-                        emoji: "🔥",
-                        title: "The Heater",
-                        winners: winners.length > 0 ? winners : [],
-                        description: `Can't miss. Longest winning streak of the season (${globalMaxStreak} games).`,
-                        colorTheme: { bg: "bg-orange-100", text: "text-orange-800", border: "border-orange-300" }
-                    });
-                
-                } catch (e) {
-                    console.error("The Heater Error", e);
-                    calculatedBadges.push({
-                        emoji: "🔥",
-                        title: "The Heater",
-                        winners: [],
-                        description: "Can't miss. Longest winning streak of the season.",
-                        colorTheme: { bg: "bg-orange-100", text: "text-orange-800", border: "border-orange-300" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 6: B1G WINNER
-                // Most wins in B1G designated games
-                // ----------------------------------------------------
-                try {
-                    const bigTenGames = schedule.filter(g => g.Winner && g['B1G']);
-                
-                    if (bigTenGames.length > 0) {
-                        const playerWins = {};
-                        picks.forEach(p => playerWins[p.Name] = 0);
-                
-                        bigTenGames.forEach(g => {
-                            picks.forEach(p => {
-                                const pick = p[g.Bowl];
-                                if (pick && pick.toLowerCase() === g.Winner.toLowerCase()) {
-                                    playerWins[p.Name]++;
-                                }
-                            });
-                        });
-                
-                        let maxWins = -1;
-                        Object.values(playerWins).forEach(w => { if(w > maxWins) maxWins = w; });
-                
-                        let winners = maxWins > 0 ? Object.keys(playerWins).filter(name => playerWins[name] === maxWins) : [];
-                
-                        calculatedBadges.push({
-                            emoji: "🌰",
-                            title: "B1G Winner",
-                            winners: winners,
-                            description: `Dominating the conference. Most wins (${maxWins}) in Big Ten matchups.`,
-                            colorTheme: { bg: "bg-[#ba0c2f]/10", text: "text-[#ba0c2f]", border: "border-[#ba0c2f]/30" }
-                        });
-                    } else {
-                        calculatedBadges.push({
-                            emoji: "🌰",
-                            title: "B1G Winner",
-                            winners: [],
-                            description: "Dominating the conference. Most wins in Big Ten matchups.",
-                            colorTheme: { bg: "bg-[#ba0c2f]/10", text: "text-[#ba0c2f]", border: "border-[#ba0c2f]/30" }
-                        });
-                    }
-                } catch (e) {
-                    console.error("B1G Winner Error", e);
-                    calculatedBadges.push({
-                        emoji: "🌰",
-                        title: "B1G Winner",
-                        winners: [],
-                        description: "Dominating the conference. Most wins in Big Ten matchups.",
-                        colorTheme: { bg: "bg-[#ba0c2f]/10", text: "text-[#ba0c2f]", border: "border-[#ba0c2f]/30" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 7: IT JUST MEANS MORE (SEC)
-                // Most wins in SEC designated games
-                // ----------------------------------------------------
-                try {
-                    const secGames = schedule.filter(g => g.Winner && g['SEC']);
-                
-                    if (secGames.length > 0) {
-                        const playerWins = {};
-                        picks.forEach(p => playerWins[p.Name] = 0);
-                
-                        secGames.forEach(g => {
-                            picks.forEach(p => {
-                                const pick = p[g.Bowl];
-                                if (pick && pick.toLowerCase() === g.Winner.toLowerCase()) {
-                                    playerWins[p.Name]++;
-                                }
-                            });
-                        });
-                
-                        let maxWins = -1;
-                        Object.values(playerWins).forEach(w => { if(w > maxWins) maxWins = w; });
-                
-                        let winners = maxWins > 0 ? Object.keys(playerWins).filter(name => playerWins[name] === maxWins) : [];
-                
-                        calculatedBadges.push({
-                            emoji: "🐶",
-                            title: "It Just Means More",
-                            winners: winners,
-                            description: `SEC supremacy. Most wins (${maxWins}) in SEC matchups.`,
-                            colorTheme: { bg: "bg-blue-100", text: "text-blue-900", border: "border-blue-300" }
-                        });
-                    } else {
-                        calculatedBadges.push({
-                            emoji: "🐶",
-                            title: "It Just Means More",
-                            winners: [],
-                            description: "SEC supremacy. Most wins in SEC matchups.",
-                            colorTheme: { bg: "bg-blue-100", text: "text-blue-900", border: "border-blue-300" }
-                        });
-                    }
-                } catch (e) {
-                    console.error("SEC Winner Error", e);
-                    calculatedBadges.push({
-                        emoji: "🐶",
-                        title: "It Just Means More",
-                        winners: [],
-                        description: "SEC supremacy. Most wins in SEC matchups.",
-                        colorTheme: { bg: "bg-blue-100", text: "text-blue-900", border: "border-blue-300" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 8: THE SHEEP
-                // Player that most often follows the herd
-                // ----------------------------------------------------
-                try {
-                    const sheepScores = {};
-                    picks.forEach(p => sheepScores[p.Name] = 0);
-                
-                    schedule.forEach(game => {
-                        // 1. Tally picks for this game
-                        const counts = {};
-                        picks.forEach(p => {
-                            const pick = p[game.Bowl];
-                            if (pick) {
-                                const normPick = pick.trim();
-                                counts[normPick] = (counts[normPick] || 0) + 1;
-                            }
-                        });
-                
-                        // 2. Find Majority
-                        let maxCount = 0;
-                        let majorityPick = null;
-                        let isTie = false;
-                
-                        Object.entries(counts).forEach(([pick, count]) => {
-                            if (count > maxCount) {
-                                maxCount = count;
-                                majorityPick = pick;
-                                isTie = false;
-                            } else if (count === maxCount) {
-                                isTie = true;
-                            }
-                        });
-                
-                        // 3. Award points if player picked majority
-                        if (majorityPick && !isTie) {
-                            picks.forEach(p => {
-                                const pick = p[game.Bowl];
-                                if (pick && pick.trim() === majorityPick) {
-                                    sheepScores[p.Name]++;
-                                }
-                            });
-                        }
-                    });
-                
-                    let maxSheepScore = -1;
-                    Object.values(sheepScores).forEach(s => { if (s > maxSheepScore) maxSheepScore = s; });
-                
-                    let winners = maxSheepScore > 0 ? Object.keys(sheepScores).filter(n => sheepScores[n] === maxSheepScore) : [];
-                
-                    calculatedBadges.push({
-                        emoji: "🐑",
-                        title: "The Sheep",
-                        winners: winners,
-                        description: `Baaaaa. Followed the group majority in ${maxSheepScore} games.`,
-                        colorTheme: { bg: "bg-gray-50", text: "text-gray-600", border: "border-gray-200" }
-                    });
-                
-                } catch (e) {
-                    console.error("The Sheep Error", e);
-                    calculatedBadges.push({
-                        emoji: "🐑",
-                        title: "The Sheep",
-                        winners: [],
-                        description: "Baaaaa. Follows the group majority most often.",
-                        colorTheme: { bg: "bg-gray-50", text: "text-gray-600", border: "border-gray-200" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 9: SUB-ZERO
-                // Longest losing streak of the season
-                // ----------------------------------------------------
-                try {
-                    // Reuse completedSchedule from "The Heater" logic if scope allows, otherwise redefine
-                    const completedSchedule = schedule
-                        .filter(g => g.Date && g.Time && g.Winner)
-                        .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
-                
-                    let globalMaxLosingStreak = 0;
-                    const playerMaxLossStreaks = {};
-                
-                    picks.forEach(player => {
-                        let currentStreak = 0;
-                        let maxStreak = 0;
-                
-                        completedSchedule.forEach(game => {
-                            const pick = player[game.Bowl];
-                            const winner = game.Winner;
-                
-                            // If pick exists and matches winner -> WIN. Anything else (wrong pick or no pick) -> LOSS
-                            if (pick && pick.toLowerCase() === winner.toLowerCase()) {
-                                // Win breaks the losing streak
-                                if (currentStreak > maxStreak) maxStreak = currentStreak;
-                                currentStreak = 0;
-                            } else {
-                                // Loss increments the losing streak
-                                currentStreak++;
-                            }
-                        });
-                        // Check active streak at end
-                        if (currentStreak > maxStreak) maxStreak = currentStreak;
-                
-                        playerMaxLossStreaks[player.Name] = maxStreak;
-                        if (maxStreak > globalMaxLosingStreak) globalMaxLosingStreak = maxStreak;
-                    });
-                
-                    const winners = Object.keys(playerMaxLossStreaks).filter(name => playerMaxLossStreaks[name] === globalMaxLosingStreak && globalMaxLosingStreak > 0);
-                
-                    calculatedBadges.push({
-                        emoji: "🥶",
-                        title: "Sub-Zero",
-                        winners: winners.length > 0 ? winners : [],
-                        description: `Ice cold. Longest losing streak of the season (${globalMaxLosingStreak} games).`,
-                        colorTheme: { bg: "bg-cyan-50", text: "text-cyan-900", border: "border-cyan-200" }
-                    });
-                
-                } catch (e) {
-                    console.error("Sub-Zero Error", e);
-                    calculatedBadges.push({
-                        emoji: "🥶",
-                        title: "Sub-Zero",
-                        winners: [],
-                        description: "Ice cold. Longest losing streak of the season.",
-                        colorTheme: { bg: "bg-cyan-50", text: "text-cyan-900", border: "border-cyan-200" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 11: THE SNIPER
-                // Player(s) who correctly picked a game that the smallest amount of the total group picked correctly
-                // ----------------------------------------------------
-                try {
-                    // 1. Calculate correct pick counts for every completed game
-                    let minCorrectCount = Infinity;
-                    let hardestGames = []; // Stores { bowlName: string, winningTeam: string, winners: string[] }
-                
-                    schedule.forEach(game => {
-                        if (!game.Winner) return;
-                
-                        const correctPickers = [];
-                        picks.forEach(p => {
-                            const pick = p[game.Bowl];
-                            if (pick && pick.toLowerCase() === game.Winner.toLowerCase()) {
-                                correctPickers.push(p.Name);
-                            }
-                        });
-                
-                        const count = correctPickers.length;
-                
-                        // We are looking for the lowest non-zero count (if count is 0, nobody sniped it)
-                        if (count > 0) {
-                            if (count < minCorrectCount) {
-                                minCorrectCount = count;
-                                hardestGames = [{ bowl: game.Bowl, winningTeam: game.Winner, winners: correctPickers }];
-                            } else if (count === minCorrectCount) {
-                                hardestGames.push({ bowl: game.Bowl, winningTeam: game.Winner, winners: correctPickers });
-                            }
-                        }
-                    });
-                
-                    // Flatten winners list (handle duplicates if a player sniped multiple hard games)
-                    const allSnipers = [...new Set(hardestGames.flatMap(g => g.winners))];
-                
-                    // Construct description
-                    let descText = "Precision picking.";
-                    if (hardestGames.length === 1) {
-                        descText = `Lone wolf. Correctly picked ${hardestGames[0].winningTeam} when only ${minCorrectCount} person${minCorrectCount > 1 ? 's' : ''} got it right.`;
-                    } else if (hardestGames.length > 1) {
-                        descText = `Eagle eye. Correctly picked the hardest games of the season (only ${minCorrectCount} correct picks).`;
-                    } else {
-                        descText = "Precision picking. Correctly picked the game that fooled everyone else.";
-                    }
-                
-                    calculatedBadges.push({
-                        emoji: "🎯",
-                        title: "The Sniper",
-                        winners: allSnipers.length > 0 ? allSnipers : [],
-                        description: descText,
-                        colorTheme: { bg: "bg-red-50", text: "text-red-900", border: "border-red-200" }
-                    });
-                
-                } catch (e) {
-                    console.error("The Sniper Error", e);
-                    calculatedBadges.push({
-                        emoji: "🎯",
-                        title: "The Sniper",
-                        winners: [],
-                        description: "Precision picking. Correctly picked the game that fooled everyone else.",
-                        colorTheme: { bg: "bg-red-50", text: "text-red-900", border: "border-red-200" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 12: MIND MELD
-                // Highest agreement rate between two players
-                // ----------------------------------------------------
-                try {
-                    let maxAgreementRate = -1;
-                    let mindMeldWinners = [];
-                    let bestPercentageStr = "0%";
-                
-                    const playerNames = picks.map(p => p.Name);
-                
-                    // Iterate unique pairs
-                    for (let i = 0; i < playerNames.length; i++) {
-                        for (let j = i + 1; j < playerNames.length; j++) {
-                            const p1 = playerNames[i];
-                            const p2 = playerNames[j];
-                            const p1Picks = picks.find(p => p.Name === p1);
-                            const p2Picks = picks.find(p => p.Name === p2);
-                
-                            let agreements = 0;
-                            let commonGames = 0;
-                
-                            schedule.forEach(game => {
-                                const pick1 = p1Picks[game.Bowl];
-                                const pick2 = p2Picks[game.Bowl];
-                
-                                // Only count if both made a pick
-                                if (pick1 && pick2) {
-                                    commonGames++;
-                                    if (pick1.trim().toLowerCase() === pick2.trim().toLowerCase()) {
-                                        agreements++;
-                                    }
-                                }
-                            });
-                
-                            if (commonGames > 0) {
-                                const rate = agreements / commonGames;
-                
-                                if (rate > maxAgreementRate) {
-                                    maxAgreementRate = rate;
-                                    mindMeldWinners = [`${p1} & ${p2}`];
-                                    bestPercentageStr = (rate * 100).toFixed(1) + "%";
-                                } else if (Math.abs(rate - maxAgreementRate) < 0.0001) { // Handle floating point equality
-                                    mindMeldWinners.push(`${p1} & ${p2}`);
-                                }
-                            }
-                        }
-                    }
-                
-                    calculatedBadges.push({
-                        emoji: "♥️",
-                        title: "Mind Meld",
-                        winners: mindMeldWinners.length > 0 ? mindMeldWinners : [],
-                        description: `Great minds think alike. Highest agreement rate on picks (${bestPercentageStr}).`,
-                        colorTheme: { bg: "bg-rose-100", text: "text-rose-900", border: "border-rose-300" }
-                    });
-                
-                } catch (e) {
-                    console.error("Mind Meld Error", e);
-                    calculatedBadges.push({
-                        emoji: "♥️",
-                        title: "Mind Meld",
-                        winners: [],
-                        description: "Great minds think alike. Highest agreement rate between two players.",
-                        colorTheme: { bg: "bg-rose-100", text: "text-rose-900", border: "border-rose-300" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 13: MORTAL ENEMIES
-                // Lowest agreement rate between two players
-                // ----------------------------------------------------
-                try {
-                    let minAgreementRate = 2; // Start higher than 100%
-                    let mortalEnemiesWinners = [];
-                    let worstPercentageStr = "100%";
-                
-                    const playerNames = picks.map(p => p.Name);
-                
-                    // Iterate unique pairs
-                    for (let i = 0; i < playerNames.length; i++) {
-                        for (let j = i + 1; j < playerNames.length; j++) {
-                            const p1 = playerNames[i];
-                            const p2 = playerNames[j];
-                            const p1Picks = picks.find(p => p.Name === p1);
-                            const p2Picks = picks.find(p => p.Name === p2);
-                
-                            let agreements = 0;
-                            let commonGames = 0;
-                
-                            schedule.forEach(game => {
-                                const pick1 = p1Picks[game.Bowl];
-                                const pick2 = p2Picks[game.Bowl];
-                
-                                // Only count if both made a pick
-                                if (pick1 && pick2) {
-                                    commonGames++;
-                                    if (pick1.trim().toLowerCase() === pick2.trim().toLowerCase()) {
-                                        agreements++;
-                                    }
-                                }
-                            });
-                
-                            if (commonGames > 0) {
-                                const rate = agreements / commonGames;
-                
-                                if (rate < minAgreementRate) {
-                                    minAgreementRate = rate;
-                                    mortalEnemiesWinners = [`${p1} & ${p2}`];
-                                    worstPercentageStr = (rate * 100).toFixed(1) + "%";
-                                } else if (Math.abs(rate - minAgreementRate) < 0.0001) {
-                                    mortalEnemiesWinners.push(`${p1} & ${p2}`);
-                                }
-                            }
-                        }
-                    }
-                
-                    calculatedBadges.push({
-                        emoji: "⚔️",
-                        title: "Mortal Enemies",
-                        winners: mortalEnemiesWinners.length > 0 ? mortalEnemiesWinners : [],
-                        description: `Total opposites. Lowest agreement rate on picks (${worstPercentageStr}).`,
-                        colorTheme: { bg: "bg-gray-300", text: "text-gray-900", border: "border-gray-400" }
-                    });
-                
-                } catch (e) {
-                    console.error("Mortal Enemies Error", e);
-                    calculatedBadges.push({
-                        emoji: "⚔️",
-                        title: "Mortal Enemies",
-                        winners: [],
-                        description: "Total opposites. Lowest agreement rate between two players.",
-                        colorTheme: { bg: "bg-gray-300", text: "text-gray-900", border: "border-gray-400" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 14: KING SLAYER
-                // Most wins in games where the current leader(s) lost
-                // ----------------------------------------------------
-                try {
-                    // 1. Determine Current Leader(s)
-                    const currentWins = {};
-                    picks.forEach(p => currentWins[p.Name] = 0);
-                
-                    schedule.forEach(game => {
-                        if (!game.Winner) return;
-                        picks.forEach(p => {
-                            const pick = p[game.Bowl];
-                            if (pick && pick.toLowerCase() === game.Winner.toLowerCase()) {
-                                currentWins[p.Name]++;
-                            }
-                        });
-                    });
-                
-                    let maxTotalWins = -1;
-                    Object.values(currentWins).forEach(w => { if (w > maxTotalWins) maxTotalWins = w; });
-                    const leaders = Object.keys(currentWins).filter(n => currentWins[n] === maxTotalWins);
-                
-                    // 2. Identify games where ALL leaders lost
-                    const vulnerableGames = schedule.filter(game => {
-                        if (!game.Winner) return false;
-                        // Check if every leader picked incorrectly (or didn't pick)
-                        return leaders.every(leaderName => {
-                            const p = picks.find(i => i.Name === leaderName);
-                            const pick = p[game.Bowl];
-                            return !pick || pick.toLowerCase() !== game.Winner.toLowerCase();
-                        });
-                    });
-                
-                    // 3. Count wins in those specific games
-                    if (vulnerableGames.length > 0) {
-                        const slayerScores = {};
-                        picks.forEach(p => slayerScores[p.Name] = 0);
-                
-                        vulnerableGames.forEach(game => {
-                            picks.forEach(p => {
-                                const pick = p[game.Bowl];
-                                if (pick && pick.toLowerCase() === game.Winner.toLowerCase()) {
-                                    slayerScores[p.Name]++;
-                                }
-                            });
-                        });
-                
-                        let maxSlayerScore = -1;
-                        Object.values(slayerScores).forEach(s => { if (s > maxSlayerScore) maxSlayerScore = s; });
-                
-                        let winners = maxSlayerScore > 0 ? Object.keys(slayerScores).filter(n => slayerScores[n] === maxSlayerScore) : [];
-                
-                        calculatedBadges.push({
-                            emoji: "👑",
-                            title: "King Slayer",
-                            winners: winners,
-                            description: `Takes down the giants. Won ${maxSlayerScore} games where the leader(s) stumbled.`,
-                            colorTheme: { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" }
-                        });
-                    } else {
-                        // Leaders haven't lost a game collectively yet
-                        calculatedBadges.push({
-                            emoji: "👑",
-                            title: "King Slayer",
-                            winners: [],
-                            description: "Takes down the giants. Most wins in games where the leader(s) lost.",
-                            colorTheme: { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" }
-                        });
-                    }
-                
-                } catch (e) {
-                    console.error("King Slayer Error", e);
-                    calculatedBadges.push({
-                        emoji: "👑",
-                        title: "King Slayer",
-                        winners: [],
-                        description: "Takes down the giants. Most wins in games where the leader(s) lost.",
-                        colorTheme: { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 15: THE AVENGERS
-                // Most shared wins together between two players
-                // ----------------------------------------------------
-                try {
-                    let maxSharedWins = 0;
-                    let wonderTwinsWinners = [];
-                    const playerNames = picks.map(p => p.Name);
-                
-                    // Iterate all unique pairs
-                    for (let i = 0; i < playerNames.length; i++) {
-                        for (let j = i + 1; j < playerNames.length; j++) {
-                            const p1 = playerNames[i];
-                            const p2 = playerNames[j];
-                            const p1Picks = picks.find(p => p.Name === p1);
-                            const p2Picks = picks.find(p => p.Name === p2);
-                
-                            let currentSharedWins = 0;
-                
-                            schedule.forEach(game => {
-                                if (!game.Winner) return;
-                
-                                const pick1 = p1Picks[game.Bowl];
-                                const pick2 = p2Picks[game.Bowl];
-                                const winner = game.Winner;
-                
-                                // Both picked the winner
-                                if (pick1 && pick2 &&
-                                    pick1.trim().toLowerCase() === winner.trim().toLowerCase() &&
-                                    pick2.trim().toLowerCase() === winner.trim().toLowerCase()) {
-                                    currentSharedWins++;
-                                }
-                            });
-                
-                            if (currentSharedWins > maxSharedWins) {
-                                maxSharedWins = currentSharedWins;
-                                wonderTwinsWinners = [`${p1} & ${p2}`];
-                            } else if (currentSharedWins === maxSharedWins && maxSharedWins > 0) {
-                                wonderTwinsWinners.push(`${p1} & ${p2}`);
-                            }
-                        }
-                    }
-                
-                    calculatedBadges.push({
-                        emoji: "👊",
-                        title: "The Avengers",
-                        winners: wonderTwinsWinners.length > 0 ? wonderTwinsWinners : [],
-                        description: `Dynamic duo. Most shared wins together (${maxSharedWins} games).`,
-                        colorTheme: { bg: "bg-green-100", text: "text-green-800", border: "border-green-300" }
-                    });
-                
-                } catch (e) {
-                    console.error("The Avengers Error", e);
-                    calculatedBadges.push({
-                        emoji: "👊",
-                        title: "The Avengers",
-                        winners: [],
-                        description: "Dynamic duo. Most shared wins together.",
-                        colorTheme: { bg: "bg-green-100", text: "text-green-800", border: "border-green-300" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 16: PLAYOFF PAYOFF
-                // Most wins in CFP designated games
-                // ----------------------------------------------------
-                try {
-                    const cfpGames = schedule.filter(g => g.Winner && g['CFP']);
-                
-                    if (cfpGames.length > 0) {
-                        const playerWins = {};
-                        picks.forEach(p => playerWins[p.Name] = 0);
-                
-                        cfpGames.forEach(g => {
-                            picks.forEach(p => {
-                                const pick = p[g.Bowl];
-                                if (pick && pick.toLowerCase() === g.Winner.toLowerCase()) {
-                                    playerWins[p.Name]++;
-                                }
-                            });
-                        });
-                
-                        let maxWins = -1;
-                        Object.values(playerWins).forEach(w => { if(w > maxWins) maxWins = w; });
-                
-                        let winners = maxWins > 0 ? Object.keys(playerWins).filter(name => playerWins[name] === maxWins) : [];
-                
-                        calculatedBadges.push({
-                            emoji: "🏅",
-                            title: "Playoff Payoff",
-                            winners: winners,
-                            description: `Big stage player. Most wins (${maxWins}) in College Football Playoff games.`,
-                            colorTheme: { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" }
-                        });
-                    } else {
-                        calculatedBadges.push({
-                            emoji: "🏅",
-                            title: "Playoff Payoff",
-                            winners: [],
-                            description: "Big stage player. Most wins in College Football Playoff games.",
-                            colorTheme: { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" }
-                        });
-                    }
-                } catch (e) {
-                    console.error("Playoff Payoff Error", e);
-                    calculatedBadges.push({
-                        emoji: "🏅",
-                        title: "Playoff Payoff",
-                        winners: [],
-                        description: "Big stage player. Most wins in College Football Playoff games.",
-                        colorTheme: { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 17: CHAMPIONSHIP RIVALS
-                // Pair with highest agreement (>50%) but different Champs
-                // ----------------------------------------------------
-                try {
-                    let maxRivalAgreement = 0;
-                    let rivalWinners = [];
-                    let agreementStr = "0%";
-                    const playerNames = picks.map(p => p.Name);
-                
-                    for (let i = 0; i < playerNames.length; i++) {
-                        for (let j = i + 1; j < playerNames.length; j++) {
-                            const p1Name = playerNames[i];
-                            const p2Name = playerNames[j];
-                            const p1 = picks.find(p => p.Name === p1Name);
-                            const p2 = picks.find(p => p.Name === p2Name);
-                
-                            // Check Champs
-                            const c1 = p1["National Championship"];
-                            const c2 = p2["National Championship"];
-                
-                            if (!c1 || !c2 || c1.trim().toLowerCase() === c2.trim().toLowerCase()) {
-                                continue;
-                            }
-                
-                            // Calculate Agreement
-                            let agreements = 0;
-                            let common = 0;
-                            schedule.forEach(g => {
-                                const pick1 = p1[g.Bowl];
-                                const pick2 = p2[g.Bowl];
-                                if (pick1 && pick2) {
-                                    common++;
-                                    if (pick1.trim().toLowerCase() === pick2.trim().toLowerCase()) {
-                                        agreements++;
-                                    }
-                                }
-                            });
-                
-                            if (common > 0) {
-                                const rate = agreements / common;
-                                if (rate > 0.50) {
-                                    if (rate > maxRivalAgreement) {
-                                        maxRivalAgreement = rate;
-                                        rivalWinners = [`${p1Name} & ${p2Name}`];
-                                        agreementStr = (rate * 100).toFixed(1) + "%";
-                                    } else if (Math.abs(rate - maxRivalAgreement) < 0.0001) {
-                                        rivalWinners.push(`${p1Name} & ${p2Name}`);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                
-                    calculatedBadges.push({
-                        emoji: "🥊",
-                        title: "Championship Rivals",
-                        winners: rivalWinners.length > 0 ? rivalWinners : [],
-                        description: `Friends until the end. ${agreementStr} agreement, but split on the title game.`,
-                        colorTheme: { bg: "bg-red-50", text: "text-red-900", border: "border-red-200" }
-                    });
-                
-                } catch (e) {
-                    console.error("Championship Rivals Error", e);
-                     calculatedBadges.push({
-                        emoji: "🥊",
-                        title: "Championship Rivals",
-                        winners: [],
-                        description: "Friends until the end. High agreement, but split on the title game.",
-                        colorTheme: { bg: "bg-red-50", text: "text-red-900", border: "border-red-200" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 18: SATURDAY NIGHT FEVER
-                // Most wins in games on Saturday nights 7 PM or later
-                // ----------------------------------------------------
-                try {
-                    // Filter for Saturday games >= 7:00 PM
-                    const satNightGames = schedule.filter(g => {
-                        if (!g.Winner || !g.Time || !g.Date) return false;
-                
-                        // Check Day of Week (Saturday is 6)
-                        // Note: Assuming Date format allows JS to parse correctly (e.g. "Dec 28")
-                        // Adding a year might be safer in production, but relying on browser heuristic for now
-                        const d = new Date(`${g.Date} ${g.Time}`);
-                        if (d.getDay() !== 6) return false; // 0=Sun, 1=Mon... 6=Sat
-                
-                        // Check Time >= 7 PM
-                        const timeStr = g.Time.trim().toUpperCase();
-                        let [timePart, modifier] = timeStr.split(' ');
-                        if (!modifier) {
-                            if (timeStr.includes('PM')) { modifier = 'PM'; timePart = timeStr.replace('PM',''); }
-                            else if (timeStr.includes('AM')) { modifier = 'AM'; timePart = timeStr.replace('AM',''); }
-                        }
-                        let [hours, minutes] = timePart.split(':').map(Number);
-                        if (modifier === 'PM' && hours !== 12) hours += 12;
-                        if (modifier === 'AM' && hours === 12) hours = 0;
-                
-                        return hours >= 19;
-                    });
-                
-                    if (satNightGames.length > 0) {
-                        const playerWins = {};
-                        picks.forEach(p => playerWins[p.Name] = 0);
-                
-                        satNightGames.forEach(g => {
-                            picks.forEach(p => {
-                                const pick = p[g.Bowl];
-                                if (pick && pick.toLowerCase() === g.Winner.toLowerCase()) {
-                                    playerWins[p.Name]++;
-                                }
-                            });
-                        });
-                
-                        let maxWins = -1;
-                        Object.values(playerWins).forEach(w => { if(w > maxWins) maxWins = w; });
-                        let winners = maxWins > 0 ? Object.keys(playerWins).filter(name => playerWins[name] === maxWins) : [];
-                
-                        calculatedBadges.push({
-                            emoji: "🕺",
-                            title: "Saturday Night Fever",
-                            winners: winners,
-                            description: `Owns the prime time. Most wins (${maxWins}) in Saturday night games.`,
-                            colorTheme: { bg: "bg-[#701a75]/10", text: "text-[#701a75]", border: "border-[#701a75]/30" } // Velvet
-                        });
-                    } else {
-                        calculatedBadges.push({
-                            emoji: "🕺",
-                            title: "Saturday Night Fever",
-                            winners: [],
-                            description: "Owns the prime time. Most wins in Saturday night games.",
-                            colorTheme: { bg: "bg-[#701a75]/10", text: "text-[#701a75]", border: "border-[#701a75]/30" }
-                        });
-                    }
-                
-                } catch (e) {
-                    console.error("Saturday Night Fever Error", e);
-                    calculatedBadges.push({
-                        emoji: "🕺",
-                        title: "Saturday Night Fever",
-                        winners: [],
-                        description: "Owns the prime time. Most wins in Saturday night games.",
-                        colorTheme: { bg: "bg-[#701a75]/10", text: "text-[#701a75]", border: "border-[#701a75]/30" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 19: THE TV GUIDE
-                // Most wins in games broadcast on ESPN
-                // ----------------------------------------------------
-                try {
-                    const espnGames = schedule.filter(g => g.Winner && g.Network && g.Network.toUpperCase().includes('ESPN'));
-                
-                    if (espnGames.length > 0) {
-                        const playerWins = {};
-                        picks.forEach(p => playerWins[p.Name] = 0);
-                
-                        espnGames.forEach(g => {
-                            picks.forEach(p => {
-                                const pick = p[g.Bowl];
-                                if (pick && pick.toLowerCase() === g.Winner.toLowerCase()) {
-                                    playerWins[p.Name]++;
-                                }
-                            });
-                        });
-                
-                        let maxWins = -1;
-                        Object.values(playerWins).forEach(w => { if(w > maxWins) maxWins = w; });
-                
-                        let winners = maxWins > 0 ? Object.keys(playerWins).filter(name => playerWins[name] === maxWins) : [];
-                
-                        calculatedBadges.push({
-                            emoji: "📺",
-                            title: "The TV Guide",
-                            winners: winners,
-                            description: `Glued to the screen. Most wins (${maxWins}) in games broadcast on ESPN networks.`,
-                            colorTheme: { bg: "bg-green-100", text: "text-green-800", border: "border-green-300" }
-                        });
-                    } else {
-                        calculatedBadges.push({
-                            emoji: "📺",
-                            title: "The TV Guide",
-                            winners: [],
-                            description: "Glued to the screen. Most wins in games broadcast on ESPN networks.",
-                            colorTheme: { bg: "bg-green-100", text: "text-green-800", border: "border-green-300" }
-                        });
-                    }
-                } catch (e) {
-                    console.error("TV Guide Error", e);
-                    calculatedBadges.push({
-                        emoji: "📺",
-                        title: "The TV Guide",
-                        winners: [],
-                        description: "Glued to the screen. Most wins in games broadcast on ESPN networks.",
-                        colorTheme: { bg: "bg-green-100", text: "text-green-800", border: "border-green-300" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 20: CLEAN SHEET
-                // Most "perfect days" (100% wins on days with 3+ games)
-                // ----------------------------------------------------
-                try {
-                    // 1. Group completed games by Date
-                    const gamesByDate = {};
-                    schedule.forEach(g => {
-                        if (g.Winner && g.Date) {
-                            if (!gamesByDate[g.Date]) gamesByDate[g.Date] = [];
-                            gamesByDate[g.Date].push(g);
-                        }
-                    });
-                
-                    const perfectDayCounts = {};
-                    picks.forEach(p => perfectDayCounts[p.Name] = 0);
-                
-                    // 2. Iterate dates with >= 3 games
-                    Object.values(gamesByDate).forEach(dayGames => {
-                        if (dayGames.length >= 3) {
-                            picks.forEach(p => {
-                                let allCorrect = true;
-                                for (const game of dayGames) {
-                                    const pick = p[game.Bowl];
-                                    if (!pick || pick.toLowerCase() !== game.Winner.toLowerCase()) {
-                                        allCorrect = false;
-                                        break;
-                                    }
-                                }
-                                if (allCorrect) {
-                                    perfectDayCounts[p.Name]++;
-                                }
-                            });
-                        }
-                    });
-                
-                    let maxPerfectDays = -1;
-                    Object.values(perfectDayCounts).forEach(c => { if(c > maxPerfectDays) maxPerfectDays = c; });
-                
-                    let winners = maxPerfectDays > 0 ? Object.keys(perfectDayCounts).filter(n => perfectDayCounts[n] === maxPerfectDays) : [];
-                
-                    calculatedBadges.push({
-                        emoji: "🧼",
-                        title: "Clean Sheet",
-                        winners: winners,
-                        description: `Flawless victory. Achieved perfection on ${maxPerfectDays} day${maxPerfectDays !== 1 ? 's' : ''} (3+ games).`,
-                        colorTheme: { bg: "bg-teal-100", text: "text-teal-800", border: "border-teal-300" }
-                    });
-                
-                } catch (e) {
-                    console.error("Clean Sheet Error", e);
-                    calculatedBadges.push({
-                        emoji: "🧼",
-                        title: "Clean Sheet",
-                        winners: [],
-                        description: "Flawless victory. Most perfect days with 100% accuracy.",
-                        colorTheme: { bg: "bg-teal-100", text: "text-teal-800", border: "border-teal-300" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 21: ALPHABET SOUP
-                // Most wins picking the team that comes first alphabetically
-                // ----------------------------------------------------
-                try {
-                    const alphaSoupScores = {};
-                    picks.forEach(p => alphaSoupScores[p.Name] = 0);
-                
-                    schedule.forEach(game => {
-                        if (!game.Winner || !game["Team 1"] || !game["Team 2"]) return;
-                
-                        const t1 = game["Team 1"].trim();
-                        const t2 = game["Team 2"].trim();
-                        // Determine which team is first alphabetically
-                        const alphaTeam = t1.localeCompare(t2) < 0 ? t1 : t2;
-                
-                        // Only counts if the alphabetical team actually won
-                        if (alphaTeam.toLowerCase() === game.Winner.toLowerCase()) {
-                            picks.forEach(p => {
-                                const pick = p[game.Bowl];
-                                if (pick && pick.toLowerCase() === alphaTeam.toLowerCase()) {
-                                    alphaSoupScores[p.Name]++;
-                                }
-                            });
-                        }
-                    });
-                
-                    let maxAlphaWins = -1;
-                    Object.values(alphaSoupScores).forEach(s => { if (s > maxAlphaWins) maxAlphaWins = s; });
-                
-                    let winners = maxAlphaWins > 0 ? Object.keys(alphaSoupScores).filter(n => alphaSoupScores[n] === maxAlphaWins) : [];
-                
-                    calculatedBadges.push({
-                        emoji: "🥫",
-                        title: "Alphabet Soup",
-                        winners: winners,
-                        description: `A to Z strategy. Most wins (${maxAlphaWins}) when picking the team that comes first alphabetically.`,
-                        colorTheme: { bg: "bg-red-50", text: "text-red-900", border: "border-red-200" }
-                    });
-                
-                } catch (e) {
-                    console.error("Alphabet Soup Error", e);
-                    calculatedBadges.push({
-                        emoji: "🥫",
-                        title: "Alphabet Soup",
-                        winners: [],
-                        description: "A to Z strategy. Most wins picking the team that comes first alphabetically.",
-                        colorTheme: { bg: "bg-red-50", text: "text-red-900", border: "border-red-200" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 22: SHORT AND SWEET
-                // Most wins picking the team with the shorter name
-                // ----------------------------------------------------
-                try {
-                    const shortScores = {};
-                    picks.forEach(p => shortScores[p.Name] = 0);
-                
-                    // Helper to clean name (remove #12 etc)
-                    const cleanName = (name) => name.replace(/#\d+\s*/g, '').trim();
-                
-                    schedule.forEach(game => {
-                        if (!game.Winner || !game["Team 1"] || !game["Team 2"]) return;
-                
-                        const t1Raw = game["Team 1"];
-                        const t2Raw = game["Team 2"];
-                        const t1Clean = cleanName(t1Raw);
-                        const t2Clean = cleanName(t2Raw);
-                
-                        let shortTeam = null;
-                        if (t1Clean.length < t2Clean.length) {
-                            shortTeam = t1Raw;
-                        } else if (t2Clean.length < t1Clean.length) {
-                            shortTeam = t2Raw;
-                        }
-                        // If lengths are equal, neither is shorter
-                
-                        // Only counts if the shorter name team actually won
-                        if (shortTeam && game.Winner.toLowerCase() === shortTeam.toLowerCase()) {
-                             picks.forEach(p => {
-                                 const pick = p[game.Bowl];
-                                 if (pick && pick.toLowerCase() === shortTeam.toLowerCase()) {
-                                     shortScores[p.Name]++;
-                                 }
-                             });
-                        }
-                    });
-                
-                    let maxShortWins = -1;
-                    Object.values(shortScores).forEach(s => { if (s > maxShortWins) maxShortWins = s; });
-                
-                    let winners = maxShortWins > 0 ? Object.keys(shortScores).filter(n => shortScores[n] === maxShortWins) : [];
-                
-                    calculatedBadges.push({
-                        emoji: "🍬",
-                        title: "Short & Sweet",
-                        winners: winners,
-                        description: `Efficiency is key. Most wins (${maxShortWins}) picking the team with the shorter name.`,
-                        colorTheme: { bg: "bg-teal-100", text: "text-teal-800", border: "border-teal-300" }
-                    });
-                
-                } catch (e) {
-                    console.error("Short and Sweet Error", e);
-                     calculatedBadges.push({
-                        emoji: "🍬",
-                        title: "Short & Sweet",
-                        winners: [],
-                        description: "Efficiency is key. Most wins picking the team with the shorter name.",
-                        colorTheme: { bg: "bg-teal-100", text: "text-teal-800", border: "border-teal-300" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 23: BOOKED A TEE TIME
-                // Most losses by an individual
-                // ----------------------------------------------------
-                try {
-                    const playerLosses = {};
-                    picks.forEach(p => playerLosses[p.Name] = 0);
-                
-                    schedule.forEach(g => {
-                        if (g.Winner) {
-                            picks.forEach(p => {
-                                const pick = p[g.Bowl];
-                                // Count as loss if pick exists but is wrong, or if pick is missing
-                                if (!pick || pick.toLowerCase() !== g.Winner.toLowerCase()) {
-                                    playerLosses[p.Name]++;
-                                }
-                            });
-                        }
-                    });
-                
-                    let maxLosses = -1;
-                    Object.values(playerLosses).forEach(l => { if (l > maxLosses) maxLosses = l; });
-                
-                    let winners = maxLosses > 0 ? Object.keys(playerLosses).filter(n => playerLosses[n] === maxLosses) : [];
-                
-                    calculatedBadges.push({
-                        emoji: "⛳️",
-                        title: "Booked a Tee Time",
-                        winners: winners,
-                        description: `It's just as hard to pick the wrong ones. Most losses (${maxLosses}).`,
-                        colorTheme: { bg: "bg-green-100", text: "text-green-800", border: "border-green-300" }
-                    });
-                
-                } catch (e) {
-                    console.error("Golf Error", e);
-                     calculatedBadges.push({
-                        emoji: "⛳️",
-                        title: "Booked a Tee Time",
-                        winners: [],
-                        description: "It's just as hard to pick the wrong ones. Most losses.",
-                        colorTheme: { bg: "bg-green-100", text: "text-green-800", border: "border-green-300" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 24: CHASING GLORY
-                // Most wins by a player who has not won a championship
-                // ----------------------------------------------------
-                try {
-                    // 1. Identify Past Winners
-                    const pastWinners = new Set();
-                    history.forEach(h => {
-                        if (h.Winner) pastWinners.add(h.Winner.trim().toLowerCase());
-                    });
-                
-                    // 2. Calculate Current Standings
-                    const currentWins = {};
-                    picks.forEach(p => currentWins[p.Name] = 0);
-                
-                    schedule.forEach(g => {
-                        if (g.Winner) {
-                            picks.forEach(p => {
-                                const pick = p[g.Bowl];
-                                if (pick && pick.toLowerCase() === g.Winner.toLowerCase()) {
-                                    currentWins[p.Name]++;
-                                }
-                            });
-                        }
-                    });
-                
-                    // 3. Find Max Wins among Non-Winners
-                    let maxNonChampWins = -1;
-                    let gloryHunters = [];
-                
-                    Object.keys(currentWins).forEach(player => {
-                        if (!pastWinners.has(player.toLowerCase())) {
-                            const wins = currentWins[player];
-                            if (wins > maxNonChampWins) {
-                                maxNonChampWins = wins;
-                                gloryHunters = [player];
-                            } else if (wins === maxNonChampWins) {
-                                gloryHunters.push(player);
-                            }
-                        }
-                    });
-                
-                    if (maxNonChampWins > -1) {
-                        calculatedBadges.push({
-                            emoji: "⭐️",
-                            title: "Chasing Glory",
-                            winners: gloryHunters,
-                            description: `Hungry for the first title. Most wins (${maxNonChampWins}) by a player who has never won it all.`,
-                            colorTheme: { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" }
-                        });
-                    }
-                
-                } catch (e) {
-                    console.error("Chasing Glory Error", e);
-                    calculatedBadges.push({
-                        emoji: "⭐️",
-                        title: "Chasing Glory",
-                        winners: [],
-                        description: "Hungry for the first title. Most wins by a player who has never won it all.",
-                        colorTheme: { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" }
-                    });
-                }
-                
-                // ----------------------------------------------------
-                // BADGE 25: BLIND FAITH
-                // Most correct picks on Unranked Teams
-                // ----------------------------------------------------
-                try {
-                    const unrankedWins = {};
-                    picks.forEach(p => unrankedWins[p.Name] = 0);
-                
-                    schedule.forEach(g => {
-                        if (!g.Winner) return;
-                        // Check if winner is unranked (no #)
-                        if (!g.Winner.includes('#')) {
-                             picks.forEach(p => {
-                                 const pick = p[g.Bowl];
-                                 if (pick && pick.toLowerCase() === g.Winner.toLowerCase()) {
-                                     unrankedWins[p.Name]++;
-                                 }
-                             });
-                        }
-                    });
-                
-                    let maxUnranked = -1;
-                    Object.values(unrankedWins).forEach(c => { if(c > maxUnranked) maxUnranked = c; });
-                
-                    let winners = maxUnranked > 0 ? Object.keys(unrankedWins).filter(n => unrankedWins[n] === maxUnranked) : [];
-                
-                    calculatedBadges.push({
-                        emoji: "🙈",
-                        title: "Blind Faith",
-                        winners: winners,
-                        description: `Who needs rankings? Most wins (${maxUnranked}) picking unranked teams.`,
-                        colorTheme: { bg: "bg-stone-100", text: "text-stone-800", border: "border-stone-300" }
-                    });
-                
-                } catch (e) {
-                    console.error("Blind Faith Error", e);
-                    calculatedBadges.push({
-                        emoji: "🙈",
-                        title: "Blind Faith",
-                        winners: [],
-                        description: "Who needs rankings? Most wins picking unranked teams.",
-                        colorTheme: { bg: "bg-stone-100", text: "text-stone-800", border: "border-stone-300" }
-                    });
-                }
-                
-                // Combine Calculated + Mocks
-                const finalPool = [...calculatedBadges];
-                
-                // Assign static colors (if not already set) and shuffle once
-                const withColors = finalPool.map((badge, idx) => {
-                    if (badge.colorTheme) return badge; // Use explicit theme if set
-                    return {
-                        ...badge,
-                        colorTheme: THEMES[idx % THEMES.length]
-                    };
-                });
-                
-                // Shuffle
-                setBadges(withColors.sort(() => 0.5 - Math.random()));
-                } catch (err) {
-                console.error("Error init badges:", err);
-                }
-            }, [loading, error, schedule, picks, history, THEMES]);
+    const { LoadingSpinner, ErrorMessage } = (RC.ui || {});
+    const Spinner = LoadingSpinner || (() => <div className="p-6">Loading…</div>);
+    const Err = ErrorMessage || (({ message }) => <div className="p-6 text-red-600">{message}</div>);
 
-            if (loading) return <LoadingSpinner text="Calculating Superlatives..." />;
-            if (error) return <ErrorMessage message={(error && (error.message || String(error))) || "Failed to load data"} />;
+    const THEMES = useMemo(() => [
+      { bg: "bg-indigo-100", text: "text-indigo-800", border: "border-indigo-300" },
+      { bg: "bg-emerald-100", text: "text-emerald-800", border: "border-emerald-300" },
+      { bg: "bg-amber-100", text: "text-amber-800", border: "border-amber-300" },
+      { bg: "bg-rose-100", text: "text-rose-800", border: "border-rose-300" },
+      { bg: "bg-cyan-100", text: "text-cyan-800", border: "border-cyan-300" },
+      { bg: "bg-violet-100", text: "text-violet-800", border: "border-violet-300" },
+      { bg: "bg-slate-100", text: "text-slate-800", border: "border-slate-300" },
+    ], []);
 
-            return (
-                <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
-                    <div className="bg-white pt-8 pb-8 px-4">
-                        <div className="max-w-7xl mx-auto text-center">
-                            <h2 className="text-3xl text-blue-900 font-bold mb-1">Superlatives</h2>
-                            <p className="text-gray-600 text-sm">Celebrating the best, worst, and weirdest performances.</p>
-                        </div>
-                    </div>
-                    <div className="px-4 md:px-6 max-w-7xl mx-auto w-full">
-                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {badges.map((badge, idx) => (
-                                <BadgeCard
-                                    key={idx}
-                                    {...badge}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            );
-        };
+    useEffect(() => {
+      if (loading || error) return;
+      if (!Array.isArray(schedule) || !Array.isArray(picksIds)) return;
+
+      const shuffleArray = (arr) => {
+        const out = arr.slice();
+        for (let i = out.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [out[i], out[j]] = [out[j], out[i]];
+        }
+        return out;
+      };
+
+      const ctx = { schedule, bowlGames, picksIds, teamById, teams, history, THEMES };
+
+      const BADGE_DEFS = [
+        // Badge #2: The Matriarch (static, no ties)
+        {
+          id: "matriarch",
+          emoji: "👸",
+          title: "The Matriarch",
+          themeHint: "amber",
+          compute: () => ({
+            winners: ["Nana"],
+            description: "The heart of the Roberts Cup (and the family). Win or lose, she\'s still the favorite."
+          })
+        },
+
+
+
+// Badge #3: King Slayer (individual)
+{
+  id: "king-slayer",
+  emoji: "👑",
+  title: "King Slayer",
+  themeHint: "amber",
+  compute: ({ schedule, picksIds }) => {
+    const players = picksIds.filter(p => p && p.Name);
+    const playerByName = {};
+    players.forEach(p => { playerByName[p.Name] = p; });
+
+    const completed = schedule.filter(g => {
+      const bowlId = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
+      const winnerId = (g && g["Winner ID"] !== undefined && g["Winner ID"] !== null) ? String(g["Winner ID"]).trim() : "";
+      return Boolean(bowlId && winnerId);
+    });
+
+    if (!completed.length || !players.length) {
+      return { winners: [], description: "Waiting on completed games." };
+    }
+
+    // 1) Current leaders (Top Dawg logic)
+    const winsByPlayer = {};
+    players.forEach(p => { winsByPlayer[p.Name] = 0; });
+
+    completed.forEach(g => {
+      const bowlId = String(g["Bowl ID"]).trim();
+      const winnerId = String(g["Winner ID"]).trim();
+
+      players.forEach(p => {
+        const pickId = (p[bowlId] !== undefined && p[bowlId] !== null) ? String(p[bowlId]).trim() : "";
+        if (pickId && pickId === winnerId) winsByPlayer[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(winsByPlayer));
+    const leaders = Object.keys(winsByPlayer).filter(n => winsByPlayer[n] === maxWins);
+
+    // 2) King Slayer points: correct picks on bowls where any leader missed
+    const ksByPlayer = {};
+    players.forEach(p => { ksByPlayer[p.Name] = 0; });
+
+    completed.forEach(g => {
+      const bowlId = String(g["Bowl ID"]).trim();
+      const winnerId = String(g["Winner ID"]).trim();
+
+      const leaderStumbled = leaders.some(ln => {
+        const lp = playerByName[ln];
+        if (!lp) return false;
+        const lPick = (lp[bowlId] !== undefined && lp[bowlId] !== null) ? String(lp[bowlId]).trim() : "";
+        return Boolean(lPick) && lPick !== winnerId;
+      });
+
+      if (!leaderStumbled) return;
+
+      players.forEach(p => {
+        const pickId = (p[bowlId] !== undefined && p[bowlId] !== null) ? String(p[bowlId]).trim() : "";
+        if (pickId && pickId === winnerId) ksByPlayer[p.Name] += 1;
+      });
+    });
+
+    const maxKs = Math.max(...Object.values(ksByPlayer));
+    const winners = maxKs > 0
+      ? Object.keys(ksByPlayer).filter(n => ksByPlayer[n] === maxKs).sort((a,b) => a.localeCompare(b))
+      : [];
+
+    const description = maxKs > 0
+      ? `Takes down the giants when they wobble. Won ${maxKs} game${maxKs === 1 ? "" : "s"} where the leader(s) stumbled — pure upset energy.`
+      : "No leader stumbles yet — everyone’s playing it safe. Waiting on the first real upset to crown a slayer.";
+
+    return { winners, description };
+  }
+},
+
+// Badge #4: Championship Rivals (affinity)
+{
+  id: "championship-rivals",
+  emoji: "🥊",
+  title: "Championship Rivals",
+  themeHint: "rose",
+  compute: ({ schedule, picksIds }) => {
+    const players = picksIds.filter(p => p && p.Name);
+
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    // Find the National Championship Bowl ID
+    const nattyGame = Array.isArray(schedule)
+      ? schedule.find(g => String(g && (g.Bowl || g["Bowl Name"] || "")).toLowerCase().includes("national championship"))
+      : null;
+
+    const nattyId = nattyGame && nattyGame["Bowl ID"] !== undefined && nattyGame["Bowl ID"] !== null
+      ? String(nattyGame["Bowl ID"]).trim()
+      : "";
+
+    // Bowl IDs to compare (prefer schedule list)
+    const bowlIds = (() => {
+      const ids = new Set();
+      if (Array.isArray(schedule)) {
+        schedule.forEach(g => {
+          const bid = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
+          if (bid) ids.add(bid);
+        });
+      }
+      if (ids.size === 0) {
+        const sample = players[0] || {};
+        Object.keys(sample).forEach(k => {
+          if (k === "Name" || k === "Timestamp" || k === "Email") return;
+          if (/^\d+$/.test(String(k).trim())) ids.add(String(k).trim());
+        });
+      }
+      return Array.from(ids);
+    })();
+
+    const labelPair = (a, b) => {
+      const left = String(a).trim();
+      const right = String(b).trim();
+      return left.localeCompare(right) <= 0 ? `${left} & ${right}` : `${right} & ${left}`;
+    };
+
+    let bestRate = -1;
+    const winners = [];
+
+    for (let i = 0; i < players.length; i++) {
+      for (let j = i + 1; j < players.length; j++) {
+        const A = players[i];
+        const B = players[j];
+
+        // Must disagree on Natty pick (and both must have one if nattyId exists)
+        if (nattyId) {
+          const aNat = (A[nattyId] !== undefined && A[nattyId] !== null) ? String(A[nattyId]).trim() : "";
+          const bNat = (B[nattyId] !== undefined && B[nattyId] !== null) ? String(B[nattyId]).trim() : "";
+          if (!aNat || !bNat || aNat === bNat) continue;
+        }
+
+        let total = 0;
+        let agree = 0;
+
+        bowlIds.forEach(bid => {
+          const aPick = (A[bid] !== undefined && A[bid] !== null) ? String(A[bid]).trim() : "";
+          const bPick = (B[bid] !== undefined && B[bid] !== null) ? String(B[bid]).trim() : "";
+          if (!aPick || !bPick) return;
+          total += 1;
+          if (aPick === bPick) agree += 1;
+        });
+
+        if (total === 0) continue;
+
+        const rate = agree / total;
+
+        if (rate > bestRate + 1e-12) {
+          bestRate = rate;
+          winners.length = 0;
+          winners.push(labelPair(A.Name, B.Name));
+        } else if (Math.abs(rate - bestRate) <= 1e-12) {
+          winners.push(labelPair(A.Name, B.Name));
+        }
+      }
+    }
+
+    winners.sort((a, b) => a.localeCompare(b));
+
+    const description = bestRate < 0
+      ? "No rivals yet — need differing National Championship picks. Once two people split on the Natty, the gloves come off."
+      : `Highest agreement among Natty rivals (${Math.round(bestRate * 100)}%). Same brain all season… until the end.`;
+
+    return { winners, description };
+  }
+},
+
+// Badge #5: Blind Faith (individual)
+{
+  id: "blind-faith",
+  emoji: "🙈",
+  title: "Blind Faith",
+  themeHint: "slate",
+  compute: ({ schedule, picksIds, teamById, teams }) => {
+    const players = picksIds.filter(p => p && p.Name);
+    const completed = Array.isArray(schedule) ? schedule.filter(g => {
+      const bowlId = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
+      const winnerId = (g && g["Winner ID"] !== undefined && g["Winner ID"] !== null) ? String(g["Winner ID"]).trim() : "";
+      return Boolean(bowlId && winnerId);
+    }) : [];
+
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+    if (!completed.length) return { winners: [], description: "Waiting on completed games." };
+
+    const byId = (() => {
+      if (teamById && typeof teamById === "object") return teamById;
+      const map = {};
+      if (Array.isArray(teams)) {
+        teams.forEach(t => {
+          const rawId = (t && (t["Team ID"] ?? t.TeamID ?? t.id)) !== undefined ? (t["Team ID"] ?? t.TeamID ?? t.id) : "";
+          const id = String(rawId || "").trim();
+          if (id) map[id] = t;
+        });
+      }
+      return map;
+    })();
+
+    const pickFirst = (...vals) => {
+      for (const v of vals) {
+        const s = (v === null || v === undefined) ? "" : String(v).trim();
+        if (s) return s;
+      }
+      return "";
+    };
+
+    const cleanNum = (s) => {
+      const raw = String(s || "").trim();
+      if (!raw) return "";
+      const m = raw.match(/(\d+)/);
+      return m ? m[1] : "";
+    };
+
+    const isUnranked = (team) => {
+      if (!team) return false; // unknown team: don't count it
+      const seedRaw = pickFirst(team["Seed"], team["Team Seed"], team["Seed #"], team["Seed Number"], team["Playoff Seed"], team["CFP Seed"]);
+      const rankRaw = pickFirst(team["Ranking"], team["Rank"], team["AP Rank"], team["AP Ranking"], team["Rk"]);
+      const seedNum = cleanNum(seedRaw);
+      const rankNum = cleanNum(rankRaw);
+      return !seedNum && !rankNum;
+    };
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    completed.forEach(g => {
+      const bowlId = String(g["Bowl ID"]).trim();
+      const winnerId = String(g["Winner ID"]).trim();
+
+      players.forEach(p => {
+        const pickId = (p[bowlId] !== undefined && p[bowlId] !== null) ? String(p[bowlId]).trim() : "";
+        if (!pickId) return;
+        if (pickId !== winnerId) return;
+
+        const team = byId[pickId];
+        if (isUnranked(team)) wins[p.Name] += 1;
+      });
+    });
+
+    const counts = Object.values(wins);
+    const maxWins = counts.length ? Math.max(...counts) : 0;
+
+    const winners = maxWins > 0
+      ? Object.keys(wins).filter(n => wins[n] === maxWins).sort((a, b) => a.localeCompare(b))
+      : [];
+
+    const description = maxWins > 0
+      ? `Most correct picks with unranked teams (${maxWins}). Trusting the chaos and cashing it in — the ultimate “why not?” energy.`
+      : "No unranked winners yet — chalk has ruled so far. Waiting on an unranked surprise to make this badge spicy.";
+
+    return { winners, description };
+  }
+},
+
+// Badge #6: Mortal Enemies (affinity)
+{
+  id: "mortal-enemies",
+  emoji: "⚔️",
+  title: "Mortal Enemies",
+  themeHint: "dark gray",
+  compute: ({ schedule, picksIds }) => {
+    const players = picksIds.filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    // Bowl IDs to compare (prefer schedule list)
+    const bowlIds = (() => {
+      const ids = new Set();
+      if (Array.isArray(schedule)) {
+        schedule.forEach(g => {
+          const bid = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
+          if (bid) ids.add(bid);
+        });
+      }
+      if (ids.size === 0) {
+        const sample = players[0] || {};
+        Object.keys(sample).forEach(k => {
+          if (k === "Name" || k === "Timestamp" || k === "Email") return;
+          if (/^\d+$/.test(String(k).trim())) ids.add(String(k).trim());
+        });
+      }
+      return Array.from(ids);
+    })();
+
+    const labelPair = (a, b) => {
+      const left = String(a).trim();
+      const right = String(b).trim();
+      return left.localeCompare(right) <= 0 ? `${left} & ${right}` : `${right} & ${left}`;
+    };
+
+    let worstRate = Infinity;
+    const winners = [];
+
+    for (let i = 0; i < players.length; i++) {
+      for (let j = i + 1; j < players.length; j++) {
+        const A = players[i];
+        const B = players[j];
+
+        let total = 0;
+        let agree = 0;
+
+        bowlIds.forEach(bid => {
+          const aPick = (A[bid] !== undefined && A[bid] !== null) ? String(A[bid]).trim() : "";
+          const bPick = (B[bid] !== undefined && B[bid] !== null) ? String(B[bid]).trim() : "";
+          if (!aPick || !bPick) return;
+          total += 1;
+          if (aPick === bPick) agree += 1;
+        });
+
+        if (total === 0) continue;
+
+        const rate = agree / total;
+
+        if (rate < worstRate - 1e-12) {
+          worstRate = rate;
+          winners.length = 0;
+          winners.push(labelPair(A.Name, B.Name));
+        } else if (Math.abs(rate - worstRate) <= 1e-12) {
+          winners.push(labelPair(A.Name, B.Name));
+        }
+      }
+    }
+
+    winners.sort((a, b) => a.localeCompare(b));
+
+    const description = (worstRate === Infinity)
+      ? "Not enough overlapping picks yet to start a feud. Make more picks and let the sparks fly."
+      : `Lowest agreement in the league (${Math.round(worstRate * 100)}%). If there’s a hill to die on, these two chose different ones.`;
+
+    return { winners, description };
+  }
+},
+
+// Badge #7: Booked a Tee Time (individual)
+{
+  id: "booked-a-tee-time",
+  emoji: "🏌️‍♂️",
+  title: "Booked a Tee Time",
+  themeHint: "emerald",
+  compute: ({ schedule, picksIds }) => {
+    const players = picksIds.filter(p => p && p.Name);
+    const completed = Array.isArray(schedule) ? schedule.filter(g => {
+      const bowlId = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
+      const winnerId = (g && g["Winner ID"] !== undefined && g["Winner ID"] !== null) ? String(g["Winner ID"]).trim() : "";
+      return Boolean(bowlId && winnerId);
+    }) : [];
+
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+    if (!completed.length) return { winners: [], description: "Waiting on completed games." };
+
+    const losses = {};
+    players.forEach(p => { losses[p.Name] = 0; });
+
+    completed.forEach(g => {
+      const bowlId = String(g["Bowl ID"]).trim();
+      const winnerId = String(g["Winner ID"]).trim();
+
+      players.forEach(p => {
+        const pickId = (p[bowlId] !== undefined && p[bowlId] !== null) ? String(p[bowlId]).trim() : "";
+        if (!pickId) return;
+        if (pickId !== winnerId) losses[p.Name] += 1;
+      });
+    });
+
+    const counts = Object.values(losses);
+    const maxLosses = counts.length ? Math.max(...counts) : 0;
+
+    const winners = maxLosses > 0
+      ? Object.keys(losses).filter(n => losses[n] === maxLosses).sort((a, b) => a.localeCompare(b))
+      : [];
+
+    const description = maxLosses > 0
+      ? `Most wrong picks so far (${maxLosses}). The clubs are packed and the cart is warming up.`
+      : "Nobody’s taken a big hit yet — the fairway is still wide open.";
+
+    return { winners, description };
+  }
+},
+
+// Badge #8: Home Sweet Dome (individual)
+{
+  id: "home-sweet-dome",
+  emoji: "🏟️",
+  title: "Home Sweet Dome",
+  themeHint: "rose",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const isTruthy = (v) => {
+      const s = String(v ?? "").trim().toLowerCase();
+      return s === "true" || s === "yes" || s === "y" || s === "1" || s === "t";
+    };
+
+    const indoorGames = (bowlGames || []).filter((g) => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+
+      // Source of truth (supports your rename): Indoor / Indoor? / Indoors
+      const indoorRaw = (g && (g["Indoor"] ?? g["Indoor?"] ?? g["Indoors"]));
+      if (indoorRaw === undefined || indoorRaw === null || String(indoorRaw).trim() === "") return false;
+
+      return isTruthy(indoorRaw);
+    });
+
+    if (!indoorGames.length) {
+      return { winners: [], description: "No indoor games counted yet — make sure Bowl Games has Indoor = TRUE for completed dome games." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    indoorGames.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (!pickId) return;
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const counts = Object.values(wins);
+    const maxWins = counts.length ? Math.max(...counts) : 0;
+
+    const winners = maxWins > 0
+      ? Object.keys(wins).filter(n => wins[n] === maxWins).sort((a, b) => a.localeCompare(b))
+      : [];
+
+    const description = maxWins > 0
+      ? `Most correct picks under a roof (${maxWins}). No wind, no excuses — just clean work.`
+      : "Nobody’s stacked indoor wins yet — waiting for some dome magic.";
+
+    return { winners, description };
+  }
+},
+// Badge #9: The Sheep (individual)
+{
+  id: "the-sheep",
+  emoji: "🐑",
+  title: "The Sheep",
+  themeHint: "slate",
+  compute: ({ schedule, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    // Bowl IDs to evaluate (prefer schedule list)
+    const bowlIds = (() => {
+      const ids = new Set();
+      if (Array.isArray(schedule)) {
+        schedule.forEach(g => {
+          const bid = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
+          if (bid) ids.add(bid);
+        });
+      }
+      if (ids.size === 0) {
+        const sample = players[0] || {};
+        Object.keys(sample).forEach(k => {
+          if (k === "Name" || k === "Timestamp" || k === "Email") return;
+          if (/^\d+$/.test(String(k).trim())) ids.add(String(k).trim());
+        });
+      }
+      return Array.from(ids);
+    })();
+
+    const followed = {};
+    players.forEach(p => { followed[p.Name] = 0; });
+
+    bowlIds.forEach((bid) => {
+      // Everyone has picks per your league rules
+      const freq = {};
+      players.forEach(p => {
+        const pid = String(p[bid]).trim();
+        freq[pid] = (freq[pid] || 0) + 1;
+      });
+
+      const entries = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+      if (!entries.length) return;
+
+      const topCount = entries[0][1];
+      // If tied for top, no clear majority—skip this bowl
+      const tiedTop = entries.length > 1 && entries[1][1] === topCount;
+      if (tiedTop) return;
+
+      const majorityPick = entries[0][0];
+
+      players.forEach(p => {
+        const pid = String(p[bid]).trim();
+        if (pid === majorityPick) followed[p.Name] += 1;
+      });
+    });
+
+    const counts = Object.values(followed);
+    const maxFollowed = counts.length ? Math.max(...counts) : 0;
+
+    const winners = Object.keys(followed)
+      .filter(n => followed[n] === maxFollowed)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most “follow-the-crowd” picks (${maxFollowed}). When the room nods, they nod too.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #10: Night Owl (individual)
+{
+  id: "night-owl",
+  emoji: "🦉",
+  title: "Night Owl",
+  themeHint: "brown",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const parseTimeToMinutes = (timeStr) => {
+      const raw = String(timeStr ?? "").trim();
+      if (!raw) return NaN;
+
+      // Format: "7:00 PM"
+      const m = raw.match(/^(\d{1,2})\s*:\s*(\d{2})\s*(AM|PM)$/i);
+      if (!m) return NaN;
+
+      let hh = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      const ap = m[3].toUpperCase();
+
+      if (ap === "AM") {
+        if (hh === 12) hh = 0;
+      } else {
+        if (hh !== 12) hh += 12;
+      }
+      return hh * 60 + mm;
+    };
+
+    const cutoff = 19 * 60; // 7:00 PM
+
+    const lateCompleted = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+
+      const t = g && (g["Time"] ?? g["Start Time"] ?? g["Kickoff"] ?? g["Kickoff Time"]);
+      const mins = parseTimeToMinutes(t);
+      return Number.isFinite(mins) && mins >= cutoff;
+    });
+
+    if (!lateCompleted.length) {
+      return { winners: [], description: "No 7 PM+ winners logged yet — waiting for the late window to cash." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    lateCompleted.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most correct picks after 7 PM (${maxWins}). Late kickoff, sharp instincts — somebody’s thriving after dark.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #11: Alphabet Soup (individual)
+{
+  id: "alphabet-soup",
+  emoji: "🥫",
+  title: "Alphabet Soup",
+  themeHint: "rose",
+  compute: ({ bowlGames, picksIds, teamById }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const nameForTeamId = (tid) => {
+      const t = teamById && tid ? teamById[normId(tid)] : null;
+      const n = t && (t["School Name"] ?? t["School"] ?? t["Team"] ?? t["Name"]);
+      return String(n ?? "").trim();
+    };
+
+    const completed = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      const homeId = normId(g && (g["Home ID"] ?? g["HomeID"]));
+      const awayId = normId(g && (g["Away ID"] ?? g["AwayID"]));
+      return Boolean(bowlId && winnerId && homeId && awayId);
+    });
+
+    if (!completed.length) {
+      return { winners: [], description: "No completed bowls yet — the alphabet hasn’t decided anything (yet)." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    completed.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+      const homeId = normId(g["Home ID"] ?? g["HomeID"]);
+      const awayId = normId(g["Away ID"] ?? g["AwayID"]);
+
+      const homeName = nameForTeamId(homeId);
+      const awayName = nameForTeamId(awayId);
+
+      // If we can't resolve both names, skip to avoid bogus counts
+      if (!homeName || !awayName) return;
+
+      const firstTeamId = (awayName.localeCompare(homeName, undefined, { sensitivity: "base" }) <= 0) ? awayId : homeId;
+
+      // Only award points when the alphabetical-first team actually won,
+      // AND the player picked that winning team.
+      if (winnerId !== firstTeamId) return;
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId && pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most wins when the alphabet wins (${maxWins}). If it comes first in the dictionary, it comes first on their scoreboard.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #12: Chasing Glory (individual)
+{
+  id: "chasing-glory",
+  emoji: "⭐️",
+  title: "Chasing Glory",
+  themeHint: "yellow",
+  compute: ({ bowlGames, picksIds, history }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    // Build a set of past champions from History tab (support multiple possible column names)
+    const champNames = new Set(
+      (history || [])
+        .map(r => {
+          const v =
+            (r && (r["Champion"] ?? r["Winner"] ?? r["Champion Name"] ?? r["Champ"] ?? r["Champion(s)"] ?? r["Champions"])) ??
+            "";
+          return String(v).trim();
+        })
+        .filter(Boolean)
+        .map(n => n.toLowerCase())
+    );
+
+    // Eligible = players who have never won a championship historically
+    const eligible = players.filter(p => !champNames.has(String(p.Name).trim().toLowerCase()));
+    if (!eligible.length) {
+      return {
+        winners: [],
+        description: "Everyone’s got a ring in the trophy case — no first-timer glory to chase this year."
+      };
+    }
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const completed = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      return Boolean(bowlId && winnerId);
+    });
+
+    if (!completed.length) {
+      return { winners: [], description: "No winners logged yet — glory can’t be chased until bowls are decided." };
+    }
+
+    const wins = {};
+    eligible.forEach(p => { wins[p.Name] = 0; });
+
+    completed.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      eligible.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most wins among players still hunting their first title (${maxWins}). The banner-less are making noise.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #13: The Avengers (affinity)
+{
+  id: "the-avengers",
+  emoji: "👊",
+  title: "The Avengers",
+  themeHint: "emerald",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const completed = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      return Boolean(bowlId && winnerId);
+    });
+
+    if (!completed.length) {
+      return { winners: [], description: "No completed games yet — assembling is hard without results." };
+    }
+
+    const labelPair = (a, b) => {
+      const left = String(a).trim();
+      const right = String(b).trim();
+      return left.localeCompare(right) <= 0 ? `${left} & ${right}` : `${right} & ${left}`;
+    };
+
+    // Precompute per-player correctness by bowl for speed/clarity
+    const correctByPlayer = {};
+    players.forEach(p => {
+      const name = String(p.Name).trim();
+      correctByPlayer[name] = {};
+      completed.forEach(g => {
+        const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+        const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+        const pickId = normId(p[bowlId]);
+        correctByPlayer[name][bowlId] = (pickId === winnerId);
+      });
+    });
+
+    let best = -1;
+    const winners = [];
+
+    for (let i = 0; i < players.length; i++) {
+      for (let j = i + 1; j < players.length; j++) {
+        const A = String(players[i].Name).trim();
+        const B = String(players[j].Name).trim();
+
+        let sharedWins = 0;
+        completed.forEach(g => {
+          const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+          if (correctByPlayer[A][bowlId] && correctByPlayer[B][bowlId]) sharedWins += 1;
+        });
+
+        if (sharedWins > best) {
+          best = sharedWins;
+          winners.length = 0;
+          winners.push(labelPair(A, B));
+        } else if (sharedWins === best) {
+          winners.push(labelPair(A, B));
+        }
+      }
+    }
+
+    winners.sort((a, b) => a.localeCompare(b));
+
+    const description = `Most shared wins together (${best}). Two minds, one scoreboard — this duo keeps landing on the right side of chaos.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #14: Mind Meld (affinity)
+{
+  id: "mind-meld",
+  emoji: "♥️",
+  title: "Mind Meld",
+  themeHint: "rose",
+  compute: ({ schedule, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (players.length < 2) return { winners: [], description: "Need at least two players to meld minds." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    // Bowl IDs to evaluate (prefer schedule list; fallback to numeric keys on picks row)
+    const bowlIds = (() => {
+      const ids = new Set();
+      if (Array.isArray(schedule)) {
+        schedule.forEach(g => {
+          const bid = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
+          if (bid) ids.add(bid);
+        });
+      }
+      if (ids.size === 0) {
+        const sample = players[0] || {};
+        Object.keys(sample).forEach(k => {
+          if (k === "Name" || k === "Timestamp" || k === "Email") return;
+          if (/^\d+$/.test(String(k).trim())) ids.add(String(k).trim());
+        });
+      }
+      return Array.from(ids);
+    })();
+
+    if (!bowlIds.length) {
+      return { winners: [], description: "No bowls found to compare — waiting on schedule." };
+    }
+
+    const labelPair = (a, b) => {
+      const left = String(a).trim();
+      const right = String(b).trim();
+      return left.localeCompare(right) <= 0 ? `${left} & ${right}` : `${right} & ${left}`;
+    };
+
+    let bestRate = -1;
+    const winners = [];
+
+    for (let i = 0; i < players.length; i++) {
+      for (let j = i + 1; j < players.length; j++) {
+        const A = String(players[i].Name).trim();
+        const B = String(players[j].Name).trim();
+
+        let agree = 0;
+        let total = 0;
+
+        bowlIds.forEach(bid => {
+          const aPick = normId(players[i][bid]);
+          const bPick = normId(players[j][bid]);
+          // Your league rules: everyone has a pick, so total counts every bowl
+          total += 1;
+          if (aPick === bPick) agree += 1;
+        });
+
+        const rate = total > 0 ? (agree / total) : 0;
+
+        if (rate > bestRate) {
+          bestRate = rate;
+          winners.length = 0;
+          winners.push(labelPair(A, B));
+        } else if (rate === bestRate) {
+          winners.push(labelPair(A, B));
+        }
+      }
+    }
+
+    winners.sort((a, b) => a.localeCompare(b));
+
+    const pct = bestRate >= 0 ? Math.round(bestRate * 100) : 0;
+    const description = `Highest pick agreement (${pct}%). Two brackets, one brain — it’s getting spooky.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #15: Early Riser (individual)
+{
+  id: "early-riser",
+  emoji: "🌅",
+  title: "Early Riser",
+  themeHint: "orange",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const parseTimeToMinutes = (timeStr) => {
+      const raw = String(timeStr ?? "").trim();
+      if (!raw) return NaN;
+
+      // Format: "2:00 PM"
+      const m = raw.match(/^(\d{1,2})\s*:\s*(\d{2})\s*(AM|PM)$/i);
+      if (!m) return NaN;
+
+      let hh = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      const ap = m[3].toUpperCase();
+
+      if (ap === "AM") {
+        if (hh === 12) hh = 0;
+      } else {
+        if (hh !== 12) hh += 12;
+      }
+      return hh * 60 + mm;
+    };
+
+    const cutoff = 14 * 60; // 2:00 PM
+
+    const earlyCompleted = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+
+      const t = g && (g["Time"] ?? g["Start Time"] ?? g["Kickoff"] ?? g["Kickoff Time"]);
+      const mins = parseTimeToMinutes(t);
+      return Number.isFinite(mins) && mins <= cutoff;
+    });
+
+    if (!earlyCompleted.length) {
+      return { winners: [], description: "No 2 PM (or earlier) winners logged yet — the sunrise slate is still brewing." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    earlyCompleted.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most correct picks at 2 PM or earlier (${maxWins}). While others hit snooze, they’re stacking wins.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #16: The Twins (affinity)
+{
+  id: "the-twins",
+  emoji: "👯",
+  title: "The Twins",
+  themeHint: "purple",
+  compute: ({ bowlGames, schedule, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (players.length < 2) return { winners: [], description: "Need at least two players to find twins." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const parseTimeToMinutes = (timeStr) => {
+      const raw = String(timeStr ?? "").trim();
+      if (!raw) return NaN;
+      const m = raw.match(/^(\d{1,2})\s*:\s*(\d{2})\s*(AM|PM)$/i);
+      if (!m) return NaN;
+      let hh = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      const ap = m[3].toUpperCase();
+      if (ap === "AM") {
+        if (hh === 12) hh = 0;
+      } else {
+        if (hh !== 12) hh += 12;
+      }
+      return hh * 60 + mm;
+    };
+
+    const parseDateToDay = (dateStr) => {
+      const raw = String(dateStr ?? "").trim();
+      if (!raw) return NaN;
+
+      // Support YYYY-MM-DD and MM/DD/YYYY (or M/D/YYYY)
+      const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (iso) {
+        const y = parseInt(iso[1], 10);
+        const mo = parseInt(iso[2], 10) - 1;
+        const d = parseInt(iso[3], 10);
+        return Date.UTC(y, mo, d);
+      }
+
+      const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (us) {
+        const mo = parseInt(us[1], 10) - 1;
+        const d = parseInt(us[2], 10);
+        let y = parseInt(us[3], 10);
+        if (y < 100) y += 2000;
+        return Date.UTC(y, mo, d);
+      }
+
+      const parsed = Date.parse(raw);
+      return Number.isFinite(parsed) ? parsed : NaN;
+    };
+
+    // Build ordered bowl list using Bowl Games (preferred), fallback to schedule, then numeric keys from picks.
+    const orderedBowlIds = (() => {
+      const rows = Array.isArray(bowlGames) && bowlGames.length ? bowlGames : (Array.isArray(schedule) ? schedule : []);
+      const items = [];
+
+      rows.forEach((g, idx) => {
+        const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+        if (!bowlId) return;
+
+        const day = parseDateToDay(g && (g["Date"] ?? g["Game Date"] ?? g["Day"]));
+        const mins = parseTimeToMinutes(g && (g["Time"] ?? g["Start Time"] ?? g["Kickoff"] ?? g["Kickoff Time"]));
+        // Use idx as stable tiebreaker when dates/times are missing
+        items.push({ bowlId, day, mins, idx });
+      });
+
+      // If we couldn't pull any bowls from data rows, fallback to numeric keys on picks row
+      if (!items.length) {
+        const sample = players[0] || {};
+        Object.keys(sample).forEach(k => {
+          if (k === "Name" || k === "Timestamp" || k === "Email") return;
+          if (/^\d+$/.test(String(k).trim())) items.push({ bowlId: String(k).trim(), day: NaN, mins: NaN, idx: items.length });
+        });
+      }
+
+      // Sort: known day first, then known time, then idx, then bowlId
+      items.sort((a, b) => {
+        const ad = Number.isFinite(a.day) ? a.day : Infinity;
+        const bd = Number.isFinite(b.day) ? b.day : Infinity;
+        if (ad !== bd) return ad - bd;
+
+        const at = Number.isFinite(a.mins) ? a.mins : Infinity;
+        const bt = Number.isFinite(b.mins) ? b.mins : Infinity;
+        if (at !== bt) return at - bt;
+
+        if (a.idx !== b.idx) return a.idx - b.idx;
+        return String(a.bowlId).localeCompare(String(b.bowlId));
+      });
+
+      // De-dupe by bowlId while preserving order
+      const seen = new Set();
+      const out = [];
+      items.forEach(it => {
+        if (seen.has(it.bowlId)) return;
+        seen.add(it.bowlId);
+        out.push(it.bowlId);
+      });
+      return out;
+    })();
+
+    if (!orderedBowlIds.length) return { winners: [], description: "No bowls found to compare — waiting on schedule." };
+
+    const labelPair = (a, b) => {
+      const left = String(a).trim();
+      const right = String(b).trim();
+      return left.localeCompare(right) <= 0 ? `${left} & ${right}` : `${right} & ${left}`;
+    };
+
+    let best = -1;
+    const winners = [];
+
+    for (let i = 0; i < players.length; i++) {
+      for (let j = i + 1; j < players.length; j++) {
+        const A = String(players[i].Name).trim();
+        const B = String(players[j].Name).trim();
+
+        let current = 0;
+        let maxStreak = 0;
+
+        orderedBowlIds.forEach((bid) => {
+          const aPick = normId(players[i][bid]);
+          const bPick = normId(players[j][bid]);
+
+          // League rules: always picked, but keep safe
+          if (!aPick || !bPick) {
+            current = 0;
+            return;
+          }
+
+          if (aPick === bPick) {
+            current += 1;
+            if (current > maxStreak) maxStreak = current;
+          } else {
+            current = 0;
+          }
+        });
+
+        if (maxStreak > best) {
+          best = maxStreak;
+          winners.length = 0;
+          winners.push(labelPair(A, B));
+        } else if (maxStreak === best) {
+          winners.push(labelPair(A, B));
+        }
+      }
+    }
+
+    winners.sort((a, b) => a.localeCompare(b));
+
+    const description = `Longest identical-pick streak (${best}). Two brackets, one heartbeat — they’ve been in lockstep for a while.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #17: The Jinx (affinity)
+{
+  id: "the-jinx",
+  emoji: "🐈‍⬛",
+  title: "The Jinx",
+  themeHint: "dark gray",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (players.length < 2) return { winners: [], description: "Need at least two players to jinx each other." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const completed = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      return Boolean(bowlId && winnerId);
+    });
+
+    if (!completed.length) {
+      return { winners: [], description: "No completed games yet — the black cat hasn’t crossed anyone’s path." };
+    }
+
+    const labelPair = (a, b) => {
+      const left = String(a).trim();
+      const right = String(b).trim();
+      return left.localeCompare(right) <= 0 ? `${left} & ${right}` : `${right} & ${left}`;
+    };
+
+    let best = -1;
+    const winners = [];
+
+    for (let i = 0; i < players.length; i++) {
+      for (let j = i + 1; j < players.length; j++) {
+        const A = String(players[i].Name).trim();
+        const B = String(players[j].Name).trim();
+
+        let sharedLosses = 0;
+
+        completed.forEach(g => {
+          const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+          const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+          const aPick = normId(players[i][bowlId]);
+          const bPick = normId(players[j][bowlId]);
+
+          // League rules: always picked; keep safe anyway.
+          if (!aPick || !bPick) return;
+
+          // Identical pick, and it was wrong => shared loss
+          if (aPick === bPick && aPick !== winnerId) sharedLosses += 1;
+        });
+
+        if (sharedLosses > best) {
+          best = sharedLosses;
+          winners.length = 0;
+          winners.push(labelPair(A, B));
+        } else if (sharedLosses === best) {
+          winners.push(labelPair(A, B));
+        }
+      }
+    }
+
+    winners.sort((a, b) => a.localeCompare(b));
+
+    const description = `Most shared losses on the same pick (${best}). When these two agree… somebody should panic.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #18: Sub-Zero (individual)
+{
+  id: "sub-zero",
+  emoji: "🥶",
+  title: "Sub-Zero",
+  themeHint: "light blue",
+  compute: ({ bowlGames, schedule, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const parseTimeToMinutes = (timeStr) => {
+      const raw = String(timeStr ?? "").trim();
+      if (!raw) return NaN;
+      const m = raw.match(/^(\d{1,2})\s*:\s*(\d{2})\s*(AM|PM)$/i);
+      if (!m) return NaN;
+      let hh = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      const ap = m[3].toUpperCase();
+      if (ap === "AM") {
+        if (hh === 12) hh = 0;
+      } else {
+        if (hh !== 12) hh += 12;
+      }
+      return hh * 60 + mm;
+    };
+
+    const parseDateToDay = (dateStr) => {
+      const raw = String(dateStr ?? "").trim();
+      if (!raw) return NaN;
+
+      const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (iso) {
+        const y = parseInt(iso[1], 10);
+        const mo = parseInt(iso[2], 10) - 1;
+        const d = parseInt(iso[3], 10);
+        return Date.UTC(y, mo, d);
+      }
+
+      const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (us) {
+        const mo = parseInt(us[1], 10) - 1;
+        const d = parseInt(us[2], 10);
+        let y = parseInt(us[3], 10);
+        if (y < 100) y += 2000;
+        return Date.UTC(y, mo, d);
+      }
+
+      const parsed = Date.parse(raw);
+      return Number.isFinite(parsed) ? parsed : NaN;
+    };
+
+    // Ordered list of completed bowls (for streak logic)
+    const completedOrdered = (() => {
+      const rows = Array.isArray(bowlGames) && bowlGames.length ? bowlGames : (Array.isArray(schedule) ? schedule : []);
+      const items = [];
+
+      rows.forEach((g, idx) => {
+        const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+        const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+        if (!bowlId || !winnerId) return;
+
+        const day = parseDateToDay(g && (g["Date"] ?? g["Game Date"] ?? g["Day"]));
+        const mins = parseTimeToMinutes(g && (g["Time"] ?? g["Start Time"] ?? g["Kickoff"] ?? g["Kickoff Time"]));
+        items.push({ bowlId, winnerId, day, mins, idx });
+      });
+
+      items.sort((a, b) => {
+        const ad = Number.isFinite(a.day) ? a.day : Infinity;
+        const bd = Number.isFinite(b.day) ? b.day : Infinity;
+        if (ad !== bd) return ad - bd;
+
+        const at = Number.isFinite(a.mins) ? a.mins : Infinity;
+        const bt = Number.isFinite(b.mins) ? b.mins : Infinity;
+        if (at !== bt) return at - bt;
+
+        return a.idx - b.idx;
+      });
+
+      // De-dupe by bowlId in case of duplicates
+      const seen = new Set();
+      return items.filter(it => {
+        if (seen.has(it.bowlId)) return false;
+        seen.add(it.bowlId);
+        return true;
+      });
+    })();
+
+    if (!completedOrdered.length) {
+      return { winners: [], description: "No winners logged yet — nobody’s cold until the games start ending." };
+    }
+
+    const losingStreaks = {}; // max losing streak per player
+    const current = {};       // current streak while scanning chronologically
+
+    players.forEach(p => {
+      losingStreaks[p.Name] = 0;
+      current[p.Name] = 0;
+    });
+
+    completedOrdered.forEach(g => {
+      const bid = g.bowlId;
+      const wid = g.winnerId;
+
+      players.forEach(p => {
+        const pickId = normId(p[bid]);
+
+        // If somehow missing, break streak (but league says always picked)
+        if (!pickId) {
+          current[p.Name] = 0;
+          return;
+        }
+
+        const isLoss = (pickId !== wid);
+        if (isLoss) {
+          current[p.Name] += 1;
+          if (current[p.Name] > losingStreaks[p.Name]) losingStreaks[p.Name] = current[p.Name];
+        } else {
+          current[p.Name] = 0;
+        }
+      });
+    });
+
+    const maxStreak = Math.max(...Object.values(losingStreaks));
+    const winners = Object.keys(losingStreaks)
+      .filter(n => losingStreaks[n] === maxStreak)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Longest losing streak (${maxStreak}). The picks froze solid — somebody’s living in the icebox.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #19: The TV Guide (individual)
+{
+  id: "the-tv-guide",
+  emoji: "📺",
+  title: "The TV Guide",
+  themeHint: "emerald",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const isESPN = (tv) => {
+      const s = String(tv ?? "").trim().toUpperCase();
+      if (!s) return false;
+      // Treat anything that starts with ESPN as ESPN network (ESPN, ESPN2, ESPN+, ESPNU, ESPN Deportes, etc.)
+      return s.startsWith("ESPN");
+    };
+
+    const espnCompleted = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+
+      const tv = g && (g["TV"] ?? g["Network"] ?? g["Channel"]);
+      return isESPN(tv);
+    });
+
+    if (!espnCompleted.length) {
+      return { winners: [], description: "No ESPN winners logged yet — flip the channel, the points aren’t here (yet)." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    espnCompleted.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most wins on ESPN games (${maxWins}). They don’t just watch the bowls — they *read* the scroll.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #20: The Heater (individual)
+{
+  id: "the-heater",
+  emoji: "🔥",
+  title: "The Heater",
+  themeHint: "orange",
+  compute: ({ bowlGames, schedule, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const parseTimeToMinutes = (timeStr) => {
+      const raw = String(timeStr ?? "").trim();
+      if (!raw) return NaN;
+      const m = raw.match(/^(\d{1,2})\s*:\s*(\d{2})\s*(AM|PM)$/i);
+      if (!m) return NaN;
+      let hh = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      const ap = m[3].toUpperCase();
+      if (ap === "AM") {
+        if (hh === 12) hh = 0;
+      } else {
+        if (hh !== 12) hh += 12;
+      }
+      return hh * 60 + mm;
+    };
+
+    const parseDateToDay = (dateStr) => {
+      const raw = String(dateStr ?? "").trim();
+      if (!raw) return NaN;
+
+      const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (iso) {
+        const y = parseInt(iso[1], 10);
+        const mo = parseInt(iso[2], 10) - 1;
+        const d = parseInt(iso[3], 10);
+        return Date.UTC(y, mo, d);
+      }
+
+      const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (us) {
+        const mo = parseInt(us[1], 10) - 1;
+        const d = parseInt(us[2], 10);
+        let y = parseInt(us[3], 10);
+        if (y < 100) y += 2000;
+        return Date.UTC(y, mo, d);
+      }
+
+      const parsed = Date.parse(raw);
+      return Number.isFinite(parsed) ? parsed : NaN;
+    };
+
+    // Ordered list of completed bowls (for streak logic)
+    const completedOrdered = (() => {
+      const rows = Array.isArray(bowlGames) && bowlGames.length ? bowlGames : (Array.isArray(schedule) ? schedule : []);
+      const items = [];
+
+      rows.forEach((g, idx) => {
+        const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+        const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+        if (!bowlId || !winnerId) return;
+
+        const day = parseDateToDay(g && (g["Date"] ?? g["Game Date"] ?? g["Day"]));
+        const mins = parseTimeToMinutes(g && (g["Time"] ?? g["Start Time"] ?? g["Kickoff"] ?? g["Kickoff Time"]));
+        items.push({ bowlId, winnerId, day, mins, idx });
+      });
+
+      items.sort((a, b) => {
+        const ad = Number.isFinite(a.day) ? a.day : Infinity;
+        const bd = Number.isFinite(b.day) ? b.day : Infinity;
+        if (ad !== bd) return ad - bd;
+
+        const at = Number.isFinite(a.mins) ? a.mins : Infinity;
+        const bt = Number.isFinite(b.mins) ? b.mins : Infinity;
+        if (at !== bt) return at - bt;
+
+        return a.idx - b.idx;
+      });
+
+      // De-dupe by bowlId
+      const seen = new Set();
+      return items.filter(it => {
+        if (seen.has(it.bowlId)) return false;
+        seen.add(it.bowlId);
+        return true;
+      });
+    })();
+
+    if (!completedOrdered.length) {
+      return { winners: [], description: "No winners logged yet — nobody’s heating up until bowls start ending." };
+    }
+
+    const bestStreak = {};
+    const current = {};
+
+    players.forEach(p => {
+      bestStreak[p.Name] = 0;
+      current[p.Name] = 0;
+    });
+
+    completedOrdered.forEach(g => {
+      const bid = g.bowlId;
+      const wid = g.winnerId;
+
+      players.forEach(p => {
+        const pickId = normId(p[bid]);
+        if (!pickId) {
+          current[p.Name] = 0;
+          return;
+        }
+
+        const isWin = (pickId === wid);
+        if (isWin) {
+          current[p.Name] += 1;
+          if (current[p.Name] > bestStreak[p.Name]) bestStreak[p.Name] = current[p.Name];
+        } else {
+          current[p.Name] = 0;
+        }
+      });
+    });
+
+    const maxStreak = Math.max(...Object.values(bestStreak));
+    const winners = Object.keys(bestStreak)
+      .filter(n => bestStreak[n] === maxStreak)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Longest winning streak (${maxStreak}). They’ve been on fire — somebody check the thermostat.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #21: Short & Sweet (individual)
+{
+  id: "short-and-sweet",
+  emoji: "🍬",
+  title: "Short & Sweet",
+  themeHint: "teal",
+  compute: ({ bowlGames, teamById, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const getTeamName = (teamId) => {
+      const t = teamById && teamById[String(teamId)];
+      const name = t && (t["School Name"] ?? t["School"] ?? t["Name"] ?? t["Team"] ?? t["Team Name"]);
+      return String(name ?? "").trim();
+    };
+
+    const completed = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      const homeId = normId(g && (g["Home ID"] ?? g["HomeID"]));
+      const awayId = normId(g && (g["Away ID"] ?? g["AwayID"]));
+      return Boolean(bowlId && winnerId && homeId && awayId);
+    });
+
+    if (!completed.length) {
+      return { winners: [], description: "No completed games yet — nobody’s earned candy (yet)." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    completed.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+      const homeId = normId(g["Home ID"] ?? g["HomeID"]);
+      const awayId = normId(g["Away ID"] ?? g["AwayID"]);
+
+      const homeName = getTeamName(homeId);
+      const awayName = getTeamName(awayId);
+
+      // If team names missing, skip this bowl for this badge.
+      if (!homeName || !awayName) return;
+
+      const homeLen = homeName.length;
+      const awayLen = awayName.length;
+
+      // Identify the shortest-name team in this matchup.
+      // If tied, no one can "pick the shortest" definitively — skip the bowl.
+      if (homeLen === awayLen) return;
+
+      const shortestTeamId = homeLen < awayLen ? homeId : awayId;
+
+      // Only count if the shortest-name team actually won.
+      if (winnerId !== shortestTeamId) return;
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most wins backing the shortest-name team (${maxWins}). Less letters, more Ws — pure candy.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #22: B1G Winner (individual)
+{
+  id: "b1g-winner",
+  emoji: "🌰",
+  title: "B1G Winner",
+  themeHint: "red",
+  compute: ({ bowlGames, teamById, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const getConf = (teamId) => {
+      const t = teamById && teamById[String(teamId)];
+      const conf =
+        (t && (t["Conference"] ?? t["Conf"] ?? t["Conference Name"] ?? t["League"] ?? t["Division"])) ?? "";
+      return String(conf).trim();
+    };
+
+    const isBigTen = (confStr) => {
+      const s = String(confStr ?? "").toUpperCase();
+      if (!s) return false;
+      return s.includes("BIG TEN") || s.includes("B1G");
+    };
+
+    const b1gCompleted = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      const homeId = normId(g && (g["Home ID"] ?? g["HomeID"]));
+      const awayId = normId(g && (g["Away ID"] ?? g["AwayID"]));
+      if (!bowlId || !winnerId || !homeId || !awayId) return false;
+
+      const homeConf = getConf(homeId);
+      const awayConf = getConf(awayId);
+      return isBigTen(homeConf) || isBigTen(awayConf);
+    });
+
+    if (!b1gCompleted.length) {
+      return { winners: [], description: "No Big Ten matchups have gone final yet — the nut hasn’t cracked." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    b1gCompleted.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most correct picks in Big Ten-involved bowls (${maxWins}). When the B1G shows up, they show out.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #23: It Just Means More (individual)
+{
+  id: "it-just-means-more",
+  emoji: "🐶",
+  title: "It Just Means More",
+  themeHint: "blue",
+  compute: ({ bowlGames, teamById, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const getConf = (teamId) => {
+      const t = teamById && teamById[String(teamId)];
+      const conf =
+        (t && (t["Conference"] ?? t["Conf"] ?? t["Conference Name"] ?? t["League"] ?? t["Division"])) ?? "";
+      return String(conf).trim();
+    };
+
+    const isSEC = (confStr) => {
+      const s = String(confStr ?? "").toUpperCase();
+      if (!s) return false;
+      // Most sheets will have "SEC"; allow "SOUTHEASTERN" as a backup.
+      return s.includes("SEC") || s.includes("SOUTHEASTERN");
+    };
+
+    const secCompleted = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      const homeId = normId(g && (g["Home ID"] ?? g["HomeID"]));
+      const awayId = normId(g && (g["Away ID"] ?? g["AwayID"]));
+      if (!bowlId || !winnerId || !homeId || !awayId) return false;
+
+      const homeConf = getConf(homeId);
+      const awayConf = getConf(awayId);
+      return isSEC(homeConf) || isSEC(awayConf);
+    });
+
+    if (!secCompleted.length) {
+      return { winners: [], description: "No SEC matchups have gone final yet — it *doesn’t* mean more (yet)." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    secCompleted.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most correct picks in SEC-involved bowls (${maxWins}). If it’s an SEC game, they somehow *knew*.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #24: Playoff Payoff (individual)
+{
+  id: "playoff-payoff",
+  emoji: "🏅",
+  title: "Playoff Payoff",
+  themeHint: "yellow",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const truthy = (v) => {
+      const s = String(v ?? "").trim().toUpperCase();
+      if (!s) return false;
+      return s === "TRUE" || s === "YES" || s === "Y" || s === "1";
+    };
+
+    const cfpCompleted = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+
+      const cfpVal = g && (g["CFP?"] ?? g["CFP"] ?? g["Playoff"] ?? g["Playoff?"]);
+      return truthy(cfpVal);
+    });
+
+    if (!cfpCompleted.length) {
+      return { winners: [], description: "No CFP games have gone final yet — the payoff’s still pending." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    cfpCompleted.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most correct picks on CFP games (${maxWins}). When the lights get brighter, they get sharper.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #25: Saturday Night Fever (individual)
+{
+  id: "saturday-night-fever",
+  emoji: "🕺",
+  title: "Saturday Night Fever",
+  themeHint: "purple",
+  compute: ({ bowlGames, schedule, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const parseTimeToMinutes = (timeStr) => {
+      const raw = String(timeStr ?? "").trim();
+      if (!raw) return NaN;
+      const m = raw.match(/^(\d{1,2})\s*:\s*(\d{2})\s*(AM|PM)$/i);
+      if (!m) return NaN;
+      let hh = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      const ap = m[3].toUpperCase();
+      if (ap === "AM") {
+        if (hh === 12) hh = 0;
+      } else {
+        if (hh !== 12) hh += 12;
+      }
+      return hh * 60 + mm;
+    };
+
+    const parseDateToUTCNoon = (dateStr) => {
+      const raw = String(dateStr ?? "").trim();
+      if (!raw) return null;
+
+      const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (iso) {
+        const y = parseInt(iso[1], 10);
+        const mo = parseInt(iso[2], 10) - 1;
+        const d = parseInt(iso[3], 10);
+        return new Date(Date.UTC(y, mo, d, 12, 0, 0));
+      }
+
+      const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (us) {
+        const mo = parseInt(us[1], 10) - 1;
+        const d = parseInt(us[2], 10);
+        let y = parseInt(us[3], 10);
+        if (y < 100) y += 2000;
+        return new Date(Date.UTC(y, mo, d, 12, 0, 0));
+      }
+
+      const parsed = Date.parse(raw);
+      if (!Number.isFinite(parsed)) return null;
+      const dt = new Date(parsed);
+      // Normalize to UTC noon of that calendar day if possible
+      return new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate(), 12, 0, 0));
+    };
+
+    const isSaturdayNight = (g) => {
+      const dt = parseDateToUTCNoon(g && (g["Date"] ?? g["Game Date"] ?? g["Day"]));
+      if (!dt) return false;
+      const dow = dt.getUTCDay(); // 0 Sun ... 6 Sat
+      if (dow !== 6) return false;
+
+      const mins = parseTimeToMinutes(g && (g["Time"] ?? g["Start Time"] ?? g["Kickoff"] ?? g["Kickoff Time"]));
+      return Number.isFinite(mins) && mins >= 19 * 60;
+    };
+
+    const rows = Array.isArray(bowlGames) && bowlGames.length ? bowlGames : (Array.isArray(schedule) ? schedule : []);
+    const satNightCompleted = (rows || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+      return isSaturdayNight(g);
+    });
+
+    if (!satNightCompleted.length) {
+      return { winners: [], description: "No Saturday night finals yet — the dance floor’s still empty." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    satNightCompleted.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most wins on Saturday-night bowls (${maxWins}). Glitter, lights, and straight-up good reads.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #26: Cover Artist (individual)
+{
+  id: "cover-artist",
+  emoji: "🎸",
+  title: "Cover Artist",
+  themeHint: "red",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const toNum = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return NaN;
+      const n = parseFloat(s.replace(/[^0-9.\-]/g, ""));
+      return Number.isFinite(n) ? n : NaN;
+    };
+
+    const completedCoverGames = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      const favId = normId(g && (g["Favorite ID"] ?? g["FavoriteID"] ?? g["Fav ID"] ?? g["FavID"]));
+      const spreadRaw = g && (g["Spread"] ?? g["Line"] ?? g["Vegas Spread"]);
+      const spread = toNum(spreadRaw);
+
+      const homeId = normId(g && (g["Home ID"] ?? g["HomeID"]));
+      const awayId = normId(g && (g["Away ID"] ?? g["AwayID"]));
+      const homePts = toNum(g && (g["Home Pts"] ?? g["HomePts"] ?? g["Home Points"]));
+      const awayPts = toNum(g && (g["Away Pts"] ?? g["AwayPts"] ?? g["Away Points"]));
+
+      if (!bowlId || !winnerId || !favId) return false;
+      if (!Number.isFinite(spread)) return false;
+      if (!homeId || !awayId) return false;
+      if (!Number.isFinite(homePts) || !Number.isFinite(awayPts)) return false;
+
+      // Favorite must actually win
+      if (winnerId !== favId) return false;
+
+      // Determine favorite margin
+      const favIsHome = favId === homeId;
+      const favPts = favIsHome ? homePts : awayPts;
+      const dogPts = favIsHome ? awayPts : homePts;
+      const margin = favPts - dogPts;
+
+      // Spread might be stored as -3.5 or 3.5 — we care about magnitude.
+      const spreadAbs = Math.abs(spread);
+
+      // "Covered" = win by MORE than the spread (strictly greater).
+      return margin > spreadAbs;
+    });
+
+    if (!completedCoverGames.length) {
+      return { winners: [], description: "No covers logged yet — the band’s still tuning up." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    completedCoverGames.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+      const favId = normId(g["Favorite ID"] ?? g["FavoriteID"] ?? g["Fav ID"] ?? g["FavID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        // Count only if they picked the favorite AND the favorite covered (and won).
+        if (pickId && pickId === winnerId && pickId === favId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most correct picks where the favorite covered (${maxWins}). Vegas called it — they played it loud.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #27: Under Taker (individual)
+{
+  id: "under-taker",
+  emoji: "🪦",
+  title: "Under Taker",
+  themeHint: "light gray",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const toNum = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return NaN;
+      const n = parseFloat(s.replace(/[^0-9.\-]/g, ""));
+      return Number.isFinite(n) ? n : NaN;
+    };
+
+    const underGames = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+
+      const homePts = toNum(g && (g["Home Pts"] ?? g["HomePts"] ?? g["Home Points"]));
+      const awayPts = toNum(g && (g["Away Pts"] ?? g["AwayPts"] ?? g["Away Points"]));
+      const ou = toNum(g && (g["O/U"] ?? g["OU"] ?? g["Over/Under"] ?? g["Total"]));
+
+      if (!Number.isFinite(homePts) || !Number.isFinite(awayPts) || !Number.isFinite(ou)) return false;
+
+      const total = homePts + awayPts;
+      return total < ou;
+    });
+
+    if (!underGames.length) {
+      return { winners: [], description: "No unders have hit yet — the defenses haven’t clocked in." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    underGames.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most correct picks on UNDER games (${maxWins}). Low scores, cold hearts, and clean reads.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #28: Weatherproof Duo (affinity)
+{
+  id: "weatherproof-duo",
+  emoji: "🌧️",
+  title: "Weatherproof Duo",
+  themeHint: "blue",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (players.length < 2) return { winners: [], description: "Need at least two players to pair up." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const normWeather = (v) => String(v ?? "").trim().toUpperCase();
+
+    const isNotClearWeather = (w) => {
+              const s = normWeather(w);
+              if (!s) return false;
+              // Exclude "clear" (including variants like "Clear Skies")…
+              if (s.includes("CLEAR")) return false;
+              // …and exclude indoor/dome-type labels where weather doesn't matter.
+              if (s.includes("INDOOR") || s.includes("DOME")) return false;
+              return true;
+            };
+
+    const messyGames = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+
+      const weatherVal = g && (g["Weather"] ?? g["Conditions"] ?? g["Wx"]);
+      return isNotClearWeather(weatherVal);
+    });
+
+    if (!messyGames.length) {
+      return { winners: [], description: "No messy-weather finals yet — bring on the chaos." };
+    }
+
+    const labelPair = (a, b) => {
+      const left = String(a).trim();
+      const right = String(b).trim();
+      return left.localeCompare(right) <= 0 ? `${left} & ${right}` : `${right} & ${left}`;
+    };
+
+    const pairWins = {};
+
+    // Pre-init all pairs to 0 so ties behave predictably.
+    for (let i = 0; i < players.length; i++) {
+      for (let j = i + 1; j < players.length; j++) {
+        pairWins[labelPair(players[i].Name, players[j].Name)] = 0;
+      }
+    }
+
+    messyGames.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      for (let i = 0; i < players.length; i++) {
+        const A = players[i];
+        const pickA = normId(A[bowlId]);
+        if (!pickA || pickA !== winnerId) continue;
+
+        for (let j = i + 1; j < players.length; j++) {
+          const B = players[j];
+          const pickB = normId(B[bowlId]);
+          if (!pickB || pickB !== winnerId) continue;
+
+          const key = labelPair(A.Name, B.Name);
+          pairWins[key] = (pairWins[key] || 0) + 1;
+        }
+      }
+    });
+
+    const maxWins = Math.max(...Object.values(pairWins));
+    const winners = Object.keys(pairWins)
+      .filter(k => pairWins[k] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most shared wins when the weather isn’t clear (${maxWins}). Two umbrellas, one brain.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #29: Heartbreaker (individual)
+{
+  id: "heartbreaker",
+  emoji: "💔",
+  title: "Heartbreaker",
+  themeHint: "red",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const toNum = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return NaN;
+      const n = parseFloat(s.replace(/[^0-9.\-]/g, ""));
+      return Number.isFinite(n) ? n : NaN;
+    };
+
+    const closeGames = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+
+      const homePts = toNum(g && (g["Home Pts"] ?? g["HomePts"] ?? g["Home Points"]));
+      const awayPts = toNum(g && (g["Away Pts"] ?? g["AwayPts"] ?? g["Away Points"]));
+      if (!Number.isFinite(homePts) || !Number.isFinite(awayPts)) return false;
+
+      const diff = Math.abs(homePts - awayPts);
+      return diff <= 3;
+    });
+
+    if (!closeGames.length) {
+      return { winners: [], description: "No nail-biters have finished yet — nobody’s had their heart broken (yet)." };
+    }
+
+    const losses = {};
+    players.forEach(p => { losses[p.Name] = 0; });
+
+    closeGames.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId && pickId !== winnerId) losses[p.Name] += 1;
+      });
+    });
+
+    const maxLosses = Math.max(...Object.values(losses));
+    const winners = Object.keys(losses)
+      .filter(n => losses[n] === maxLosses)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most losses in one-score games (${maxLosses}). Always so close… and somehow always the one left staring at the final score.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #30: Animal Whisperer (individual)
+{
+  id: "animal-whisperer",
+  emoji: "🐾",
+  title: "The Zoo Keepers",
+  themeHint: "pink",
+  compute: ({ bowlGames, picksIds, teamById }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    // A lightweight heuristic list for common animal mascots/nicknames.
+    // (We match whole words where possible to avoid false positives like "Cathedral".)
+    const ANIMAL_WORDS = [
+      "EAGLE","EAGLES","HAWK","HAWKS","FALCON","FALCONS","RAVEN","RAVENS","OWL","OWLS",
+      "DUCK","DUCKS","GATOR","GATORS","BULL","BULLS","BUFFALO","BUFFALOES","BISON",
+      "BEAR","BEARS","PANTHER","PANTHERS","TIGER","TIGERS","LION","LIONS","WOLF","WOLVES",
+      "DOG","DOGS","BULLDOG","BULLDOGS","HOUND","HOUNDS","CAT","CATS","WILDCAT","WILDCATS",
+      "COUGAR","COUGARS","BOBCAT","BOBCATS","MUSTANG","MUSTANGS","BRONCO","BRONCOS",
+      "HORSE","HORSES","RAM","RAMS","GOAT","GOATS","FROG","FROGS","TOAD","TOADS",
+      "TURTLE","TURTLES","TERRAPIN","TERRAPINS",
+      "BEE","BEES","WASP","WASPS","HORNET","HORNETS","JACKET","JACKETS","YELLOWJACKETS",
+      "SPIDER","SPIDERS",
+      "SHARK","SHARKS","DOLPHIN","DOLPHINS","WHALE","WHALES",
+      "BIRD","BIRDS","CARDINAL","CARDINALS","JAY","JAYS",
+      "COYOTE","COYOTES","JAGUAR","JAGUARS","LEOPARD","LEOPARDS",
+      "DEVILRAY","DEVILRAYS" // just in case someone gets creative :)
+    ];
+
+    const isAnimalNickname = (nickname) => {
+      const raw = String(nickname ?? "").trim();
+      if (!raw) return false;
+      const upper = raw.toUpperCase().replace(/[^A-Z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+      if (!upper) return false;
+
+      // Exact word match against our list
+      const tokens = upper.split(" ");
+      return tokens.some(t => ANIMAL_WORDS.includes(t));
+    };
+
+    // Only count bowls that have a winner recorded.
+    const finals = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      return Boolean(bowlId && winnerId);
+    });
+
+    if (!finals.length) {
+      return { winners: [], description: "No finals yet — the zoo is still warming up." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    finals.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+      if (!bowlId || !winnerId) return;
+
+      const team = teamById && teamById[winnerId];
+      const nickname = team && (team["Team Nickname"] ?? team["Nickname"] ?? team["Nick Name"] ?? team["Mascot"]);
+      const animalWin = isAnimalNickname(nickname);
+
+      if (!animalWin) return;
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId && pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most wins by backing animal mascots (${maxWins}). Big Columbus Zoo energy — calm hands, wild picks.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #31: The Patriot (individual)
+{
+  id: "the-patriot",
+  emoji: "🇺🇸",
+  title: "The Patriot",
+  themeHint: "blue",
+  compute: ({ bowlGames, picksIds, teamById }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const hexToRgb = (hex) => {
+      const s0 = String(hex ?? "").trim();
+      if (!s0) return null;
+      const s = s0.replace("#", "").trim();
+      if (s.length === 3) {
+        const r = parseInt(s[0] + s[0], 16);
+        const g = parseInt(s[1] + s[1], 16);
+        const b = parseInt(s[2] + s[2], 16);
+        if ([r, g, b].some(x => !Number.isFinite(x))) return null;
+        return { r, g, b };
+      }
+      if (s.length === 6) {
+        const r = parseInt(s.slice(0, 2), 16);
+        const g = parseInt(s.slice(2, 4), 16);
+        const b = parseInt(s.slice(4, 6), 16);
+        if ([r, g, b].some(x => !Number.isFinite(x))) return null;
+        return { r, g, b };
+      }
+      return null;
+    };
+
+    // Convert RGB to HSL-ish components (0..1) for easier color family checks.
+    const rgbToHsl = ({ r, g, b }) => {
+      const rn = r / 255, gn = g / 255, bn = b / 255;
+      const max = Math.max(rn, gn, bn);
+      const min = Math.min(rn, gn, bn);
+      const d = max - min;
+      let h = 0;
+      if (d !== 0) {
+        if (max === rn) h = ((gn - bn) / d) % 6;
+        else if (max === gn) h = (bn - rn) / d + 2;
+        else h = (rn - gn) / d + 4;
+        h *= 60;
+        if (h < 0) h += 360;
+      }
+      const l = (max + min) / 2;
+      const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+      return { h, s, l };
+    };
+
+    const isPatriotColor = (hex) => {
+      const rgb = hexToRgb(hex);
+      if (!rgb) return false;
+      const { h, s, l } = rgbToHsl(rgb);
+
+      // "White": very light + low saturation.
+      if (l >= 0.88 && s <= 0.18) return true;
+
+      // Require some saturation for red/blue classification.
+      if (s < 0.22) return false;
+
+      // "Red": around 0° (or 360°) and nearby.
+      const isRed = (h <= 20) || (h >= 340);
+
+      // "Blue": roughly 200°–260°.
+      const isBlue = (h >= 200 && h <= 260);
+
+      return isRed || isBlue;
+    };
+
+    const finals = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      return Boolean(bowlId && winnerId);
+    });
+
+    if (!finals.length) {
+      return { winners: [], description: "No finals yet — still waiting to wave the flag." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    finals.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+      if (!bowlId || !winnerId) return;
+
+      const team = teamById && teamById[winnerId];
+      const primaryHex =
+        team && (team["Primary Hex"] ?? team["PrimaryHex"] ?? team["Primary"] ?? team["Hex"] ?? team["Color"]);
+      if (!isPatriotColor(primaryHex)) return;
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId && pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most wins on red/white/blue teams (${maxWins}). Stars, stripes, and a suspiciously accurate gut feeling.`;
+
+    return { winners, description };
+  }
+}
+    ];
+
+      const themeFromHint = (hint) => {
+        if (!hint) return THEMES[Math.floor(Math.random() * THEMES.length)];
+        const key = String(hint).toLowerCase();
+        if (key.includes("orange")) return { bg: "bg-orange-200", text: "text-orange-900", border: "border-orange-400" };
+        if (key.includes("light blue") || key.includes("lightblue") || key.includes("sky")) return { bg: "bg-sky-200", text: "text-sky-900", border: "border-sky-400" };
+        if (key.includes("dark") || key.includes("charcoal")) return { bg: "bg-slate-300", text: "text-slate-900", border: "border-slate-500" };
+        if (key.includes("brown") || key.includes("tan")) return { bg: "bg-amber-200", text: "text-amber-900", border: "border-amber-400" };
+        if (key.includes("yellow") || key.includes("amber") || key.includes("gold")) return THEMES[2];
+        if (key.includes("indigo")) return THEMES[0];
+        if (key.includes("emerald") || key.includes("green")) return THEMES[1];
+        if (key.includes("rose") || key.includes("red") || key.includes("pink")) return THEMES[3];
+        if (key.includes("cyan") || key.includes("teal") || key.includes("blue")) return THEMES[4];
+        if (key.includes("violet") || key.includes("purple")) return THEMES[5];
+        if (key.includes("dark-slate") || key.includes("dark gray") || key.includes("dark-gray") || key.includes("darker")) {
+          return { bg: "bg-slate-200", text: "text-slate-900", border: "border-slate-400" };
+        }
+        if (key.includes("gray") || key.includes("grey") || key.includes("slate")) return THEMES[6] || THEMES[0];
+        return THEMES[Math.floor(Math.random() * THEMES.length)];
+      };
+
+      const built = [];
+
+      BADGE_DEFS.forEach((def) => {
+        try {
+          const result = def.compute(ctx) || {};
+          const theme = themeFromHint(def.themeHint);
+
+          built.push({
+            id: def.id,
+            emoji: def.emoji,
+            title: def.title,
+            winners: Array.isArray(result.winners) ? result.winners : [],
+            description: result.description || "",
+            colorTheme: theme,
+          });
+        } catch (e) {
+          console.warn(`Badge failed: ${def.id}`, e);
+        }
+      });
+
+      setBadges(shuffleArray(built));
+    }, [loading, error, schedule, picksIds, THEMES]);
+
+    if (loading) return <Spinner text="Calculating Superlatives..." />;
+    if (error) return <Err message={(error && (error.message || String(error))) || "Failed to load data"} />;
+
+    return (
+      <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
+        {/* Page Header (matches other pages) */}
+        <div className="bg-white pt-8 pb-8 px-4">
+          <div className="max-w-7xl mx-auto text-center">
+            <h2 className="text-3xl text-blue-900 font-bold mb-1">Superlatives</h2>
+            <p className="text-gray-600 text-sm">
+              Celebrating the best, worst, and weirdest performances.
+            </p>
+          </div>
+        </div>
+
+        {/* Cards */}
+        <div className="px-4 md:px-6 flex flex-col items-center">
+          <div className="w-full max-w-7xl">
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {badges.map((b) => (
+            <BadgeCard
+              key={b.id || b.title}
+              emoji={b.emoji}
+              title={b.title}
+              winners={b.winners}
+              description={b.description}
+              colorTheme={b.colorTheme || THEMES[0]}
+            />
+          ))}
+        </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   RC.pages.BadgesPage = BadgesPage;
 })();
