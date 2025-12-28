@@ -1082,6 +1082,169 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #16: The Twins (affinity)
+{
+  id: "the-twins",
+  emoji: "👯",
+  title: "The Twins",
+  themeHint: "purple",
+  compute: ({ bowlGames, schedule, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (players.length < 2) return { winners: [], description: "Need at least two players to find twins." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const parseTimeToMinutes = (timeStr) => {
+      const raw = String(timeStr ?? "").trim();
+      if (!raw) return NaN;
+      const m = raw.match(/^(\d{1,2})\s*:\s*(\d{2})\s*(AM|PM)$/i);
+      if (!m) return NaN;
+      let hh = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      const ap = m[3].toUpperCase();
+      if (ap === "AM") {
+        if (hh === 12) hh = 0;
+      } else {
+        if (hh !== 12) hh += 12;
+      }
+      return hh * 60 + mm;
+    };
+
+    const parseDateToDay = (dateStr) => {
+      const raw = String(dateStr ?? "").trim();
+      if (!raw) return NaN;
+
+      // Support YYYY-MM-DD and MM/DD/YYYY (or M/D/YYYY)
+      const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (iso) {
+        const y = parseInt(iso[1], 10);
+        const mo = parseInt(iso[2], 10) - 1;
+        const d = parseInt(iso[3], 10);
+        return Date.UTC(y, mo, d);
+      }
+
+      const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (us) {
+        const mo = parseInt(us[1], 10) - 1;
+        const d = parseInt(us[2], 10);
+        let y = parseInt(us[3], 10);
+        if (y < 100) y += 2000;
+        return Date.UTC(y, mo, d);
+      }
+
+      const parsed = Date.parse(raw);
+      return Number.isFinite(parsed) ? parsed : NaN;
+    };
+
+    // Build ordered bowl list using Bowl Games (preferred), fallback to schedule, then numeric keys from picks.
+    const orderedBowlIds = (() => {
+      const rows = Array.isArray(bowlGames) && bowlGames.length ? bowlGames : (Array.isArray(schedule) ? schedule : []);
+      const items = [];
+
+      rows.forEach((g, idx) => {
+        const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+        if (!bowlId) return;
+
+        const day = parseDateToDay(g && (g["Date"] ?? g["Game Date"] ?? g["Day"]));
+        const mins = parseTimeToMinutes(g && (g["Time"] ?? g["Start Time"] ?? g["Kickoff"] ?? g["Kickoff Time"]));
+        // Use idx as stable tiebreaker when dates/times are missing
+        items.push({ bowlId, day, mins, idx });
+      });
+
+      // If we couldn't pull any bowls from data rows, fallback to numeric keys on picks row
+      if (!items.length) {
+        const sample = players[0] || {};
+        Object.keys(sample).forEach(k => {
+          if (k === "Name" || k === "Timestamp" || k === "Email") return;
+          if (/^\d+$/.test(String(k).trim())) items.push({ bowlId: String(k).trim(), day: NaN, mins: NaN, idx: items.length });
+        });
+      }
+
+      // Sort: known day first, then known time, then idx, then bowlId
+      items.sort((a, b) => {
+        const ad = Number.isFinite(a.day) ? a.day : Infinity;
+        const bd = Number.isFinite(b.day) ? b.day : Infinity;
+        if (ad !== bd) return ad - bd;
+
+        const at = Number.isFinite(a.mins) ? a.mins : Infinity;
+        const bt = Number.isFinite(b.mins) ? b.mins : Infinity;
+        if (at !== bt) return at - bt;
+
+        if (a.idx !== b.idx) return a.idx - b.idx;
+        return String(a.bowlId).localeCompare(String(b.bowlId));
+      });
+
+      // De-dupe by bowlId while preserving order
+      const seen = new Set();
+      const out = [];
+      items.forEach(it => {
+        if (seen.has(it.bowlId)) return;
+        seen.add(it.bowlId);
+        out.push(it.bowlId);
+      });
+      return out;
+    })();
+
+    if (!orderedBowlIds.length) return { winners: [], description: "No bowls found to compare — waiting on schedule." };
+
+    const labelPair = (a, b) => {
+      const left = String(a).trim();
+      const right = String(b).trim();
+      return left.localeCompare(right) <= 0 ? `${left} & ${right}` : `${right} & ${left}`;
+    };
+
+    let best = -1;
+    const winners = [];
+
+    for (let i = 0; i < players.length; i++) {
+      for (let j = i + 1; j < players.length; j++) {
+        const A = String(players[i].Name).trim();
+        const B = String(players[j].Name).trim();
+
+        let current = 0;
+        let maxStreak = 0;
+
+        orderedBowlIds.forEach((bid) => {
+          const aPick = normId(players[i][bid]);
+          const bPick = normId(players[j][bid]);
+
+          // League rules: always picked, but keep safe
+          if (!aPick || !bPick) {
+            current = 0;
+            return;
+          }
+
+          if (aPick === bPick) {
+            current += 1;
+            if (current > maxStreak) maxStreak = current;
+          } else {
+            current = 0;
+          }
+        });
+
+        if (maxStreak > best) {
+          best = maxStreak;
+          winners.length = 0;
+          winners.push(labelPair(A, B));
+        } else if (maxStreak === best) {
+          winners.push(labelPair(A, B));
+        }
+      }
+    }
+
+    winners.sort((a, b) => a.localeCompare(b));
+
+    const description = `Longest identical-pick streak (${best}). Two brackets, one heartbeat — they’ve been in lockstep for a while.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
