@@ -58,7 +58,7 @@ const BadgeCard = ({ emoji, title, winners, description, colorTheme }) => {
         };
 
   const BadgesPage = () => {
-    const { schedule, bowlGames, picksIds, teamById, teams, loading, error } = RC.data.useLeagueData();
+    const { schedule, bowlGames, picksIds, teamById, teams, history, loading, error } = RC.data.useLeagueData();
 const [badges, setBadges] = useState([]);
 
     const { LoadingSpinner, ErrorMessage } = (RC.ui || {});
@@ -88,7 +88,7 @@ const [badges, setBadges] = useState([]);
         return out;
       };
 
-      const ctx = { schedule, bowlGames, picksIds, teamById, teams, THEMES };
+      const ctx = { schedule, bowlGames, picksIds, teamById, teams, history, THEMES };
 
       const BADGE_DEFS = [
         // Badge #2: The Matriarch (static, no ties)
@@ -764,6 +764,79 @@ const [badges, setBadges] = useState([]);
       .sort((a, b) => a.localeCompare(b));
 
     const description = `Most wins when the alphabet wins (${maxWins}). If it comes first in the dictionary, it comes first on their scoreboard.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #12: Chasing Glory (individual)
+{
+  id: "chasing-glory",
+  emoji: "⭐️",
+  title: "Chasing Glory",
+  themeHint: "yellow",
+  compute: ({ bowlGames, picksIds, history }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    // Build a set of past champions from History tab (support multiple possible column names)
+    const champNames = new Set(
+      (history || [])
+        .map(r => {
+          const v =
+            (r && (r["Champion"] ?? r["Winner"] ?? r["Champion Name"] ?? r["Champ"] ?? r["Champion(s)"] ?? r["Champions"])) ??
+            "";
+          return String(v).trim();
+        })
+        .filter(Boolean)
+        .map(n => n.toLowerCase())
+    );
+
+    // Eligible = players who have never won a championship historically
+    const eligible = players.filter(p => !champNames.has(String(p.Name).trim().toLowerCase()));
+    if (!eligible.length) {
+      return {
+        winners: [],
+        description: "Everyone’s got a ring in the trophy case — no first-timer glory to chase this year."
+      };
+    }
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const completed = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      return Boolean(bowlId && winnerId);
+    });
+
+    if (!completed.length) {
+      return { winners: [], description: "No winners logged yet — glory can’t be chased until bowls are decided." };
+    }
+
+    const wins = {};
+    eligible.forEach(p => { wins[p.Name] = 0; });
+
+    completed.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      eligible.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most wins among players still hunting their first title (${maxWins}). The banner-less are making noise.`;
 
     return { winners, description };
   }
