@@ -2200,6 +2200,94 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #28: Weatherproof Duo (affinity)
+{
+  id: "weatherproof-duo",
+  emoji: "🌧️",
+  title: "Weatherproof Duo",
+  themeHint: "blue",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (players.length < 2) return { winners: [], description: "Need at least two players to pair up." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const normWeather = (v) => String(v ?? "").trim().toUpperCase();
+
+    const isNotClearWeather = (w) => {
+              const s = normWeather(w);
+              if (!s) return false;
+              // Exclude "clear" (including variants like "Clear Skies")…
+              if (s.includes("CLEAR")) return false;
+              // …and exclude indoor/dome-type labels where weather doesn't matter.
+              if (s.includes("INDOOR") || s.includes("DOME")) return false;
+              return true;
+            };
+
+    const messyGames = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+
+      const weatherVal = g && (g["Weather"] ?? g["Conditions"] ?? g["Wx"]);
+      return isNotClearWeather(weatherVal);
+    });
+
+    if (!messyGames.length) {
+      return { winners: [], description: "No messy-weather finals yet — bring on the chaos." };
+    }
+
+    const labelPair = (a, b) => {
+      const left = String(a).trim();
+      const right = String(b).trim();
+      return left.localeCompare(right) <= 0 ? `${left} & ${right}` : `${right} & ${left}`;
+    };
+
+    const pairWins = {};
+
+    // Pre-init all pairs to 0 so ties behave predictably.
+    for (let i = 0; i < players.length; i++) {
+      for (let j = i + 1; j < players.length; j++) {
+        pairWins[labelPair(players[i].Name, players[j].Name)] = 0;
+      }
+    }
+
+    messyGames.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      for (let i = 0; i < players.length; i++) {
+        const A = players[i];
+        const pickA = normId(A[bowlId]);
+        if (!pickA || pickA !== winnerId) continue;
+
+        for (let j = i + 1; j < players.length; j++) {
+          const B = players[j];
+          const pickB = normId(B[bowlId]);
+          if (!pickB || pickB !== winnerId) continue;
+
+          const key = labelPair(A.Name, B.Name);
+          pairWins[key] = (pairWins[key] || 0) + 1;
+        }
+      }
+    });
+
+    const maxWins = Math.max(...Object.values(pairWins));
+    const winners = Object.keys(pairWins)
+      .filter(k => pairWins[k] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most shared wins when the weather isn’t clear (${maxWins}). Two umbrellas, one brain.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
