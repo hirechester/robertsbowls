@@ -12,7 +12,7 @@
 
   // --- RACE PAGE ---
           const RacePage = () => {
-              const { schedule, picks, loading, error, refresh } = RC.data.useLeagueData();
+              const { schedule, picks, picksIds, loading, error, refresh } = RC.data.useLeagueData();
               const [chartData, setChartData] = useState({ series: [], maxWins: 0, gameCount: 0 });
               const [hoveredPlayer, setHoveredPlayer] = useState(null);
               const [selectedPlayer, setSelectedPlayer] = useState(null);
@@ -41,23 +41,45 @@
                   if (!Array.isArray(schedule) || !Array.isArray(picks)) return;
                   try {
                       // Process Schedule - Get completed games strictly ordered by time
+                      const useIds = Array.isArray(picksIds) && schedule.some(g => String(g["Bowl ID"] || "").trim());
+
                       const sortedSchedule = schedule
-                          .filter(g => g.Date && g.Time && g.Winner)
+                          .filter(g => {
+                              if (!g || !g.Date || !g.Time) return false;
+                              return useIds ? !!String(g["Winner ID"] || "").trim() : !!String(g.Winner || "").trim();
+                          })
                           .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
 
-                      const players = picks.map(p => p.Name);
+                      const normalizeId = (v) => {
+                          const s = String(v ?? "").trim();
+                          if (!s) return "";
+                          const n = parseInt(s, 10);
+                          return Number.isFinite(n) ? String(n) : s;
+                      };
+
+                      const playerRows = useIds ? picksIds : picks;
+                      const players = playerRows.map(p => p.Name);
+
+                      const picksByName = {};
+                      playerRows.forEach(r => { picksByName[r.Name] = r; });
+
                       // Initialize history with 0 wins at start (game 0)
                       const history = {};
                       players.forEach(p => history[p] = [0]);
 
                       sortedSchedule.forEach(game => {
-                          players.forEach(playerObj => {
-                              const playerPicks = picks.find(p => p.Name === playerObj);
-                              const pick = playerPicks[game.Bowl];
-                              const currentWins = history[playerObj][history[playerObj].length - 1];
-                              // If pick matches winner, increment, else keep same
-                              const isWin = pick && pick.toLowerCase() === game.Winner.toLowerCase();
-                              history[playerObj].push(currentWins + (isWin ? 1 : 0));
+                          const bowlKey = useIds ? String(game["Bowl ID"] || "").trim() : game.Bowl;
+                          const winnerKey = useIds ? normalizeId(game["Winner ID"]) : String(game.Winner || "");
+                          players.forEach(playerName => {
+                              const playerPicks = picksByName[playerName] || {};
+                              const pickVal = playerPicks[bowlKey];
+                              const currentWins = history[playerName][history[playerName].length - 1];
+
+                              const isWin = useIds
+                                  ? (normalizeId(pickVal) && normalizeId(pickVal) === winnerKey)
+                                  : (pickVal && String(pickVal).toLowerCase() === winnerKey.toLowerCase());
+
+                              history[playerName].push(currentWins + (isWin ? 1 : 0));
                           });
                       });
 
@@ -81,7 +103,7 @@
                   } catch (e) {
                       console.error(e);
                   }
-              }, [schedule, picks]);
+              }, [schedule, picks, picksIds]);
 
               const activePlayer = selectedPlayer || hoveredPlayer;
 
