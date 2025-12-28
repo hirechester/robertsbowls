@@ -9,6 +9,10 @@
     // Shared league data (loaded once per session by rc-data.js)
     const { history, loading, error } = RC.data.useLeagueData();
 
+    const { LoadingSpinner, ErrorMessage } = (RC.ui || {});
+    const Spinner = LoadingSpinner || (({ text }) => <div className="px-4 py-8 text-gray-600">{text || "Loading..."}</div>);
+    const Err = ErrorMessage || (({ message }) => <div className="px-4 py-8 text-red-600">{message}</div>);
+
     // Transform history into newest-first list and annotate each winner with winNumber (1st, 2nd, ...)
     const historyData = useMemo(() => {
       if (!Array.isArray(history)) return [];
@@ -27,8 +31,8 @@
         .reverse();
     }, [history]);
 
-if (loading) return <LoadingSpinner text="Loading History..." />;
-              if (error) return <ErrorMessage message={error} />;
+if (loading) return <Spinner text="Loading History..." />;
+              if (error) return <Err message={(error && (error.message || String(error))) || "Failed to load history"} />;
               return (
                   <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
                       <div className="bg-white pt-8 pb-8 px-4"><div className="max-w-7xl mx-auto text-center"><h2 className="text-3xl text-blue-900 font-bold mb-1">Hall of Fame</h2><p className="text-gray-600 text-sm">The legends of the family pool.</p></div></div>
