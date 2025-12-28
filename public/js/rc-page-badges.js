@@ -1939,6 +1939,113 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #25: Saturday Night Fever (individual)
+{
+  id: "saturday-night-fever",
+  emoji: "🕺",
+  title: "Saturday Night Fever",
+  themeHint: "purple",
+  compute: ({ bowlGames, schedule, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const parseTimeToMinutes = (timeStr) => {
+      const raw = String(timeStr ?? "").trim();
+      if (!raw) return NaN;
+      const m = raw.match(/^(\d{1,2})\s*:\s*(\d{2})\s*(AM|PM)$/i);
+      if (!m) return NaN;
+      let hh = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      const ap = m[3].toUpperCase();
+      if (ap === "AM") {
+        if (hh === 12) hh = 0;
+      } else {
+        if (hh !== 12) hh += 12;
+      }
+      return hh * 60 + mm;
+    };
+
+    const parseDateToUTCNoon = (dateStr) => {
+      const raw = String(dateStr ?? "").trim();
+      if (!raw) return null;
+
+      const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (iso) {
+        const y = parseInt(iso[1], 10);
+        const mo = parseInt(iso[2], 10) - 1;
+        const d = parseInt(iso[3], 10);
+        return new Date(Date.UTC(y, mo, d, 12, 0, 0));
+      }
+
+      const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (us) {
+        const mo = parseInt(us[1], 10) - 1;
+        const d = parseInt(us[2], 10);
+        let y = parseInt(us[3], 10);
+        if (y < 100) y += 2000;
+        return new Date(Date.UTC(y, mo, d, 12, 0, 0));
+      }
+
+      const parsed = Date.parse(raw);
+      if (!Number.isFinite(parsed)) return null;
+      const dt = new Date(parsed);
+      // Normalize to UTC noon of that calendar day if possible
+      return new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate(), 12, 0, 0));
+    };
+
+    const isSaturdayNight = (g) => {
+      const dt = parseDateToUTCNoon(g && (g["Date"] ?? g["Game Date"] ?? g["Day"]));
+      if (!dt) return false;
+      const dow = dt.getUTCDay(); // 0 Sun ... 6 Sat
+      if (dow !== 6) return false;
+
+      const mins = parseTimeToMinutes(g && (g["Time"] ?? g["Start Time"] ?? g["Kickoff"] ?? g["Kickoff Time"]));
+      return Number.isFinite(mins) && mins >= 19 * 60;
+    };
+
+    const rows = Array.isArray(bowlGames) && bowlGames.length ? bowlGames : (Array.isArray(schedule) ? schedule : []);
+    const satNightCompleted = (rows || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+      return isSaturdayNight(g);
+    });
+
+    if (!satNightCompleted.length) {
+      return { winners: [], description: "No Saturday night finals yet — the dance floor’s still empty." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    satNightCompleted.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most wins on Saturday-night bowls (${maxWins}). Glitter, lights, and straight-up good reads.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
