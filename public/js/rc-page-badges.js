@@ -549,7 +549,76 @@ const [badges, setBadges] = useState([]);
 
     return { winners, description };
   }
-},];
+},
+// Badge #9: The Sheep (individual)
+{
+  id: "the-sheep",
+  emoji: "🐑",
+  title: "The Sheep",
+  themeHint: "slate",
+  compute: ({ schedule, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    // Bowl IDs to evaluate (prefer schedule list)
+    const bowlIds = (() => {
+      const ids = new Set();
+      if (Array.isArray(schedule)) {
+        schedule.forEach(g => {
+          const bid = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
+          if (bid) ids.add(bid);
+        });
+      }
+      if (ids.size === 0) {
+        const sample = players[0] || {};
+        Object.keys(sample).forEach(k => {
+          if (k === "Name" || k === "Timestamp" || k === "Email") return;
+          if (/^\d+$/.test(String(k).trim())) ids.add(String(k).trim());
+        });
+      }
+      return Array.from(ids);
+    })();
+
+    const followed = {};
+    players.forEach(p => { followed[p.Name] = 0; });
+
+    bowlIds.forEach((bid) => {
+      // Everyone has picks per your league rules
+      const freq = {};
+      players.forEach(p => {
+        const pid = String(p[bid]).trim();
+        freq[pid] = (freq[pid] || 0) + 1;
+      });
+
+      const entries = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+      if (!entries.length) return;
+
+      const topCount = entries[0][1];
+      // If tied for top, no clear majority—skip this bowl
+      const tiedTop = entries.length > 1 && entries[1][1] === topCount;
+      if (tiedTop) return;
+
+      const majorityPick = entries[0][0];
+
+      players.forEach(p => {
+        const pid = String(p[bid]).trim();
+        if (pid === majorityPick) followed[p.Name] += 1;
+      });
+    });
+
+    const counts = Object.values(followed);
+    const maxFollowed = counts.length ? Math.max(...counts) : 0;
+
+    const winners = Object.keys(followed)
+      .filter(n => followed[n] === maxFollowed)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most “follow-the-crowd” picks (${maxFollowed}). When the room nods, they nod too.`;
+
+    return { winners, description };
+  }
+}
+    ];
 
       const themeFromHint = (hint) => {
         if (!hint) return THEMES[Math.floor(Math.random() * THEMES.length)];
