@@ -2205,7 +2205,7 @@ const [badges, setBadges] = useState([]);
 {
   id: "weatherproof-duo",
   emoji: "🌧️",
-  title: "Weatherproof Duo",
+  title: "Singin' in the Rain",
   themeHint: "blue",
   compute: ({ bowlGames, picksIds }) => {
     const players = (picksIds || []).filter(p => p && p.Name);
@@ -2233,14 +2233,13 @@ const [badges, setBadges] = useState([]);
     const messyGames = (bowlGames || []).filter(g => {
       const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
       const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
-      if (!bowlId || !winnerId) return false;
-
-      const weatherVal = g && (g["Weather"] ?? g["Conditions"] ?? g["Wx"]);
+      if (!bowlId) return false;
+const weatherVal = g && (g["Weather"] ?? g["Conditions"] ?? g["Wx"]);
       return isNotClearWeather(weatherVal);
     });
 
     if (!messyGames.length) {
-      return { winners: [], description: "No messy-weather finals yet — bring on the chaos." };
+      return { winners: [], description: "No messy-weather games yet — bring on the chaos." };
     }
 
     const labelPair = (a, b) => {
@@ -2265,12 +2264,16 @@ const [badges, setBadges] = useState([]);
       for (let i = 0; i < players.length; i++) {
         const A = players[i];
         const pickA = normId(A[bowlId]);
-        if (!pickA || pickA !== winnerId) continue;
+        if (!pickA) continue;
 
         for (let j = i + 1; j < players.length; j++) {
           const B = players[j];
           const pickB = normId(B[bowlId]);
-          if (!pickB || pickB !== winnerId) continue;
+          if (!pickB) continue;
+
+          // Count any "wet-weather" game where the two players picked the same team,
+          // regardless of whether it ended up being a win or a loss.
+          if (pickA !== pickB) continue;
 
           const key = labelPair(A.Name, B.Name);
           pairWins[key] = (pairWins[key] || 0) + 1;
@@ -2278,12 +2281,12 @@ const [badges, setBadges] = useState([]);
       }
     });
 
-    const maxWins = Math.max(...Object.values(pairWins));
+    const maxGames = Math.max(...Object.values(pairWins));
     const winners = Object.keys(pairWins)
-      .filter(k => pairWins[k] === maxWins)
+      .filter(k => pairWins[k] === maxGames)
       .sort((a, b) => a.localeCompare(b));
 
-    const description = `Most shared wins when the weather isn’t clear (${maxWins}). Two umbrellas, one brain.`;
+    const description = `Most shared picks when the weather isn’t clear (${maxGames}). Wet like Zoombezi Bay, but still perfectly in sync.`;
 
     return { winners, description };
   }
