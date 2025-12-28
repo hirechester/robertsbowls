@@ -1460,11 +1460,73 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #19: The TV Guide (individual)
+{
+  id: "the-tv-guide",
+  emoji: "📺",
+  title: "The TV Guide",
+  themeHint: "emerald",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const isESPN = (tv) => {
+      const s = String(tv ?? "").trim().toUpperCase();
+      if (!s) return false;
+      // Treat anything that starts with ESPN as ESPN network (ESPN, ESPN2, ESPN+, ESPNU, ESPN Deportes, etc.)
+      return s.startsWith("ESPN");
+    };
+
+    const espnCompleted = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+
+      const tv = g && (g["TV"] ?? g["Network"] ?? g["Channel"]);
+      return isESPN(tv);
+    });
+
+    if (!espnCompleted.length) {
+      return { winners: [], description: "No ESPN winners logged yet — flip the channel, the points aren’t here (yet)." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    espnCompleted.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most wins on ESPN games (${maxWins}). They don’t just watch the bowls — they *read* the scroll.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
         if (!hint) return THEMES[Math.floor(Math.random() * THEMES.length)];
         const key = String(hint).toLowerCase();
+        if (key.includes("orange")) return { bg: "bg-orange-200", text: "text-orange-900", border: "border-orange-400" };
         if (key.includes("light blue") || key.includes("lightblue") || key.includes("sky")) return { bg: "bg-sky-200", text: "text-sky-900", border: "border-sky-400" };
         if (key.includes("dark") || key.includes("charcoal")) return { bg: "bg-slate-300", text: "text-slate-900", border: "border-slate-500" };
         if (key.includes("brown") || key.includes("tan")) return { bg: "bg-amber-200", text: "text-amber-900", border: "border-amber-400" };
