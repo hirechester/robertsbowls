@@ -79,50 +79,106 @@ const BadgeCard = ({ emoji, title, winners, description, colorTheme }) => {
       if (loading || error) return;
       if (!Array.isArray(schedule) || !Array.isArray(picksIds)) return;
 
-      try {
-        const players = picksIds.filter(p => p && p.Name);
-        const completed = schedule.filter(g => {
-          const bowlId = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
-          const winnerId = (g && g["Winner ID"] !== undefined && g["Winner ID"] !== null) ? String(g["Winner ID"]).trim() : "";
-          return Boolean(bowlId && winnerId);
-        });
+      const shuffleArray = (arr) => {
+        const out = arr.slice();
+        for (let i = out.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [out[i], out[j]] = [out[j], out[i]];
+        }
+        return out;
+      };
 
-        const winsByPlayer = {};
-        players.forEach(p => { winsByPlayer[p.Name] = 0; });
+      const ctx = { schedule, picksIds, THEMES };
 
-        completed.forEach(g => {
-          const bowlId = String(g["Bowl ID"]).trim();
-          const winnerId = String(g["Winner ID"]).trim();
+      const BADGE_DEFS = [
+        // Badge #2: The Matriarch (static, no ties)
+        {
+          id: "matriarch",
+          emoji: "👸",
+          title: "The Matriarch",
+          themeHint: "amber",
+          compute: () => ({
+            winners: ["Nana"],
+            description: "The heart of the league (and the family). Official Queen of the Roberts Cup."
+          })
+        },
 
-          players.forEach(p => {
-            const pickId = (p[bowlId] !== undefined && p[bowlId] !== null) ? String(p[bowlId]).trim() : "";
-            if (pickId && pickId === winnerId) winsByPlayer[p.Name] += 1;
-          });
-        });
-
-        const counts = Object.values(winsByPlayer);
-        const maxWins = counts.length ? Math.max(...counts) : 0;
-
-        const winners = maxWins > 0
-          ? Object.keys(winsByPlayer).filter(n => winsByPlayer[n] === maxWins).sort((a,b) => a.localeCompare(b))
-          : [];
-
-        const theme = THEMES[0] || { bg: "bg-indigo-100", text: "text-indigo-800", border: "border-indigo-300" };
-        const description = completed.length
-          ? `Most correct picks so far (${maxWins}).`
-          : `Waiting on completed games.`;
-
-        setBadges([{
+        // Badge #1 (sanity): Top Dawg (ID-native scoring)
+        {
           id: "top-dawg",
           emoji: "🏆",
           title: "Top Dawg",
-          winners,
-          description,
-          colorTheme: theme,
-        }]);
-      } catch (e) {
-        console.error("Error init badges:", e);
-      }
+          themeHint: "indigo",
+          compute: ({ schedule, picksIds }) => {
+            const players = picksIds.filter(p => p && p.Name);
+            const completed = schedule.filter(g => {
+              const bowlId = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
+              const winnerId = (g && g["Winner ID"] !== undefined && g["Winner ID"] !== null) ? String(g["Winner ID"]).trim() : "";
+              return Boolean(bowlId && winnerId);
+            });
+
+            const winsByPlayer = {};
+            players.forEach(p => { winsByPlayer[p.Name] = 0; });
+
+            completed.forEach(g => {
+              const bowlId = String(g["Bowl ID"]).trim();
+              const winnerId = String(g["Winner ID"]).trim();
+
+              players.forEach(p => {
+                const pickId = (p[bowlId] !== undefined && p[bowlId] !== null) ? String(p[bowlId]).trim() : "";
+                if (pickId && pickId === winnerId) winsByPlayer[p.Name] += 1;
+              });
+            });
+
+            const counts = Object.values(winsByPlayer);
+            const maxWins = counts.length ? Math.max(...counts) : 0;
+
+            const winners = maxWins > 0
+              ? Object.keys(winsByPlayer).filter(n => winsByPlayer[n] === maxWins).sort((a,b) => a.localeCompare(b))
+              : [];
+
+            const description = completed.length
+              ? `Most correct picks so far (${maxWins}).`
+              : `Waiting on completed games.`;
+
+            return { winners, description };
+          }
+        },
+      ];
+
+      const themeFromHint = (hint) => {
+        if (!hint) return THEMES[Math.floor(Math.random() * THEMES.length)];
+        const key = String(hint).toLowerCase();
+        if (key.includes("yellow") || key.includes("amber") || key.includes("gold")) return THEMES[2];
+        if (key.includes("indigo")) return THEMES[0];
+        if (key.includes("emerald") || key.includes("green")) return THEMES[1];
+        if (key.includes("rose") || key.includes("red") || key.includes("pink")) return THEMES[3];
+        if (key.includes("cyan") || key.includes("teal") || key.includes("blue")) return THEMES[4];
+        if (key.includes("violet") || key.includes("purple")) return THEMES[5];
+        return THEMES[Math.floor(Math.random() * THEMES.length)];
+      };
+
+      const built = [];
+
+      BADGE_DEFS.forEach((def) => {
+        try {
+          const result = def.compute(ctx) || {};
+          const theme = themeFromHint(def.themeHint);
+
+          built.push({
+            id: def.id,
+            emoji: def.emoji,
+            title: def.title,
+            winners: Array.isArray(result.winners) ? result.winners : [],
+            description: result.description || "",
+            colorTheme: theme,
+          });
+        } catch (e) {
+          console.warn(`Badge failed: ${def.id}`, e);
+        }
+      });
+
+      setBadges(shuffleArray(built));
     }, [loading, error, schedule, picksIds, THEMES]);
 
     if (loading) return <Spinner text="Calculating Superlatives..." />;
