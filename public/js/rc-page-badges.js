@@ -1738,6 +1738,76 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #22: B1G Winner (individual)
+{
+  id: "b1g-winner",
+  emoji: "🌰",
+  title: "B1G Winner",
+  themeHint: "red",
+  compute: ({ bowlGames, teamById, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const getConf = (teamId) => {
+      const t = teamById && teamById[String(teamId)];
+      const conf =
+        (t && (t["Conference"] ?? t["Conf"] ?? t["Conference Name"] ?? t["League"] ?? t["Division"])) ?? "";
+      return String(conf).trim();
+    };
+
+    const isBigTen = (confStr) => {
+      const s = String(confStr ?? "").toUpperCase();
+      if (!s) return false;
+      return s.includes("BIG TEN") || s.includes("B1G");
+    };
+
+    const b1gCompleted = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      const homeId = normId(g && (g["Home ID"] ?? g["HomeID"]));
+      const awayId = normId(g && (g["Away ID"] ?? g["AwayID"]));
+      if (!bowlId || !winnerId || !homeId || !awayId) return false;
+
+      const homeConf = getConf(homeId);
+      const awayConf = getConf(awayId);
+      return isBigTen(homeConf) || isBigTen(awayConf);
+    });
+
+    if (!b1gCompleted.length) {
+      return { winners: [], description: "No Big Ten matchups have gone final yet — the nut hasn’t cracked." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    b1gCompleted.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most correct picks in Big Ten-involved bowls (${maxWins}). When the B1G shows up, they show out.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
