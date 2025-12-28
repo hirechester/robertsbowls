@@ -2288,6 +2288,71 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #29: Heartbreaker (individual)
+{
+  id: "heartbreaker",
+  emoji: "💔",
+  title: "Heartbreaker",
+  themeHint: "red",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const toNum = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return NaN;
+      const n = parseFloat(s.replace(/[^0-9.\-]/g, ""));
+      return Number.isFinite(n) ? n : NaN;
+    };
+
+    const closeGames = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+
+      const homePts = toNum(g && (g["Home Pts"] ?? g["HomePts"] ?? g["Home Points"]));
+      const awayPts = toNum(g && (g["Away Pts"] ?? g["AwayPts"] ?? g["Away Points"]));
+      if (!Number.isFinite(homePts) || !Number.isFinite(awayPts)) return false;
+
+      const diff = Math.abs(homePts - awayPts);
+      return diff <= 3;
+    });
+
+    if (!closeGames.length) {
+      return { winners: [], description: "No nail-biters have finished yet — nobody’s had their heart broken (yet)." };
+    }
+
+    const losses = {};
+    players.forEach(p => { losses[p.Name] = 0; });
+
+    closeGames.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId && pickId !== winnerId) losses[p.Name] += 1;
+      });
+    });
+
+    const maxLosses = Math.max(...Object.values(losses));
+    const winners = Object.keys(losses)
+      .filter(n => losses[n] === maxLosses)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most losses in one-score games (${maxLosses}). Always so close… and somehow always the one left staring at the final score.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
