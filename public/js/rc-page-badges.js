@@ -172,8 +172,8 @@ const [badges, setBadges] = useState([]);
       : [];
 
     const description = maxKs > 0
-      ? `Takes down the giants. Won ${maxKs} game${maxKs === 1 ? "" : "s"} where the leader(s) stumbled.`
-      : "No leader stumbles yet — check back after an upset!";
+      ? `Takes down the giants when they wobble. Won ${maxKs} game${maxKs === 1 ? "" : "s"} where the leader(s) stumbled — pure upset energy.`
+      : "No leader stumbles yet — everyone’s playing it safe. Waiting on the first real upset to crown a slayer.";
 
     return { winners, description };
   }
@@ -267,8 +267,8 @@ const [badges, setBadges] = useState([]);
     winners.sort((a, b) => a.localeCompare(b));
 
     const description = bestRate < 0
-      ? "No rivals yet — need differing National Championship picks."
-      : `Highest agreement among Natty rivals (${Math.round(bestRate * 100)}%).`;
+      ? "No rivals yet — need differing National Championship picks. Once two people split on the Natty, the gloves come off."
+      : `Highest agreement among Natty rivals (${Math.round(bestRate * 100)}%). Same brain all season… until the end.`;
 
     return { winners, description };
   }
@@ -353,8 +353,8 @@ const [badges, setBadges] = useState([]);
       : [];
 
     const description = maxWins > 0
-      ? `Most correct picks with unranked teams (${maxWins}).`
-      : "No unranked winners yet — waiting on chaos.";
+      ? `Most correct picks with unranked teams (${maxWins}). Trusting the chaos and cashing it in — the ultimate “why not?” energy.`
+      : "No unranked winners yet — chalk has ruled so far. Waiting on an unranked surprise to make this badge spicy.";
 
     return { winners, description };
   }
