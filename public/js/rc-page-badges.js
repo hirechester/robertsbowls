@@ -919,6 +919,169 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #14: Mind Meld (affinity)
+{
+  id: "mind-meld",
+  emoji: "♥️",
+  title: "Mind Meld",
+  themeHint: "rose",
+  compute: ({ schedule, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (players.length < 2) return { winners: [], description: "Need at least two players to meld minds." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    // Bowl IDs to evaluate (prefer schedule list; fallback to numeric keys on picks row)
+    const bowlIds = (() => {
+      const ids = new Set();
+      if (Array.isArray(schedule)) {
+        schedule.forEach(g => {
+          const bid = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
+          if (bid) ids.add(bid);
+        });
+      }
+      if (ids.size === 0) {
+        const sample = players[0] || {};
+        Object.keys(sample).forEach(k => {
+          if (k === "Name" || k === "Timestamp" || k === "Email") return;
+          if (/^\d+$/.test(String(k).trim())) ids.add(String(k).trim());
+        });
+      }
+      return Array.from(ids);
+    })();
+
+    if (!bowlIds.length) {
+      return { winners: [], description: "No bowls found to compare — waiting on schedule." };
+    }
+
+    const labelPair = (a, b) => {
+      const left = String(a).trim();
+      const right = String(b).trim();
+      return left.localeCompare(right) <= 0 ? `${left} & ${right}` : `${right} & ${left}`;
+    };
+
+    let bestRate = -1;
+    const winners = [];
+
+    for (let i = 0; i < players.length; i++) {
+      for (let j = i + 1; j < players.length; j++) {
+        const A = String(players[i].Name).trim();
+        const B = String(players[j].Name).trim();
+
+        let agree = 0;
+        let total = 0;
+
+        bowlIds.forEach(bid => {
+          const aPick = normId(players[i][bid]);
+          const bPick = normId(players[j][bid]);
+          // Your league rules: everyone has a pick, so total counts every bowl
+          total += 1;
+          if (aPick === bPick) agree += 1;
+        });
+
+        const rate = total > 0 ? (agree / total) : 0;
+
+        if (rate > bestRate) {
+          bestRate = rate;
+          winners.length = 0;
+          winners.push(labelPair(A, B));
+        } else if (rate === bestRate) {
+          winners.push(labelPair(A, B));
+        }
+      }
+    }
+
+    winners.sort((a, b) => a.localeCompare(b));
+
+    const pct = bestRate >= 0 ? Math.round(bestRate * 100) : 0;
+    const description = `Highest pick agreement (${pct}%). Two brackets, one brain — it’s getting spooky.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #15: Early Riser (individual)
+{
+  id: "early-riser",
+  emoji: "🌅",
+  title: "Early Riser",
+  themeHint: "orange",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const parseTimeToMinutes = (timeStr) => {
+      const raw = String(timeStr ?? "").trim();
+      if (!raw) return NaN;
+
+      // Format: "2:00 PM"
+      const m = raw.match(/^(\d{1,2})\s*:\s*(\d{2})\s*(AM|PM)$/i);
+      if (!m) return NaN;
+
+      let hh = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      const ap = m[3].toUpperCase();
+
+      if (ap === "AM") {
+        if (hh === 12) hh = 0;
+      } else {
+        if (hh !== 12) hh += 12;
+      }
+      return hh * 60 + mm;
+    };
+
+    const cutoff = 14 * 60; // 2:00 PM
+
+    const earlyCompleted = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+
+      const t = g && (g["Time"] ?? g["Start Time"] ?? g["Kickoff"] ?? g["Kickoff Time"]);
+      const mins = parseTimeToMinutes(t);
+      return Number.isFinite(mins) && mins <= cutoff;
+    });
+
+    if (!earlyCompleted.length) {
+      return { winners: [], description: "No 2 PM (or earlier) winners logged yet — the sunrise slate is still brewing." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    earlyCompleted.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most correct picks at 2 PM or earlier (${maxWins}). While others hit snooze, they’re stacking wins.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
