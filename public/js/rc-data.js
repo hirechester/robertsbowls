@@ -98,7 +98,7 @@
 
   const cache = {
     status: "idle", // "idle" | "loading" | "ready" | "error"
-    data: null,     // { schedule, bowlGames, picks, history, teams, teamById }
+    data: null,     // { schedule, bowlGames, picks, picksIds, history, teams, teamById }
     error: null,
     promise: null,
     ts: null
@@ -179,6 +179,7 @@
 
     return {
       "Bowl": getFirst(row, ["Bowl Name", "Bowl", "BowlName"]),
+      "Bowl ID": getFirst(row, ["Bowl ID", "BowlID", "Game ID", "GameID", "ID"]),
       "Date": getFirst(row, ["Date"]),
       "Time": getFirst(row, ["Time"]),
       "Network": getFirst(row, ["TV", "Network"]),
@@ -232,10 +233,47 @@
       .map(r => normalizeScheduleFromBowlGames(r, teamById))
       .filter(g => g.Bowl && g.Date);
 
-    const picks = RC.csvToJson(picksText).filter(p => p && p.Name);
+    
+    const picksIds = RC.csvToJson(picksText).filter(p => p && p.Name);
+
+    // Picks sheet is now ID-based:
+    // - Header columns for games use Bowl ID (stable unique ID)
+    // - Cell values are Team IDs
+    //
+    // For backward compatibility, we convert picks back into the legacy shape:
+    // - keys are Bowl *names* (matching schedule[].Bowl)
+    // - values are Team *display names* (matching schedule[].Winner)
+    const bowlIdToBowlName = {};
+    schedule.forEach(g => {
+      const bid = String(g["Bowl ID"] || "").trim();
+      if (bid) bowlIdToBowlName[bid] = g.Bowl;
+    });
+
+    const NON_GAME_COLS = new Set(["Name", "Tiebreaker Score", "Tiebreaker", "TB", "Notes"]);
+    const picks = picksIds.map((row) => {
+      const out = { Name: row.Name };
+      // Preserve tiebreaker exactly (many pages read this column)
+      if (row["Tiebreaker Score"] !== undefined) out["Tiebreaker Score"] = row["Tiebreaker Score"];
+      if (row["Tiebreaker"] !== undefined && out["Tiebreaker Score"] === undefined) out["Tiebreaker Score"] = row["Tiebreaker"];
+
+      Object.keys(row).forEach((k) => {
+        if (NON_GAME_COLS.has(k)) return;
+        const bowlId = String(k || "").trim();
+        if (!bowlId) return;
+
+        const bowlName = bowlIdToBowlName[bowlId];
+        if (!bowlName) return; // ignore columns that don't match a Bowl ID in schedule
+
+        const pickTeamId = normalizeId(row[k]);
+        const team = pickTeamId ? teamById[pickTeamId] : null;
+        out[bowlName] = team ? teamDisplayName(team) : "";
+      });
+
+      return out;
+    });
     const history = RC.csvToJson(historyText);
 
-    return { schedule, bowlGames, picks, history, teams, teamById };
+    return { schedule, bowlGames, picks, picksIds, history, teams, teamById };
   }
 
   function loadOnce() {
@@ -270,6 +308,7 @@
       schedule: cache.data?.schedule || null,
       bowlGames: cache.data?.bowlGames || null,
       picks: cache.data?.picks || null,
+      picksIds: cache.data?.picksIds || null,
       history: cache.data?.history || null,
       teams: cache.data?.teams || null,
       teamById: cache.data?.teamById || null,
@@ -293,6 +332,7 @@
           schedule: data.schedule,
           bowlGames: data.bowlGames,
           picks: data.picks,
+          picksIds: data.picksIds,
           history: data.history,
           teams: data.teams,
           teamById: data.teamById,
@@ -314,6 +354,7 @@
           schedule: cache.data.schedule,
           bowlGames: cache.data.bowlGames,
           picks: cache.data.picks,
+          picksIds: cache.data.picksIds,
           history: cache.data.history,
           teams: cache.data.teams,
           teamById: cache.data.teamById,
@@ -333,6 +374,7 @@
             schedule: data.schedule,
             bowlGames: data.bowlGames,
             picks: data.picks,
+          picksIds: data.picksIds,
             history: data.history,
             teams: data.teams,
             teamById: data.teamById,
@@ -353,6 +395,7 @@
       schedule: state.schedule,
       bowlGames: state.bowlGames,
       picks: state.picks,
+      picksIds: state.picksIds,
       history: state.history,
       teams: state.teams,
       teamById: state.teamById,
