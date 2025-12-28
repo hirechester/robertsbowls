@@ -12,17 +12,31 @@
   // --- SIMULATOR PAGE ---
   const SimulatorPage = () => {
       // Shared league data (loaded once via rc-data.js)
-      const { schedule, picks, history, loading, error, refresh } = RC.data.useLeagueData();
+      const { schedule, picksIds, loading, error, refresh, teamById } = RC.data.useLeagueData();
       const [simulatedWinners, setSimulatedWinners] = useState({});
+      const keyForGame = (game) => {
+          const bid = (game && game["Bowl ID"] !== undefined) ? String(game["Bowl ID"]).trim() : "";
+          return bid || String(game && game.Bowl ? game.Bowl : "").trim();
+      };
+
+      const getTeamNameById = (id, fallbackName) => {
+          const key = (id === null || id === undefined) ? "" : String(id).trim();
+          if (key && teamById && teamById[key]) {
+              const t = teamById[key];
+              return (t["School Name"] || t.School || t.Team || t.Name || "").toString().trim();
+          }
+          return (fallbackName || "").toString().trim();
+      };
 
 
-      const toggleWinner = (bowl, team) => {
+
+      const toggleWinner = (bowlKey, teamId) => {
           setSimulatedWinners(prev => {
               const next = { ...prev };
-              if (next[bowl] === team) {
-                  delete next[bowl]; // Toggle off if already selected
+              if (next[bowlKey] === teamId) {
+                  delete next[bowlKey]; // Toggle off if already selected
               } else {
-                  next[bowl] = team;
+                  next[bowlKey] = teamId;
               }
               return next;
           });
@@ -34,32 +48,37 @@
 
       // Calculate Projected Standings based on REAL winners + SIMULATED winners
       const projectedStandings = useMemo(() => {
-          if (picks.length === 0) return [];
+          if (!Array.isArray(picksIds) || picksIds.length === 0) return [];
 
-          return picks.map(player => {
+          return picksIds.map(player => {
               let wins = 0;
               schedule.forEach(game => {
-                  const realWinner = game.Winner;
-                  const simWinner = simulatedWinners[game.Bowl];
+                  const bowlKey = keyForGame(game);
+                  const realWinnerId = (game && game["Winner ID"] !== undefined) ? String(game["Winner ID"]).trim() : "";
+                  const simWinnerId = bowlKey ? String(simulatedWinners[bowlKey] || "").trim() : "";
+                  const winnerToUseId = realWinnerId || simWinnerId;
 
-                  // Use simulated winner if no real winner exists
-                  const winnerToUse = realWinner || simWinner;
-
-                  if (winnerToUse) {
-                      const pick = player[game.Bowl];
-                      if (pick && pick.toLowerCase() === winnerToUse.toLowerCase()) {
+                  if (winnerToUseId) {
+                      const pickId = bowlKey && player[bowlKey] !== undefined ? String(player[bowlKey]).trim() : "";
+                      if (pickId && pickId === winnerToUseId) {
                           wins++;
                       }
                   }
               });
               return { name: player.Name, wins };
           }).sort((a, b) => b.wins - a.wins); // Sort descending
-      }, [picks, schedule, simulatedWinners]);
+      }, [picksIds, schedule, simulatedWinners]);
 
       if (loading) return <LoadingSpinner text="Booting up The Oracle..." />;
       if (error) return <ErrorMessage message={(error && (error.message || String(error))) || "Failed to load data"} />;
 
-      const unplayedGames = schedule.filter(g => !g.Winner && g.Bowl && g["Team 1"]).sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
+      const unplayedGames = schedule
+          .filter(g => {
+              const winnerId = (g && g["Winner ID"] !== undefined) ? String(g["Winner ID"]).trim() : "";
+              const hasTeams = (g && (g["Away ID"] || g["Home ID"] || g["Team 1"] || g["Team 2"]));
+              return !winnerId && g && g.Bowl && hasTeams;
+          })
+          .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
 
       return (
           <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
@@ -95,7 +114,14 @@
                        <div className="text-center text-gray-500 py-12">No unplayed games left to simulate!</div>
                    ) : (
                        unplayedGames.map((game) => {
-                           const selected = simulatedWinners[game.Bowl];
+                           const bowlKey = keyForGame(game);
+                              const selected = bowlKey ? simulatedWinners[bowlKey] : undefined;
+                              const awayId = (game && game["Away ID"] !== undefined) ? String(game["Away ID"]).trim() : "";
+                              const homeId = (game && game["Home ID"] !== undefined) ? String(game["Home ID"]).trim() : "";
+                              const awayKey = awayId || game["Team 1"]; 
+                              const homeKey = homeId || game["Team 2"]; 
+                              const awayName = getTeamNameById(awayId, game["Team 1"]);
+                              const homeName = getTeamNameById(homeId, game["Team 2"]);
                            return (
                               <div key={game.Bowl} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
                                   <div className="bg-gray-50 px-4 py-2 border-b border-gray-100 flex justify-between items-center">
@@ -104,15 +130,15 @@
                                   </div>
                                   <div className="p-4 flex items-center justify-between gap-4">
                                       <button
-                                          onClick={() => toggleWinner(game.Bowl, game["Team 1"])}
-                                          className={`flex-1 py-3 px-2 rounded-lg font-bold text-sm transition-all border-2 ${selected === game["Team 1"] ? 'bg-green-600 text-white border-green-600 shadow-md transform scale-[1.02]' : 'bg-white text-gray-700 border-gray-200 hover:border-green-300'}`}
+                                          onClick={() => toggleWinner(bowlKey, awayKey)}
+                                          className={`flex-1 py-3 px-2 rounded-lg font-bold text-sm transition-all border-2 ${selected === awayKey ? 'bg-green-600 text-white border-green-600 shadow-md transform scale-[1.02]' : 'bg-white text-gray-700 border-gray-200 hover:border-green-300'}`}
                                       >
                                           {game["Team 1"]}
                                       </button>
                                       <span className="text-gray-300 font-serif italic text-xs">vs</span>
                                        <button
-                                          onClick={() => toggleWinner(game.Bowl, game["Team 2"])}
-                                          className={`flex-1 py-3 px-2 rounded-lg font-bold text-sm transition-all border-2 ${selected === game["Team 2"] ? 'bg-green-600 text-white border-green-600 shadow-md transform scale-[1.02]' : 'bg-white text-gray-700 border-gray-200 hover:border-green-300'}`}
+                                          onClick={() => toggleWinner(bowlKey, homeKey)}
+                                          className={`flex-1 py-3 px-2 rounded-lg font-bold text-sm transition-all border-2 ${selected === homeKey ? 'bg-green-600 text-white border-green-600 shadow-md transform scale-[1.02]' : 'bg-white text-gray-700 border-gray-200 hover:border-green-300'}`}
                                       >
                                           {game["Team 2"]}
                                       </button>

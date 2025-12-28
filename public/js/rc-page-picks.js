@@ -15,7 +15,7 @@
   // --- PICKS PAGE ---
   const PicksPage = () => {
     // Shared league data (fetched once per session by rc-data.js)
-    const { schedule, picks, loading, error } = RC.data.useLeagueData();
+    const { schedule, picksIds, teamById, loading, error } = RC.data.useLeagueData();
 
     const scheduleRows = useMemo(() => {
       if (!Array.isArray(schedule)) return [];
@@ -23,9 +23,19 @@
     }, [schedule]);
 
     const pickRows = useMemo(() => {
-      if (!Array.isArray(picks)) return [];
-      return picks.filter(p => p.Name);
-    }, [picks]);
+      if (!Array.isArray(picksIds)) return [];
+      return picksIds.filter(p => p && p.Name);
+    }, [picksIds]);
+
+
+
+    const getTeamName = (id) => {
+      const key = (id === null || id === undefined) ? "" : String(id).trim();
+      if (!key) return "";
+      const t = teamById && teamById[key];
+      if (!t) return "";
+      return (t["School Name"] || t.School || t.Team || t.Name || "").toString().trim();
+    };
 
     if (loading) return <LoadingSpinner text="Loading Picks..." />;
     if (error) return <ErrorMessage message={(error && (error.message || String(error))) || "Failed to load picks data"} />;
@@ -81,7 +91,13 @@
 
                       {scheduleRows.map((game, colIndex) => (
                         <td key={colIndex} className="p-2 text-center border-r border-gray-100 last:border-0">
-                          <StatusPill pick={player[game.Bowl]} winner={game.Winner} />
+                          {(() => {
+                            const bowlId = (game["Bowl ID"] ?? "").toString().trim();
+                            const pickId = bowlId ? player[bowlId] : "";
+                            const pickName = getTeamName(pickId);
+                            const winnerName = getTeamName(game["Winner ID"]) || (game.Winner || "");
+                            return <StatusPill pick={pickName} winner={winnerName} />;
+                          })()}
                         </td>
                       ))}
 

@@ -166,9 +166,9 @@
     const winnerTeam = winnerId ? teamById[winnerId] : null;
 
     // Fallback to strings if any ID is missing (keeps the app resilient mid-migration)
-    const homeName = homeTeam ? teamDisplayName(homeTeam) : getFirst(row, ["Home Team", "Home", "Team 2"]);
-    const awayName = awayTeam ? teamDisplayName(awayTeam) : getFirst(row, ["Away Team", "Away", "Team 1"]);
-    const winnerName = winnerTeam ? teamDisplayName(winnerTeam) : getFirst(row, ["Winner"]);
+    const homeName = homeTeam ? teamDisplayName(homeTeam) : (homeId ? homeId : getFirst(row, ["Home Team", "Home", "Team 2"]));
+    const awayName = awayTeam ? teamDisplayName(awayTeam) : (awayId ? awayId : getFirst(row, ["Away Team", "Away", "Team 1"]));
+    const winnerName = winnerTeam ? teamDisplayName(winnerTeam) : (winnerId ? winnerId : "");
 
     const cfpRaw = getFirst(row, ["CFP?", "CFP", "CFP ?", "Playoff", "Playoff?"]);
     const cfp01 = to01(cfpRaw);
