@@ -437,6 +437,52 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 },
+
+// Badge #7: Booked a Tee Time (individual)
+{
+  id: "booked-a-tee-time",
+  emoji: "🏌️‍♂️",
+  title: "Booked a Tee Time",
+  themeHint: "emerald",
+  compute: ({ schedule, picksIds }) => {
+    const players = picksIds.filter(p => p && p.Name);
+    const completed = Array.isArray(schedule) ? schedule.filter(g => {
+      const bowlId = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
+      const winnerId = (g && g["Winner ID"] !== undefined && g["Winner ID"] !== null) ? String(g["Winner ID"]).trim() : "";
+      return Boolean(bowlId && winnerId);
+    }) : [];
+
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+    if (!completed.length) return { winners: [], description: "Waiting on completed games." };
+
+    const losses = {};
+    players.forEach(p => { losses[p.Name] = 0; });
+
+    completed.forEach(g => {
+      const bowlId = String(g["Bowl ID"]).trim();
+      const winnerId = String(g["Winner ID"]).trim();
+
+      players.forEach(p => {
+        const pickId = (p[bowlId] !== undefined && p[bowlId] !== null) ? String(p[bowlId]).trim() : "";
+        if (!pickId) return;
+        if (pickId !== winnerId) losses[p.Name] += 1;
+      });
+    });
+
+    const counts = Object.values(losses);
+    const maxLosses = counts.length ? Math.max(...counts) : 0;
+
+    const winners = maxLosses > 0
+      ? Object.keys(losses).filter(n => losses[n] === maxLosses).sort((a, b) => a.localeCompare(b))
+      : [];
+
+    const description = maxLosses > 0
+      ? `Most wrong picks so far (${maxLosses}). The clubs are packed and the cart is warming up.`
+      : "Nobody’s taken a big hit yet — the fairway is still wide open.";
+
+    return { winners, description };
+  }
+},
       ];
 
       const themeFromHint = (hint) => {
