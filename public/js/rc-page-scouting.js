@@ -153,6 +153,43 @@ useEffect(() => {
       const cfp = getWinStats(g => truthy01(g.CFP));
       const b1g = getWinStats(g => truthy01(g.B1G));
       const sec = getWinStats(g => truthy01(g.SEC));
+
+      // Conference grades (derived from Teams tab via Home ID / Away ID)
+      const teamConfById = (id) => {
+        const key = String(id || "").trim();
+        if (!key) return "";
+        const row = teamById && teamById[key];
+        const raw = row ? (row["Conference"] || row.Conference || row["Conf"] || row.Conf || row["League"] || row.League || "") : "";
+        return String(raw || "").trim().toLowerCase();
+      };
+      const gameTeamIds = (g) => {
+        const home = String((g && (g["Home ID"] || g.HomeId || g.HomeID || "")) || "").trim();
+        const away = String((g && (g["Away ID"] || g.AwayId || g.AwayID || "")) || "").trim();
+        return [home, away].filter(Boolean);
+      };
+      const gameHasConference = (g, matchFn) => {
+        return gameTeamIds(g).some(tid => matchFn(teamConfById(tid)));
+      };
+
+      const b12 = getWinStats(g => gameHasConference(g, c => {
+        const compact = c.replace(/\s+/g, "");
+        return c.includes("big 12") || compact.includes("big12");
+      }));
+      const acc = getWinStats(g => gameHasConference(g, c => {
+        return c.includes("acc") || c.includes("atlantic coast");
+      }));
+      const g6 = getWinStats(g => gameHasConference(g, c => {
+        // "Group of 6" per your list: AAC, C-USA, MAC, MWC, Pac-12, Sun Belt
+        const needles = [
+          "american athletic", "aac",
+          "conference usa", "c-usa", "cusa",
+          "mid-american", "mac",
+          "mountain west", "mwc",
+          "pac-12", "pac 12",
+          "sun belt"
+        ];
+        return needles.some(n => c.includes(n));
+      }));
       const morning = getWinStats(g => { const h = getTimeHour(g); return h !== null && h < 12; });
       const afternoon = getWinStats(g => { const h = getTimeHour(g); return h !== null && h >= 12 && h < 19; });
       const night = getWinStats(g => { const h = getTimeHour(g); return h !== null && h >= 19; });
@@ -266,7 +303,7 @@ useEffect(() => {
       return {
         rank, isTied, wins,
         titles, titleYears,
-        cfp, b1g, sec, morning, afternoon, night,
+        cfp, b1g, sec, b12, acc, g6, morning, afternoon, night,
         espn, abc, fox, cbs, tnt,
         maverickPct, nemesis, bff,
         champ: (nattyBowlId && pData && pData[nattyBowlId]) ? String(pData[nattyBowlId]).trim() : (pData && (pData["National Championship"] || pData["National Championship Pick"] || pData["Championship"] || "")),
@@ -499,7 +536,7 @@ useEffect(() => {
                                                                       <div className="p-5 space-y-4">
                                                                           <div>
                                                                               <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                  <span className="text-yellow-700">Playoffs <span className="text-gray-400 font-normal ml-1">({stats.cfp.wins} of {stats.cfp.total})</span></span>
+                                                                                  <span className="text-yellow-700">College Football Playoff Games <span className="text-gray-400 font-normal ml-1">({stats.cfp.wins} of {stats.cfp.total})</span></span>
                                                                                   <span className="text-yellow-900">{stats.cfp.pct}%</span>
                                                                               </div>
                                                                               <div className="w-full bg-gray-100 rounded-full h-2">
@@ -508,23 +545,52 @@ useEffect(() => {
                                                                           </div>
                                                                           <div>
                                                                               <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                  <span className="text-indigo-900">Big Ten conference matchups <span className="text-gray-400 font-normal ml-1">({stats.b1g.wins} of {stats.b1g.total})</span></span>
-                                                                                  <span className="text-indigo-700">{stats.b1g.pct}%</span>
+                                                                                  <span style={{ color: "#0088CE" }}>Big Ten Conference Games <span className="text-gray-400 font-normal ml-1">({stats.b1g.wins} of {stats.b1g.total})</span></span>
+                                                                                  <span style={{ color: "#0088CE" }}>{stats.b1g.pct}%</span>
                                                                               </div>
                                                                               <div className="w-full bg-gray-100 rounded-full h-2">
-                                                                                  <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${stats.b1g.pct}%` }}></div>
+                                                                                  <div className="h-2 rounded-full" style={{ width: `${stats.b1g.pct}%`, backgroundColor: "#0088CE" }}></div>
                                                                               </div>
                                                                           </div>
                                                                           <div>
                                                                               <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                  <span className="text-blue-900">SEC conference matchups <span className="text-gray-400 font-normal ml-1">({stats.sec.wins} of {stats.sec.total})</span></span>
-                                                                                  <span className="text-blue-700">{stats.sec.pct}%</span>
+                                                                                  <span style={{ color: "#22356B" }}>SEC Conference Games <span className="text-gray-400 font-normal ml-1">({stats.sec.wins} of {stats.sec.total})</span></span>
+                                                                                  <span style={{ color: "#22356B" }}>{stats.sec.pct}%</span>
                                                                               </div>
                                                                               <div className="w-full bg-gray-100 rounded-full h-2">
-                                                                                  <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${stats.sec.pct}%` }}></div>
+                                                                                  <div className="h-2 rounded-full" style={{ width: `${stats.sec.pct}%`, backgroundColor: "#22356B" }}></div>
                                                                               </div>
                                                                           </div>
   
+                                                                          
+                                                                          <div>
+                                                                              <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                  <span style={{ color: "#C41230" }}>Big 12 Conference Games <span className="text-gray-400 font-normal ml-1">({stats.b12.wins} of {stats.b12.total})</span></span>
+                                                                                  <span style={{ color: "#C41230" }}>{stats.b12.pct}%</span>
+                                                                              </div>
+                                                                              <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                  <div className="h-2 rounded-full" style={{ width: `${stats.b12.pct}%`, backgroundColor: "#C41230" }}></div>
+                                                                              </div>
+                                                                          </div>
+                                                                          <div>
+                                                                              <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                  <span style={{ color: "#013CA6" }}>ACC Conference Games <span className="text-gray-400 font-normal ml-1">({stats.acc.wins} of {stats.acc.total})</span></span>
+                                                                                  <span style={{ color: "#013CA6" }}>{stats.acc.pct}%</span>
+                                                                              </div>
+                                                                              <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                  <div className="h-2 rounded-full" style={{ width: `${stats.acc.pct}%`, backgroundColor: "#013CA6" }}></div>
+                                                                              </div>
+                                                                          </div>
+                                                                          <div>
+                                                                              <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                  <span className="text-green-800">Group of 6 Conference Games <span className="text-gray-400 font-normal ml-1">({stats.g6.wins} of {stats.g6.total})</span></span>
+                                                                                  <span className="text-green-800">{stats.g6.pct}%</span>
+                                                                              </div>
+                                                                              <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                  <div className="h-2 rounded-full" style={{ width: `${stats.g6.pct}%`, backgroundColor: "#16A34A" }}></div>
+                                                                              </div>
+                                                                          </div>
+
                                                                           <div className="border-t border-gray-100 pt-4 space-y-4">
                                                                               <div>
                                                                                   <div className="flex justify-between text-sm font-bold mb-1">
