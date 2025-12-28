@@ -1808,6 +1808,77 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #23: It Just Means More (individual)
+{
+  id: "it-just-means-more",
+  emoji: "🐶",
+  title: "It Just Means More",
+  themeHint: "blue",
+  compute: ({ bowlGames, teamById, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const getConf = (teamId) => {
+      const t = teamById && teamById[String(teamId)];
+      const conf =
+        (t && (t["Conference"] ?? t["Conf"] ?? t["Conference Name"] ?? t["League"] ?? t["Division"])) ?? "";
+      return String(conf).trim();
+    };
+
+    const isSEC = (confStr) => {
+      const s = String(confStr ?? "").toUpperCase();
+      if (!s) return false;
+      // Most sheets will have "SEC"; allow "SOUTHEASTERN" as a backup.
+      return s.includes("SEC") || s.includes("SOUTHEASTERN");
+    };
+
+    const secCompleted = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      const homeId = normId(g && (g["Home ID"] ?? g["HomeID"]));
+      const awayId = normId(g && (g["Away ID"] ?? g["AwayID"]));
+      if (!bowlId || !winnerId || !homeId || !awayId) return false;
+
+      const homeConf = getConf(homeId);
+      const awayConf = getConf(awayId);
+      return isSEC(homeConf) || isSEC(awayConf);
+    });
+
+    if (!secCompleted.length) {
+      return { winners: [], description: "No SEC matchups have gone final yet — it *doesn’t* mean more (yet)." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    secCompleted.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most correct picks in SEC-involved bowls (${maxWins}). If it’s an SEC game, they somehow *knew*.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
