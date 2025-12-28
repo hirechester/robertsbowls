@@ -29,12 +29,44 @@
 
 
 
-    const getTeamName = (id) => {
+    const getTeamLabel = (id) => {
       const key = (id === null || id === undefined) ? "" : String(id).trim();
       if (!key) return "";
+
       const t = teamById && teamById[key];
       if (!t) return "";
-      return (t["School Name"] || t.School || t.Team || t.Name || "").toString().trim();
+
+      const school = (t["School Name"] || t.School || t.Team || t.Name || "").toString().trim();
+
+      const pickFirst = (...vals) => {
+        for (const v of vals) {
+          const s = (v === null || v === undefined) ? "" : String(v).trim();
+          if (s) return s;
+        }
+        return "";
+      };
+
+      const cleanNum = (s) => {
+        const raw = String(s || "").trim();
+        if (!raw) return "";
+        // Accept values like "#3", "3", "(3)", "Seed 3"
+        const m = raw.match(/(\d+)/);
+        return m ? m[1] : "";
+      };
+
+      const seedRaw = pickFirst(
+        t["Seed"], t["Team Seed"], t["Seed #"], t["Seed Number"], t["Playoff Seed"], t["CFP Seed"]
+      );
+      const rankRaw = pickFirst(
+        t["Ranking"], t["Rank"], t["AP Rank"], t["AP Ranking"], t["Rk"]
+      );
+
+      const seedNum = cleanNum(seedRaw);
+      const rankNum = cleanNum(rankRaw);
+
+      const prefix = seedNum ? `#${seedNum}` : (rankNum ? `#${rankNum}` : "");
+
+      return prefix ? `${prefix} ${school}` : school;
     };
 
     if (loading) return <LoadingSpinner text="Loading Picks..." />;
@@ -94,8 +126,8 @@
                           {(() => {
                             const bowlId = (game["Bowl ID"] ?? "").toString().trim();
                             const pickId = bowlId ? player[bowlId] : "";
-                            const pickName = getTeamName(pickId);
-                            const winnerName = getTeamName(game["Winner ID"]) || (game.Winner || "");
+                            const pickName = getTeamLabel(pickId);
+                            const winnerName = getTeamLabel(game["Winner ID"]) || (game.Winner || "");
                             return <StatusPill pick={pickName} winner={winnerName} />;
                           })()}
                         </td>
