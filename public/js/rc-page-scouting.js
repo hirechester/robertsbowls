@@ -56,7 +56,13 @@ useEffect(() => {
     if (error) return <ErrorMessage message={(error && (error.message || String(error))) || "Failed to load data"} />;
   
                       // --- CALCULATIONS ---
-                      const calculateStats = (player) => {
+                      const normalizeHex = (v, fallback = "#4F46E5") => {
+      const raw = String(v || "").trim();
+      const m = raw.match(/^#?([0-9a-fA-F]{6})$/);
+      return m ? ("#" + m[1].toUpperCase()) : fallback;
+    };
+
+    const calculateStats = (player) => {
       if (!player) return null;
       const pData = Array.isArray(picksIds) ? picksIds.find(p => p.Name === player) : null;
     const nattyGame = Array.isArray(schedule)
@@ -153,15 +159,58 @@ useEffect(() => {
       const cfp = getWinStats(g => truthy01(g.CFP));
       const b1g = getWinStats(g => truthy01(g.B1G));
       const sec = getWinStats(g => truthy01(g.SEC));
+
+      // Conference grades (derived from Teams tab via Home ID / Away ID)
+      const teamConfById = (id) => {
+        const key = String(id || "").trim();
+        if (!key) return "";
+        const row = teamById && teamById[key];
+        const raw = row ? (row["Conference"] || row.Conference || row["Conf"] || row.Conf || row["League"] || row.League || "") : "";
+        return String(raw || "").trim().toLowerCase();
+      };
+      const gameTeamIds = (g) => {
+        const home = String((g && (g["Home ID"] || g.HomeId || g.HomeID || "")) || "").trim();
+        const away = String((g && (g["Away ID"] || g.AwayId || g.AwayID || "")) || "").trim();
+        return [home, away].filter(Boolean);
+      };
+      const gameHasConference = (g, matchFn) => {
+        return gameTeamIds(g).some(tid => matchFn(teamConfById(tid)));
+      };
+
+      const b12 = getWinStats(g => gameHasConference(g, c => {
+        const compact = c.replace(/\s+/g, "");
+        return c.includes("big 12") || compact.includes("big12");
+      }));
+      const acc = getWinStats(g => gameHasConference(g, c => {
+        return c.includes("acc") || c.includes("atlantic coast");
+      }));
+      const g6 = getWinStats(g => gameHasConference(g, c => {
+        // "Group of 6" per your list: AAC, C-USA, MAC, MWC, Pac-12, Sun Belt
+        const needles = [
+          "american athletic", "aac",
+          "conference usa", "c-usa", "cusa",
+          "mid-american", "mac",
+          "mountain west", "mwc",
+          "pac-12", "pac 12",
+          "sun belt"
+        ];
+        return needles.some(n => c.includes(n));
+      }));
       const morning = getWinStats(g => { const h = getTimeHour(g); return h !== null && h < 12; });
       const afternoon = getWinStats(g => { const h = getTimeHour(g); return h !== null && h >= 12 && h < 19; });
       const night = getWinStats(g => { const h = getTimeHour(g); return h !== null && h >= 19; });
 
-      const espn = getWinStats(g => g.Network && g.Network.toUpperCase().includes('ESPN'));
-      const abc = getWinStats(g => g.Network && g.Network.toUpperCase().includes('ABC'));
-      const fox = getWinStats(g => g.Network && g.Network.toUpperCase().includes('FOX'));
-      const cbs = getWinStats(g => g.Network && g.Network.toUpperCase().includes('CBS'));
-      const tnt = getWinStats(g => g.Network && g.Network.toUpperCase().includes('TNT'));
+      const tvNorm = (g) => String((g && (g.Network || g.TV || "")) || "").trim().toUpperCase().replace(/\s+/g, " ");
+
+      const espn = getWinStats(g => {
+        const tv = tvNorm(g);
+        return tv === "ESPN" || tv === "ESPN2";
+      });
+      const abc = getWinStats(g => tvNorm(g) === "ABC");
+      const fox = getWinStats(g => tvNorm(g) === "FOX");
+      const cbs = getWinStats(g => tvNorm(g) === "CBS");
+      const hbomax = getWinStats(g => tvNorm(g) === "HBO MAX");
+      const cw = getWinStats(g => tvNorm(g) === "THE CW NETWORK");
 
       // 4) Maverick Rating (ID-based)
       let maverickScore = 0;
@@ -259,15 +308,15 @@ useEffect(() => {
 
         if (gameWinnerCount < minWinners) {
           minWinners = gameWinnerCount;
-          bestWin = { bowl: g.Bowl, team: teamNameById(wId) || (g.Winner || wId), count: gameWinnerCount };
+          bestWin = { bowl: g.Bowl, teamId: wId, team: teamNameById(wId) || (g.Winner || wId), count: gameWinnerCount };
         }
       });
 
       return {
         rank, isTied, wins,
         titles, titleYears,
-        cfp, b1g, sec, morning, afternoon, night,
-        espn, abc, fox, cbs, tnt,
+        cfp, b1g, sec, b12, acc, g6, morning, afternoon, night,
+        espn, abc, fox, cbs, hbomax, cw,
         maverickPct, nemesis, bff,
         champ: (nattyBowlId && pData && pData[nattyBowlId]) ? String(pData[nattyBowlId]).trim() : (pData && (pData["National Championship"] || pData["National Championship Pick"] || pData["Championship"] || "")),
         tiebreaker: pData["Tiebreaker Score"],
@@ -476,20 +525,27 @@ useEffect(() => {
                                                                   </div>
   
                                                                   {/* Signature Win Card */}
-                                                                  {stats.bestWin && (
-                                                                      <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 shadow-sm p-5 relative overflow-hidden">
-                                                                          <div className="absolute top-0 right-0 text-6xl opacity-10 pointer-events-none">🌟</div>
-                                                                          <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-1">Signature Win</h3>
-                                                                          <div className="text-lg font-black text-indigo-900 leading-tight mb-2">
-                                                                              Picked {stats.bestWin.team} in the {stats.bestWin.bowl}
+                                                                  {stats.bestWin && (() => {
+                                                                      const row = (teamById && stats.bestWin.teamId != null) ? teamById[String(stats.bestWin.teamId)] : null;
+                                                                      const sigHex = normalizeHex(row && (row["Primary Hex"] || row.Hex || row.Color));
+                                                                      const sigBorder = sigHex + "55";
+                                                                      const sigBg = sigHex + "18";
+                                                                      return (
+                                                                          <div className="bg-gray-50 rounded-2xl border shadow-sm p-5 relative overflow-hidden" style={{ borderColor: sigBorder }}>
+                                                                              <div className="absolute top-0 right-0 text-6xl opacity-10 pointer-events-none">🌟</div>
+                                                                              <h3 className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: sigHex }}>Signature Win</h3>
+                                                                              <div className="text-lg font-black leading-tight mb-2 text-gray-900">
+                                                                                  Picked <span style={{ color: sigHex }}>{stats.bestWin.team}</span> in the {stats.bestWin.bowl}
+                                                                              </div>
+                                                                              <div className="inline-block text-xs font-bold px-2 py-1 rounded shadow-sm border" style={{ borderColor: sigBorder, color: sigHex, backgroundColor: sigBg }}>
+                                                                                  {stats.bestWin.count === 1
+                                                                                      ? "Only player to pick this!"
+                                                                                      : `Only ${stats.bestWin.count} players got this right`}
+                                                                              </div>
                                                                           </div>
-                                                                          <div className="inline-block bg-white border border-indigo-200 text-indigo-600 text-xs font-bold px-2 py-1 rounded shadow-sm">
-                                                                              {stats.bestWin.count === 1
-                                                                                  ? "Only player to pick this!"
-                                                                                  : `Only ${stats.bestWin.count} players picked this`}
-                                                                          </div>
-                                                                      </div>
-                                                                  )}
+                                                                      );
+                                                                  })()}
+
   
                                                                   {/* Skills Breakdown */}
                                                                   <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -499,7 +555,7 @@ useEffect(() => {
                                                                       <div className="p-5 space-y-4">
                                                                           <div>
                                                                               <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                  <span className="text-yellow-700">Playoffs <span className="text-gray-400 font-normal ml-1">({stats.cfp.wins} of {stats.cfp.total})</span></span>
+                                                                                  <span className="text-yellow-700">College Football Playoff Games <span className="text-gray-400 font-normal ml-1">({stats.cfp.wins} of {stats.cfp.total})</span></span>
                                                                                   <span className="text-yellow-900">{stats.cfp.pct}%</span>
                                                                               </div>
                                                                               <div className="w-full bg-gray-100 rounded-full h-2">
@@ -508,23 +564,52 @@ useEffect(() => {
                                                                           </div>
                                                                           <div>
                                                                               <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                  <span className="text-indigo-900">Big Ten conference matchups <span className="text-gray-400 font-normal ml-1">({stats.b1g.wins} of {stats.b1g.total})</span></span>
-                                                                                  <span className="text-indigo-700">{stats.b1g.pct}%</span>
+                                                                                  <span style={{ color: "#0088CE" }}>Big Ten Conference Games <span className="text-gray-400 font-normal ml-1">({stats.b1g.wins} of {stats.b1g.total})</span></span>
+                                                                                  <span style={{ color: "#0088CE" }}>{stats.b1g.pct}%</span>
                                                                               </div>
                                                                               <div className="w-full bg-gray-100 rounded-full h-2">
-                                                                                  <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${stats.b1g.pct}%` }}></div>
+                                                                                  <div className="h-2 rounded-full" style={{ width: `${stats.b1g.pct}%`, backgroundColor: "#0088CE" }}></div>
                                                                               </div>
                                                                           </div>
                                                                           <div>
                                                                               <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                  <span className="text-blue-900">SEC conference matchups <span className="text-gray-400 font-normal ml-1">({stats.sec.wins} of {stats.sec.total})</span></span>
-                                                                                  <span className="text-blue-700">{stats.sec.pct}%</span>
+                                                                                  <span style={{ color: "#22356B" }}>SEC Conference Games <span className="text-gray-400 font-normal ml-1">({stats.sec.wins} of {stats.sec.total})</span></span>
+                                                                                  <span style={{ color: "#22356B" }}>{stats.sec.pct}%</span>
                                                                               </div>
                                                                               <div className="w-full bg-gray-100 rounded-full h-2">
-                                                                                  <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${stats.sec.pct}%` }}></div>
+                                                                                  <div className="h-2 rounded-full" style={{ width: `${stats.sec.pct}%`, backgroundColor: "#22356B" }}></div>
                                                                               </div>
                                                                           </div>
   
+                                                                          
+                                                                          <div>
+                                                                              <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                  <span style={{ color: "#C41230" }}>Big 12 Conference Games <span className="text-gray-400 font-normal ml-1">({stats.b12.wins} of {stats.b12.total})</span></span>
+                                                                                  <span style={{ color: "#C41230" }}>{stats.b12.pct}%</span>
+                                                                              </div>
+                                                                              <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                  <div className="h-2 rounded-full" style={{ width: `${stats.b12.pct}%`, backgroundColor: "#C41230" }}></div>
+                                                                              </div>
+                                                                          </div>
+                                                                          <div>
+                                                                              <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                  <span style={{ color: "#013CA6" }}>ACC Conference Games <span className="text-gray-400 font-normal ml-1">({stats.acc.wins} of {stats.acc.total})</span></span>
+                                                                                  <span style={{ color: "#013CA6" }}>{stats.acc.pct}%</span>
+                                                                              </div>
+                                                                              <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                  <div className="h-2 rounded-full" style={{ width: `${stats.acc.pct}%`, backgroundColor: "#013CA6" }}></div>
+                                                                              </div>
+                                                                          </div>
+                                                                          <div>
+                                                                              <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                  <span className="text-green-800">Group of 6 Conference Games <span className="text-gray-400 font-normal ml-1">({stats.g6.wins} of {stats.g6.total})</span></span>
+                                                                                  <span className="text-green-800">{stats.g6.pct}%</span>
+                                                                              </div>
+                                                                              <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                  <div className="h-2 rounded-full" style={{ width: `${stats.g6.pct}%`, backgroundColor: "#16A34A" }}></div>
+                                                                              </div>
+                                                                          </div>
+
                                                                           <div className="border-t border-gray-100 pt-4 space-y-4">
                                                                               <div>
                                                                                   <div className="flex justify-between text-sm font-bold mb-1">
@@ -558,47 +643,61 @@ useEffect(() => {
                                                                           <div className="border-t border-gray-100 pt-4 space-y-4">
                                                                               <div>
                                                                                   <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                      <span className="text-red-900">ESPN <span className="text-gray-400 font-normal ml-1">({stats.espn.wins} of {stats.espn.total})</span></span>
-                                                                                      <span className="text-red-700">{stats.espn.pct}%</span>
+                                                                                      <span style={{ color: "#e52534" }}>ESPN Broadcast Games <span className="text-gray-400 font-normal ml-1">({stats.espn.wins} of {stats.espn.total})</span></span>
+                                                                                      <span style={{ color: "#e52534" }}>{stats.espn.pct}%</span>
                                                                                   </div>
                                                                                   <div className="w-full bg-gray-100 rounded-full h-2">
-                                                                                      <div className="bg-red-600 h-2 rounded-full" style={{ width: `${stats.espn.pct}%` }}></div>
+                                                                                      <div className="h-2 rounded-full" style={{ width: `${stats.espn.pct}%`, backgroundColor: "#e52534" }}></div>
                                                                                   </div>
                                                                               </div>
+
                                                                               <div>
                                                                                   <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                      <span className="text-gray-900">ABC <span className="text-gray-400 font-normal ml-1">({stats.abc.wins} of {stats.abc.total})</span></span>
-                                                                                      <span className="text-gray-700">{stats.abc.pct}%</span>
+                                                                                      <span style={{ color: "#000000" }}>ABC Broadcast Games <span className="text-gray-400 font-normal ml-1">({stats.abc.wins} of {stats.abc.total})</span></span>
+                                                                                      <span style={{ color: "#000000" }}>{stats.abc.pct}%</span>
                                                                                   </div>
                                                                                   <div className="w-full bg-gray-100 rounded-full h-2">
-                                                                                      <div className="bg-gray-900 h-2 rounded-full" style={{ width: `${stats.abc.pct}%` }}></div>
+                                                                                      <div className="h-2 rounded-full" style={{ width: `${stats.abc.pct}%`, backgroundColor: "#000000" }}></div>
                                                                                   </div>
                                                                               </div>
+
                                                                               <div>
                                                                                   <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                      <span className="text-blue-900">FOX <span className="text-gray-400 font-normal ml-1">({stats.fox.wins} of {stats.fox.total})</span></span>
-                                                                                      <span className="text-blue-700">{stats.fox.pct}%</span>
+                                                                                      <span style={{ color: "#000000" }}>FOX Broadcast Games <span className="text-gray-400 font-normal ml-1">({stats.fox.wins} of {stats.fox.total})</span></span>
+                                                                                      <span style={{ color: "#000000" }}>{stats.fox.pct}%</span>
                                                                                   </div>
                                                                                   <div className="w-full bg-gray-100 rounded-full h-2">
-                                                                                      <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${stats.fox.pct}%` }}></div>
+                                                                                      <div className="h-2 rounded-full" style={{ width: `${stats.fox.pct}%`, backgroundColor: "#000000" }}></div>
                                                                                   </div>
                                                                               </div>
+
                                                                               <div>
                                                                                   <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                      <span className="text-sky-900">CBS <span className="text-gray-400 font-normal ml-1">({stats.cbs.wins} of {stats.cbs.total})</span></span>
-                                                                                      <span className="text-sky-700">{stats.cbs.pct}%</span>
+                                                                                      <span style={{ color: "#014ace" }}>CBS Broadcast Games <span className="text-gray-400 font-normal ml-1">({stats.cbs.wins} of {stats.cbs.total})</span></span>
+                                                                                      <span style={{ color: "#014ace" }}>{stats.cbs.pct}%</span>
                                                                                   </div>
                                                                                   <div className="w-full bg-gray-100 rounded-full h-2">
-                                                                                      <div className="bg-sky-500 h-2 rounded-full" style={{ width: `${stats.cbs.pct}%` }}></div>
+                                                                                      <div className="h-2 rounded-full" style={{ width: `${stats.cbs.pct}%`, backgroundColor: "#014ace" }}></div>
                                                                                   </div>
                                                                               </div>
+
                                                                               <div>
                                                                                   <div className="flex justify-between text-sm font-bold mb-1">
-                                                                                      <span className="text-pink-900">TNT <span className="text-gray-400 font-normal ml-1">({stats.tnt.wins} of {stats.tnt.total})</span></span>
-                                                                                      <span className="text-pink-700">{stats.tnt.pct}%</span>
+                                                                                      <span style={{ color: "#002BE7" }}>HBO Max Broadcast Games <span className="text-gray-400 font-normal ml-1">({stats.hbomax.wins} of {stats.hbomax.total})</span></span>
+                                                                                      <span style={{ color: "#002BE7" }}>{stats.hbomax.pct}%</span>
                                                                                   </div>
                                                                                   <div className="w-full bg-gray-100 rounded-full h-2">
-                                                                                      <div className="bg-pink-600 h-2 rounded-full" style={{ width: `${stats.tnt.pct}%` }}></div>
+                                                                                      <div className="h-2 rounded-full" style={{ width: `${stats.hbomax.pct}%`, backgroundColor: "#002BE7" }}></div>
+                                                                                  </div>
+                                                                              </div>
+
+                                                                              <div>
+                                                                                  <div className="flex justify-between text-sm font-bold mb-1">
+                                                                                      <span style={{ color: "#FF4500" }}>CW Network Broadcast Games <span className="text-gray-400 font-normal ml-1">({stats.cw.wins} of {stats.cw.total})</span></span>
+                                                                                      <span style={{ color: "#FF4500" }}>{stats.cw.pct}%</span>
+                                                                                  </div>
+                                                                                  <div className="w-full bg-gray-100 rounded-full h-2">
+                                                                                      <div className="h-2 rounded-full" style={{ width: `${stats.cw.pct}%`, backgroundColor: "#FF4500" }}></div>
                                                                                   </div>
                                                                               </div>
                                                                           </div>
