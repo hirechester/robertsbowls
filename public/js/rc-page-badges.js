@@ -1879,6 +1879,66 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #24: Playoff Payoff (individual)
+{
+  id: "playoff-payoff",
+  emoji: "🏅",
+  title: "Playoff Payoff",
+  themeHint: "yellow",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const truthy = (v) => {
+      const s = String(v ?? "").trim().toUpperCase();
+      if (!s) return false;
+      return s === "TRUE" || s === "YES" || s === "Y" || s === "1";
+    };
+
+    const cfpCompleted = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+
+      const cfpVal = g && (g["CFP?"] ?? g["CFP"] ?? g["Playoff"] ?? g["Playoff?"]);
+      return truthy(cfpVal);
+    });
+
+    if (!cfpCompleted.length) {
+      return { winners: [], description: "No CFP games have gone final yet — the payoff’s still pending." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    cfpCompleted.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most correct picks on CFP games (${maxWins}). When the lights get brighter, they get sharper.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
