@@ -1245,11 +1245,87 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #17: The Jinx (affinity)
+{
+  id: "the-jinx",
+  emoji: "🐈‍⬛",
+  title: "The Jinx",
+  themeHint: "dark gray",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (players.length < 2) return { winners: [], description: "Need at least two players to jinx each other." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const completed = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      return Boolean(bowlId && winnerId);
+    });
+
+    if (!completed.length) {
+      return { winners: [], description: "No completed games yet — the black cat hasn’t crossed anyone’s path." };
+    }
+
+    const labelPair = (a, b) => {
+      const left = String(a).trim();
+      const right = String(b).trim();
+      return left.localeCompare(right) <= 0 ? `${left} & ${right}` : `${right} & ${left}`;
+    };
+
+    let best = -1;
+    const winners = [];
+
+    for (let i = 0; i < players.length; i++) {
+      for (let j = i + 1; j < players.length; j++) {
+        const A = String(players[i].Name).trim();
+        const B = String(players[j].Name).trim();
+
+        let sharedLosses = 0;
+
+        completed.forEach(g => {
+          const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+          const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+          const aPick = normId(players[i][bowlId]);
+          const bPick = normId(players[j][bowlId]);
+
+          // League rules: always picked; keep safe anyway.
+          if (!aPick || !bPick) return;
+
+          // Identical pick, and it was wrong => shared loss
+          if (aPick === bPick && aPick !== winnerId) sharedLosses += 1;
+        });
+
+        if (sharedLosses > best) {
+          best = sharedLosses;
+          winners.length = 0;
+          winners.push(labelPair(A, B));
+        } else if (sharedLosses === best) {
+          winners.push(labelPair(A, B));
+        }
+      }
+    }
+
+    winners.sort((a, b) => a.localeCompare(b));
+
+    const description = `Most shared losses on the same pick (${best}). When these two agree… somebody should panic.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
         if (!hint) return THEMES[Math.floor(Math.random() * THEMES.length)];
         const key = String(hint).toLowerCase();
+        if (key.includes("dark") || key.includes("charcoal")) return { bg: "bg-slate-300", text: "text-slate-900", border: "border-slate-500" };
         if (key.includes("brown") || key.includes("tan")) return { bg: "bg-amber-200", text: "text-amber-900", border: "border-amber-400" };
         if (key.includes("yellow") || key.includes("amber") || key.includes("gold")) return THEMES[2];
         if (key.includes("indigo")) return THEMES[0];
