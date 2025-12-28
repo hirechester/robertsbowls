@@ -359,6 +359,84 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 },
+
+// Badge #6: Mortal Enemies (affinity)
+{
+  id: "mortal-enemies",
+  emoji: "⚔️",
+  title: "Mortal Enemies",
+  themeHint: "slate",
+  compute: ({ schedule, picksIds }) => {
+    const players = picksIds.filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    // Bowl IDs to compare (prefer schedule list)
+    const bowlIds = (() => {
+      const ids = new Set();
+      if (Array.isArray(schedule)) {
+        schedule.forEach(g => {
+          const bid = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
+          if (bid) ids.add(bid);
+        });
+      }
+      if (ids.size === 0) {
+        const sample = players[0] || {};
+        Object.keys(sample).forEach(k => {
+          if (k === "Name" || k === "Timestamp" || k === "Email") return;
+          if (/^\d+$/.test(String(k).trim())) ids.add(String(k).trim());
+        });
+      }
+      return Array.from(ids);
+    })();
+
+    const labelPair = (a, b) => {
+      const left = String(a).trim();
+      const right = String(b).trim();
+      return left.localeCompare(right) <= 0 ? `${left} & ${right}` : `${right} & ${left}`;
+    };
+
+    let worstRate = Infinity;
+    const winners = [];
+
+    for (let i = 0; i < players.length; i++) {
+      for (let j = i + 1; j < players.length; j++) {
+        const A = players[i];
+        const B = players[j];
+
+        let total = 0;
+        let agree = 0;
+
+        bowlIds.forEach(bid => {
+          const aPick = (A[bid] !== undefined && A[bid] !== null) ? String(A[bid]).trim() : "";
+          const bPick = (B[bid] !== undefined && B[bid] !== null) ? String(B[bid]).trim() : "";
+          if (!aPick || !bPick) return;
+          total += 1;
+          if (aPick === bPick) agree += 1;
+        });
+
+        if (total === 0) continue;
+
+        const rate = agree / total;
+
+        if (rate < worstRate - 1e-12) {
+          worstRate = rate;
+          winners.length = 0;
+          winners.push(labelPair(A.Name, B.Name));
+        } else if (Math.abs(rate - worstRate) <= 1e-12) {
+          winners.push(labelPair(A.Name, B.Name));
+        }
+      }
+    }
+
+    winners.sort((a, b) => a.localeCompare(b));
+
+    const description = (worstRate === Infinity)
+      ? "Not enough overlapping picks yet to start a feud. Make more picks and let the sparks fly."
+      : `Lowest agreement in the league (${Math.round(worstRate * 100)}%). If there’s a hill to die on, these two chose different ones.`;
+
+    return { winners, description };
+  }
+},
       ];
 
       const themeFromHint = (hint) => {
@@ -370,6 +448,9 @@ const [badges, setBadges] = useState([]);
         if (key.includes("rose") || key.includes("red") || key.includes("pink")) return THEMES[3];
         if (key.includes("cyan") || key.includes("teal") || key.includes("blue")) return THEMES[4];
         if (key.includes("violet") || key.includes("purple")) return THEMES[5];
+        if (key.includes("dark-slate") || key.includes("dark gray") || key.includes("dark-gray") || key.includes("darker")) {
+          return { bg: "bg-slate-200", text: "text-slate-900", border: "border-slate-400" };
+        }
         if (key.includes("gray") || key.includes("grey") || key.includes("slate")) return THEMES[6] || THEMES[0];
         return THEMES[Math.floor(Math.random() * THEMES.length)];
       };
