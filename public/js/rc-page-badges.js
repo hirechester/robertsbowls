@@ -841,6 +841,84 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #13: The Avengers (affinity)
+{
+  id: "the-avengers",
+  emoji: "👊",
+  title: "The Avengers",
+  themeHint: "emerald",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const completed = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      return Boolean(bowlId && winnerId);
+    });
+
+    if (!completed.length) {
+      return { winners: [], description: "No completed games yet — assembling is hard without results." };
+    }
+
+    const labelPair = (a, b) => {
+      const left = String(a).trim();
+      const right = String(b).trim();
+      return left.localeCompare(right) <= 0 ? `${left} & ${right}` : `${right} & ${left}`;
+    };
+
+    // Precompute per-player correctness by bowl for speed/clarity
+    const correctByPlayer = {};
+    players.forEach(p => {
+      const name = String(p.Name).trim();
+      correctByPlayer[name] = {};
+      completed.forEach(g => {
+        const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+        const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+        const pickId = normId(p[bowlId]);
+        correctByPlayer[name][bowlId] = (pickId === winnerId);
+      });
+    });
+
+    let best = -1;
+    const winners = [];
+
+    for (let i = 0; i < players.length; i++) {
+      for (let j = i + 1; j < players.length; j++) {
+        const A = String(players[i].Name).trim();
+        const B = String(players[j].Name).trim();
+
+        let sharedWins = 0;
+        completed.forEach(g => {
+          const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+          if (correctByPlayer[A][bowlId] && correctByPlayer[B][bowlId]) sharedWins += 1;
+        });
+
+        if (sharedWins > best) {
+          best = sharedWins;
+          winners.length = 0;
+          winners.push(labelPair(A, B));
+        } else if (sharedWins === best) {
+          winners.push(labelPair(A, B));
+        }
+      }
+    }
+
+    winners.sort((a, b) => a.localeCompare(b));
+
+    const description = `Most shared wins together (${best}). Two minds, one scoreboard — this duo keeps landing on the right side of chaos.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
