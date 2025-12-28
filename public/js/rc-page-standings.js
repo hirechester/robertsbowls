@@ -12,92 +12,169 @@
 
   // --- STANDINGS PAGE ---
   const StandingsPage = () => {
-    const { schedule, picks, history, loading, error, refresh, lastUpdated } = RC.data.useLeagueData();
+    const { schedule, picks, picksIds, history, loading, error, refresh, lastUpdated } = RC.data.useLeagueData();
     const [standings, setStandings] = useState([]);
     const [sortConfig, setSortConfig] = useState({ key: 'wins', direction: 'descending' });
 
     useEffect(() => {
         // Standings are computed from shared league data (loaded once in rc-data.js).
-        if (!Array.isArray(schedule) || !Array.isArray(picks)) return;
+        // Stage F1: use ID-native picks (picksIds) + schedule Winner ID for scoring.
+        if (!Array.isArray(schedule) || !Array.isArray(picksIds)) return;
+
+        const normalizeId = (v) => {
+            const s = String(v ?? "").trim();
+            if (!s) return "";
+            const n = parseInt(s, 10);
+            return Number.isFinite(n) ? String(n) : s;
+        };
+
         try {
-                const sortedSchedule = schedule.filter(g => g.Date && g.Time).sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
-                const unplayedGames = sortedSchedule.filter(g => !g.Winner);
-                const SIMULATIONS = 2000;
-                const playerSimWins = {};
-                picks.forEach(p => playerSimWins[p.Name] = 0);
-                for (let i = 0; i < SIMULATIONS; i++) {
-                    const simOutcomes = {};
-                    unplayedGames.forEach(g => { simOutcomes[g.Bowl] = Math.random() < 0.5 ? g["Team 1"] : g["Team 2"]; });
-                    let maxWins = -1;
-                    const currentSimScores = {};
-                    picks.forEach(player => {
-                        let sWins = 0;
-                        sortedSchedule.forEach(g => {
-                            const pick = player[g.Bowl];
-                            let winner = g.Winner || simOutcomes[g.Bowl];
-                            if (pick && winner && pick.toLowerCase() === winner.toLowerCase()) sWins++;
-                        });
-                        currentSimScores[player.Name] = sWins;
-                        if (sWins > maxWins) maxWins = sWins;
+            const sortedSchedule = schedule
+                .filter(g => g.Date && g.Time)
+                .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
+
+            const getBowlKey = (g) => {
+                const bid = String(g["Bowl ID"] || "").trim();
+                return bid || String(g.Bowl || "").trim();
+            };
+
+            const unplayedGames = sortedSchedule.filter(g => !normalizeId(g["Winner ID"]));
+
+            const SIMULATIONS = 2000;
+            const playerSimWins = {};
+            picksIds.forEach(p => { playerSimWins[p.Name] = 0; });
+
+            for (let i = 0; i < SIMULATIONS; i++) {
+                const simOutcomes = {}; // bowlId -> winnerTeamId
+                unplayedGames.forEach(g => {
+                    const bowlKey = getBowlKey(g);
+                    const awayId = normalizeId(g["Away ID"]);
+                    const homeId = normalizeId(g["Home ID"]);
+                    if (!bowlKey || !awayId || !homeId) return;
+                    simOutcomes[bowlKey] = Math.random() < 0.5 ? awayId : homeId;
+                });
+
+                let maxWins = -1;
+                const currentSimScores = {};
+
+                picksIds.forEach(player => {
+                    let sWins = 0;
+                    sortedSchedule.forEach(g => {
+                        const bowlKey = getBowlKey(g);
+                        const pickId = normalizeId(player[bowlKey]);
+                        const winnerId = normalizeId(g["Winner ID"]) || simOutcomes[bowlKey];
+                        if (pickId && winnerId && pickId === winnerId) sWins++;
                     });
-                    picks.forEach(player => { if (currentSimScores[player.Name] === maxWins) playerSimWins[player.Name]++; });
-                }
-                let stats = picks.map(player => {
-                    let wins = 0; let losses = 0; let currentStreak = 0; let tempWinStreak = 0; let maxWinStreak = 0;
+                    currentSimScores[player.Name] = sWins;
+                    if (sWins > maxWins) maxWins = sWins;
+                });
+
+                picksIds.forEach(player => {
+                    if (currentSimScores[player.Name] === maxWins) playerSimWins[player.Name]++;
+                });
+            }
+
+            // Legacy picks are still useful for display-only fields like Championship Team.
+            const legacyByName = {};
+            if (Array.isArray(picks)) picks.forEach(p => { legacyByName[p.Name] = p; });
+
+            const champGame = sortedSchedule.find(g => /national\s+championship/i.test(String(g.Bowl || "")));
+            const champBowlName = champGame ? champGame.Bowl : null;
+
+            let stats = picksIds.map(playerIds => {
+                let wins = 0;
+                let losses = 0;
+                let currentStreak = 0;
+                let tempWinStreak = 0;
+                let maxWinStreak = 0;
+
+                sortedSchedule.forEach(game => {
+                    const winnerId = normalizeId(game["Winner ID"]);
+                    if (!winnerId) return;
+
+                    const bowlKey = getBowlKey(game);
+                    const pickId = normalizeId(playerIds[bowlKey]);
+
+                    if (pickId && pickId === winnerId) {
+                        wins++;
+                        currentStreak = currentStreak >= 0 ? currentStreak + 1 : 1;
+                        tempWinStreak++;
+                        if (tempWinStreak > maxWinStreak) maxWinStreak = tempWinStreak;
+                    } else {
+                        losses++;
+                        currentStreak = currentStreak <= 0 ? currentStreak - 1 : -1;
+                        tempWinStreak = 0;
+                    }
+                });
+
+                const winProbVal = playerSimWins[playerIds.Name] || 0;
+                const winProb = (winProbVal / SIMULATIONS * 100).toFixed(1) + '%';
+
+                const legacy = legacyByName[playerIds.Name] || {};
+                const champPick =
+                    (champBowlName && legacy[champBowlName]) ||
+                    legacy["National Championship"] ||
+                    "-";
+
+                const tiebreaker =
+                    legacy["Tiebreaker Score"] ||
+                    playerIds["Tiebreaker Score"] ||
+                    legacy["Tiebreaker"] ||
+                    playerIds["Tiebreaker"] ||
+                    "0";
+
+                return {
+                    name: playerIds.Name,
+                    wins,
+                    losses,
+                    percentage: (wins + losses > 0 ? (wins / (wins + losses)).toFixed(3) : ".000").replace('0.', '.'),
+                    currentStreak,
+                    maxWinStreak,
+                    champPick,
+                    tiebreaker,
+                    rawPicksIds: playerIds,
+                    rawPicks: legacy,
+                    winProb,
+                    winProbNum: winProbVal
+                };
+            });
+
+            stats.sort((a, b) => b.wins - a.wins);
+            const leader = stats[0];
+            let currentRank = 1;
+
+            for (let i = 0; i < stats.length; i++) {
+                if (i > 0 && stats[i].wins < stats[i - 1].wins) currentRank = i + 1;
+
+                stats[i].rank = currentRank;
+
+                const winDeficit = leader.wins - stats[i].wins;
+                let status = "alive";
+
+                if (stats[i].rank === 1) {
+                    stats[i].swingGames = "-";
+                    status = "leading";
+                } else {
+                    let diffs = 0;
                     sortedSchedule.forEach(game => {
-                        const winner = game.Winner;
-                        const pick = player[game.Bowl];
-                        if (winner) {
-                            if (pick && pick.toLowerCase() === winner.toLowerCase()) {
-                                wins++;
-                                currentStreak = currentStreak >= 0 ? currentStreak + 1 : 1;
-                                tempWinStreak++;
-                                if (tempWinStreak > maxWinStreak) maxWinStreak = tempWinStreak;
-                            } else {
-                                losses++;
-                                currentStreak = currentStreak <= 0 ? currentStreak - 1 : -1;
-                                tempWinStreak = 0;
-                            }
+                        if (!normalizeId(game["Winner ID"])) {
+                            const bowlKey = getBowlKey(game);
+                            const lp = normalizeId(leader.rawPicksIds[bowlKey]);
+                            const pp = normalizeId(stats[i].rawPicksIds[bowlKey]);
+                            if (lp && pp && lp !== pp) diffs++;
                         }
                     });
-                    const winProbVal = playerSimWins[player.Name];
-                    const winProb = (winProbVal / SIMULATIONS * 100).toFixed(1) + '%';
-                    return {
-                        name: player.Name, wins, losses, percentage: (wins + losses > 0 ? (wins / (wins + losses)).toFixed(3) : ".000").replace('0.', '.'),
-                        currentStreak, maxWinStreak, champPick: player["National Championship"] || "-",
-                        tiebreaker: player["Tiebreaker Score"] || "0", rawPicks: player, winProb, winProbNum: winProbVal
-                    };
-                });
-                stats.sort((a, b) => b.wins - a.wins);
-                const leader = stats[0];
-                let currentRank = 1;
-                for (let i = 0; i < stats.length; i++) {
-                    if (i > 0 && stats[i].wins < stats[i - 1].wins) currentRank = i + 1;
-                    stats[i].rank = currentRank;
-                    const winDeficit = leader.wins - stats[i].wins;
-                    let status = "alive";
-                    if (stats[i].rank === 1) {
-                        stats[i].swingGames = "-";
-                        status = "leading";
-                    } else {
-                        let diffs = 0;
-                        sortedSchedule.forEach(game => {
-                            if (!game.Winner) {
-                                const lp = leader.rawPicks[game.Bowl];
-                                const pp = stats[i].rawPicks[game.Bowl];
-                                if (lp && pp && lp !== pp) diffs++;
-                            }
-                        });
-                        stats[i].swingGames = diffs;
-                        if (diffs < winDeficit) status = "eliminated";
-                    }
-                    stats[i].status = status;
+                    stats[i].swingGames = diffs;
+                    if (diffs < winDeficit) status = "eliminated";
                 }
-                setStandings(stats);
+                stats[i].status = status;
+            }
+
+            setStandings(stats);
         } catch (err) {
             console.error(err);
         }
-    }, [schedule, picks]);
+    }, [schedule, picksIds, picks]);
 
     const sortedData = useMemo(() => {
         let sortableItems = [...standings];
