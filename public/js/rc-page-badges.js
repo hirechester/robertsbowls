@@ -2353,6 +2353,211 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #30: Animal Whisperer (individual)
+{
+  id: "animal-whisperer",
+  emoji: "🐾",
+  title: "The Zoo Keepers",
+  themeHint: "pink",
+  compute: ({ bowlGames, picksIds, teamById }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    // A lightweight heuristic list for common animal mascots/nicknames.
+    // (We match whole words where possible to avoid false positives like "Cathedral".)
+    const ANIMAL_WORDS = [
+      "EAGLE","EAGLES","HAWK","HAWKS","FALCON","FALCONS","RAVEN","RAVENS","OWL","OWLS",
+      "DUCK","DUCKS","GATOR","GATORS","BULL","BULLS","BUFFALO","BUFFALOES","BISON",
+      "BEAR","BEARS","PANTHER","PANTHERS","TIGER","TIGERS","LION","LIONS","WOLF","WOLVES",
+      "DOG","DOGS","BULLDOG","BULLDOGS","HOUND","HOUNDS","CAT","CATS","WILDCAT","WILDCATS",
+      "COUGAR","COUGARS","BOBCAT","BOBCATS","MUSTANG","MUSTANGS","BRONCO","BRONCOS",
+      "HORSE","HORSES","RAM","RAMS","GOAT","GOATS","FROG","FROGS","TOAD","TOADS",
+      "TURTLE","TURTLES","TERRAPIN","TERRAPINS",
+      "BEE","BEES","WASP","WASPS","HORNET","HORNETS","JACKET","JACKETS","YELLOWJACKETS",
+      "SPIDER","SPIDERS",
+      "SHARK","SHARKS","DOLPHIN","DOLPHINS","WHALE","WHALES",
+      "BIRD","BIRDS","CARDINAL","CARDINALS","JAY","JAYS",
+      "COYOTE","COYOTES","JAGUAR","JAGUARS","LEOPARD","LEOPARDS",
+      "DEVILRAY","DEVILRAYS" // just in case someone gets creative :)
+    ];
+
+    const isAnimalNickname = (nickname) => {
+      const raw = String(nickname ?? "").trim();
+      if (!raw) return false;
+      const upper = raw.toUpperCase().replace(/[^A-Z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+      if (!upper) return false;
+
+      // Exact word match against our list
+      const tokens = upper.split(" ");
+      return tokens.some(t => ANIMAL_WORDS.includes(t));
+    };
+
+    // Only count bowls that have a winner recorded.
+    const finals = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      return Boolean(bowlId && winnerId);
+    });
+
+    if (!finals.length) {
+      return { winners: [], description: "No finals yet — the zoo is still warming up." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    finals.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+      if (!bowlId || !winnerId) return;
+
+      const team = teamById && teamById[winnerId];
+      const nickname = team && (team["Team Nickname"] ?? team["Nickname"] ?? team["Nick Name"] ?? team["Mascot"]);
+      const animalWin = isAnimalNickname(nickname);
+
+      if (!animalWin) return;
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId && pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most wins by backing animal mascots (${maxWins}). Big Columbus Zoo energy — calm hands, wild picks.`;
+
+    return { winners, description };
+  }
+}
+    ,
+// Badge #31: The Patriot (individual)
+{
+  id: "the-patriot",
+  emoji: "🇺🇸",
+  title: "The Patriot",
+  themeHint: "blue",
+  compute: ({ bowlGames, picksIds, teamById }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const hexToRgb = (hex) => {
+      const s0 = String(hex ?? "").trim();
+      if (!s0) return null;
+      const s = s0.replace("#", "").trim();
+      if (s.length === 3) {
+        const r = parseInt(s[0] + s[0], 16);
+        const g = parseInt(s[1] + s[1], 16);
+        const b = parseInt(s[2] + s[2], 16);
+        if ([r, g, b].some(x => !Number.isFinite(x))) return null;
+        return { r, g, b };
+      }
+      if (s.length === 6) {
+        const r = parseInt(s.slice(0, 2), 16);
+        const g = parseInt(s.slice(2, 4), 16);
+        const b = parseInt(s.slice(4, 6), 16);
+        if ([r, g, b].some(x => !Number.isFinite(x))) return null;
+        return { r, g, b };
+      }
+      return null;
+    };
+
+    // Convert RGB to HSL-ish components (0..1) for easier color family checks.
+    const rgbToHsl = ({ r, g, b }) => {
+      const rn = r / 255, gn = g / 255, bn = b / 255;
+      const max = Math.max(rn, gn, bn);
+      const min = Math.min(rn, gn, bn);
+      const d = max - min;
+      let h = 0;
+      if (d !== 0) {
+        if (max === rn) h = ((gn - bn) / d) % 6;
+        else if (max === gn) h = (bn - rn) / d + 2;
+        else h = (rn - gn) / d + 4;
+        h *= 60;
+        if (h < 0) h += 360;
+      }
+      const l = (max + min) / 2;
+      const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+      return { h, s, l };
+    };
+
+    const isPatriotColor = (hex) => {
+      const rgb = hexToRgb(hex);
+      if (!rgb) return false;
+      const { h, s, l } = rgbToHsl(rgb);
+
+      // "White": very light + low saturation.
+      if (l >= 0.88 && s <= 0.18) return true;
+
+      // Require some saturation for red/blue classification.
+      if (s < 0.22) return false;
+
+      // "Red": around 0° (or 360°) and nearby.
+      const isRed = (h <= 20) || (h >= 340);
+
+      // "Blue": roughly 200°–260°.
+      const isBlue = (h >= 200 && h <= 260);
+
+      return isRed || isBlue;
+    };
+
+    const finals = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      return Boolean(bowlId && winnerId);
+    });
+
+    if (!finals.length) {
+      return { winners: [], description: "No finals yet — still waiting to wave the flag." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    finals.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+      if (!bowlId || !winnerId) return;
+
+      const team = teamById && teamById[winnerId];
+      const primaryHex =
+        team && (team["Primary Hex"] ?? team["PrimaryHex"] ?? team["Primary"] ?? team["Hex"] ?? team["Color"]);
+      if (!isPatriotColor(primaryHex)) return;
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId && pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most wins on red/white/blue teams (${maxWins}). Stars, stripes, and a suspiciously accurate gut feeling.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
