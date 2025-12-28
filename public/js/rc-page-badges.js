@@ -58,7 +58,7 @@ const BadgeCard = ({ emoji, title, winners, description, colorTheme }) => {
         };
 
   const BadgesPage = () => {
-    const { schedule, picksIds, teamById, teams, loading, error } = RC.data.useLeagueData();
+    const { schedule, bowlGames, picksIds, teamById, teams, loading, error } = RC.data.useLeagueData();
 const [badges, setBadges] = useState([]);
 
     const { LoadingSpinner, ErrorMessage } = (RC.ui || {});
@@ -88,7 +88,7 @@ const [badges, setBadges] = useState([]);
         return out;
       };
 
-      const ctx = { schedule, picksIds, teamById, teams, THEMES };
+      const ctx = { schedule, bowlGames, picksIds, teamById, teams, THEMES };
 
       const BADGE_DEFS = [
         // Badge #2: The Matriarch (static, no ties)
@@ -483,7 +483,73 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 },
-      ];
+
+// Badge #8: Home Sweet Dome (individual)
+{
+  id: "home-sweet-dome",
+  emoji: "🏟️",
+  title: "Home Sweet Dome",
+  themeHint: "rose",
+  compute: ({ bowlGames, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const isTruthy = (v) => {
+      const s = String(v ?? "").trim().toLowerCase();
+      return s === "true" || s === "yes" || s === "y" || s === "1" || s === "t";
+    };
+
+    const indoorGames = (bowlGames || []).filter((g) => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      if (!bowlId || !winnerId) return false;
+
+      // Source of truth (supports your rename): Indoor / Indoor? / Indoors
+      const indoorRaw = (g && (g["Indoor"] ?? g["Indoor?"] ?? g["Indoors"]));
+      if (indoorRaw === undefined || indoorRaw === null || String(indoorRaw).trim() === "") return false;
+
+      return isTruthy(indoorRaw);
+    });
+
+    if (!indoorGames.length) {
+      return { winners: [], description: "No indoor games counted yet — make sure Bowl Games has Indoor = TRUE for completed dome games." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    indoorGames.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (!pickId) return;
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const counts = Object.values(wins);
+    const maxWins = counts.length ? Math.max(...counts) : 0;
+
+    const winners = maxWins > 0
+      ? Object.keys(wins).filter(n => wins[n] === maxWins).sort((a, b) => a.localeCompare(b))
+      : [];
+
+    const description = maxWins > 0
+      ? `Most correct picks under a roof (${maxWins}). No wind, no excuses — just clean work.`
+      : "Nobody’s stacked indoor wins yet — waiting for some dome magic.";
+
+    return { winners, description };
+  }
+},];
 
       const themeFromHint = (hint) => {
         if (!hint) return THEMES[Math.floor(Math.random() * THEMES.length)];
