@@ -179,47 +179,100 @@ const BadgeCard = ({ emoji, title, winners, description, colorTheme }) => {
   }
 },
 
-        // Badge #1 (sanity): Top Dawg (ID-native scoring)
-        {
-          id: "top-dawg",
-          emoji: "🏆",
-          title: "Top Dawg",
-          themeHint: "indigo",
-          compute: ({ schedule, picksIds }) => {
-            const players = picksIds.filter(p => p && p.Name);
-            const completed = schedule.filter(g => {
-              const bowlId = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
-              const winnerId = (g && g["Winner ID"] !== undefined && g["Winner ID"] !== null) ? String(g["Winner ID"]).trim() : "";
-              return Boolean(bowlId && winnerId);
-            });
+// Badge #4: Championship Rivals (affinity)
+{
+  id: "championship-rivals",
+  emoji: "🥊",
+  title: "Championship Rivals",
+  themeHint: "rose",
+  compute: ({ schedule, picksIds }) => {
+    const players = picksIds.filter(p => p && p.Name);
 
-            const winsByPlayer = {};
-            players.forEach(p => { winsByPlayer[p.Name] = 0; });
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
 
-            completed.forEach(g => {
-              const bowlId = String(g["Bowl ID"]).trim();
-              const winnerId = String(g["Winner ID"]).trim();
+    // Find the National Championship Bowl ID
+    const nattyGame = Array.isArray(schedule)
+      ? schedule.find(g => String(g && (g.Bowl || g["Bowl Name"] || "")).toLowerCase().includes("national championship"))
+      : null;
 
-              players.forEach(p => {
-                const pickId = (p[bowlId] !== undefined && p[bowlId] !== null) ? String(p[bowlId]).trim() : "";
-                if (pickId && pickId === winnerId) winsByPlayer[p.Name] += 1;
-              });
-            });
+    const nattyId = nattyGame && nattyGame["Bowl ID"] !== undefined && nattyGame["Bowl ID"] !== null
+      ? String(nattyGame["Bowl ID"]).trim()
+      : "";
 
-            const counts = Object.values(winsByPlayer);
-            const maxWins = counts.length ? Math.max(...counts) : 0;
+    // Bowl IDs to compare (prefer schedule list)
+    const bowlIds = (() => {
+      const ids = new Set();
+      if (Array.isArray(schedule)) {
+        schedule.forEach(g => {
+          const bid = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
+          if (bid) ids.add(bid);
+        });
+      }
+      if (ids.size === 0) {
+        const sample = players[0] || {};
+        Object.keys(sample).forEach(k => {
+          if (k === "Name" || k === "Timestamp" || k === "Email") return;
+          if (/^\d+$/.test(String(k).trim())) ids.add(String(k).trim());
+        });
+      }
+      return Array.from(ids);
+    })();
 
-            const winners = maxWins > 0
-              ? Object.keys(winsByPlayer).filter(n => winsByPlayer[n] === maxWins).sort((a,b) => a.localeCompare(b))
-              : [];
+    const labelPair = (a, b) => {
+      const left = String(a).trim();
+      const right = String(b).trim();
+      return left.localeCompare(right) <= 0 ? `${left} & ${right}` : `${right} & ${left}`;
+    };
 
-            const description = completed.length
-              ? `Most correct picks so far (${maxWins}).`
-              : `Waiting on completed games.`;
+    let bestRate = -1;
+    const winners = [];
 
-            return { winners, description };
-          }
-        },
+    for (let i = 0; i < players.length; i++) {
+      for (let j = i + 1; j < players.length; j++) {
+        const A = players[i];
+        const B = players[j];
+
+        // Must disagree on Natty pick (and both must have one if nattyId exists)
+        if (nattyId) {
+          const aNat = (A[nattyId] !== undefined && A[nattyId] !== null) ? String(A[nattyId]).trim() : "";
+          const bNat = (B[nattyId] !== undefined && B[nattyId] !== null) ? String(B[nattyId]).trim() : "";
+          if (!aNat || !bNat || aNat === bNat) continue;
+        }
+
+        let total = 0;
+        let agree = 0;
+
+        bowlIds.forEach(bid => {
+          const aPick = (A[bid] !== undefined && A[bid] !== null) ? String(A[bid]).trim() : "";
+          const bPick = (B[bid] !== undefined && B[bid] !== null) ? String(B[bid]).trim() : "";
+          if (!aPick || !bPick) return;
+          total += 1;
+          if (aPick === bPick) agree += 1;
+        });
+
+        if (total === 0) continue;
+
+        const rate = agree / total;
+
+        if (rate > bestRate + 1e-12) {
+          bestRate = rate;
+          winners.length = 0;
+          winners.push(labelPair(A.Name, B.Name));
+        } else if (Math.abs(rate - bestRate) <= 1e-12) {
+          winners.push(labelPair(A.Name, B.Name));
+        }
+      }
+    }
+
+    winners.sort((a, b) => a.localeCompare(b));
+
+    const description = bestRate < 0
+      ? "No rivals yet — need differing National Championship picks."
+      : `Highest agreement among Natty rivals (${Math.round(bestRate * 100)}%).`;
+
+    return { winners, description };
+  }
+},
       ];
 
       const themeFromHint = (hint) => {
