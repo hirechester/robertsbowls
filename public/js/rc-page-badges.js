@@ -1659,6 +1659,85 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #21: Short & Sweet (individual)
+{
+  id: "short-and-sweet",
+  emoji: "🍬",
+  title: "Short & Sweet",
+  themeHint: "teal",
+  compute: ({ bowlGames, teamById, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const getTeamName = (teamId) => {
+      const t = teamById && teamById[String(teamId)];
+      const name = t && (t["School Name"] ?? t["School"] ?? t["Name"] ?? t["Team"] ?? t["Team Name"]);
+      return String(name ?? "").trim();
+    };
+
+    const completed = (bowlGames || []).filter(g => {
+      const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+      const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+      const homeId = normId(g && (g["Home ID"] ?? g["HomeID"]));
+      const awayId = normId(g && (g["Away ID"] ?? g["AwayID"]));
+      return Boolean(bowlId && winnerId && homeId && awayId);
+    });
+
+    if (!completed.length) {
+      return { winners: [], description: "No completed games yet — nobody’s earned candy (yet)." };
+    }
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    completed.forEach(g => {
+      const bowlId = normId(g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]);
+      const winnerId = normId(g["Winner ID"] ?? g["WinnerID"]);
+      const homeId = normId(g["Home ID"] ?? g["HomeID"]);
+      const awayId = normId(g["Away ID"] ?? g["AwayID"]);
+
+      const homeName = getTeamName(homeId);
+      const awayName = getTeamName(awayId);
+
+      // If team names missing, skip this bowl for this badge.
+      if (!homeName || !awayName) return;
+
+      const homeLen = homeName.length;
+      const awayLen = awayName.length;
+
+      // Identify the shortest-name team in this matchup.
+      // If tied, no one can "pick the shortest" definitively — skip the bowl.
+      if (homeLen === awayLen) return;
+
+      const shortestTeamId = homeLen < awayLen ? homeId : awayId;
+
+      // Only count if the shortest-name team actually won.
+      if (winnerId !== shortestTeamId) return;
+
+      players.forEach(p => {
+        const pickId = normId(p[bowlId]);
+        if (pickId === winnerId) wins[p.Name] += 1;
+      });
+    });
+
+    const maxWins = Math.max(...Object.values(wins));
+    const winners = Object.keys(wins)
+      .filter(n => wins[n] === maxWins)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Most wins backing the shortest-name team (${maxWins}). Less letters, more Ws — pure candy.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
