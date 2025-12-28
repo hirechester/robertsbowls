@@ -1521,6 +1521,144 @@ const [badges, setBadges] = useState([]);
     return { winners, description };
   }
 }
+    ,
+// Badge #20: The Heater (individual)
+{
+  id: "the-heater",
+  emoji: "🔥",
+  title: "The Heater",
+  themeHint: "orange",
+  compute: ({ bowlGames, schedule, picksIds }) => {
+    const players = (picksIds || []).filter(p => p && p.Name);
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+
+    const normId = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    };
+
+    const parseTimeToMinutes = (timeStr) => {
+      const raw = String(timeStr ?? "").trim();
+      if (!raw) return NaN;
+      const m = raw.match(/^(\d{1,2})\s*:\s*(\d{2})\s*(AM|PM)$/i);
+      if (!m) return NaN;
+      let hh = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      const ap = m[3].toUpperCase();
+      if (ap === "AM") {
+        if (hh === 12) hh = 0;
+      } else {
+        if (hh !== 12) hh += 12;
+      }
+      return hh * 60 + mm;
+    };
+
+    const parseDateToDay = (dateStr) => {
+      const raw = String(dateStr ?? "").trim();
+      if (!raw) return NaN;
+
+      const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (iso) {
+        const y = parseInt(iso[1], 10);
+        const mo = parseInt(iso[2], 10) - 1;
+        const d = parseInt(iso[3], 10);
+        return Date.UTC(y, mo, d);
+      }
+
+      const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (us) {
+        const mo = parseInt(us[1], 10) - 1;
+        const d = parseInt(us[2], 10);
+        let y = parseInt(us[3], 10);
+        if (y < 100) y += 2000;
+        return Date.UTC(y, mo, d);
+      }
+
+      const parsed = Date.parse(raw);
+      return Number.isFinite(parsed) ? parsed : NaN;
+    };
+
+    // Ordered list of completed bowls (for streak logic)
+    const completedOrdered = (() => {
+      const rows = Array.isArray(bowlGames) && bowlGames.length ? bowlGames : (Array.isArray(schedule) ? schedule : []);
+      const items = [];
+
+      rows.forEach((g, idx) => {
+        const bowlId = normId(g && (g["Bowl ID"] ?? g["BowlID"] ?? g["Game ID"] ?? g["GameID"] ?? g["ID"]));
+        const winnerId = normId(g && (g["Winner ID"] ?? g["WinnerID"]));
+        if (!bowlId || !winnerId) return;
+
+        const day = parseDateToDay(g && (g["Date"] ?? g["Game Date"] ?? g["Day"]));
+        const mins = parseTimeToMinutes(g && (g["Time"] ?? g["Start Time"] ?? g["Kickoff"] ?? g["Kickoff Time"]));
+        items.push({ bowlId, winnerId, day, mins, idx });
+      });
+
+      items.sort((a, b) => {
+        const ad = Number.isFinite(a.day) ? a.day : Infinity;
+        const bd = Number.isFinite(b.day) ? b.day : Infinity;
+        if (ad !== bd) return ad - bd;
+
+        const at = Number.isFinite(a.mins) ? a.mins : Infinity;
+        const bt = Number.isFinite(b.mins) ? b.mins : Infinity;
+        if (at !== bt) return at - bt;
+
+        return a.idx - b.idx;
+      });
+
+      // De-dupe by bowlId
+      const seen = new Set();
+      return items.filter(it => {
+        if (seen.has(it.bowlId)) return false;
+        seen.add(it.bowlId);
+        return true;
+      });
+    })();
+
+    if (!completedOrdered.length) {
+      return { winners: [], description: "No winners logged yet — nobody’s heating up until bowls start ending." };
+    }
+
+    const bestStreak = {};
+    const current = {};
+
+    players.forEach(p => {
+      bestStreak[p.Name] = 0;
+      current[p.Name] = 0;
+    });
+
+    completedOrdered.forEach(g => {
+      const bid = g.bowlId;
+      const wid = g.winnerId;
+
+      players.forEach(p => {
+        const pickId = normId(p[bid]);
+        if (!pickId) {
+          current[p.Name] = 0;
+          return;
+        }
+
+        const isWin = (pickId === wid);
+        if (isWin) {
+          current[p.Name] += 1;
+          if (current[p.Name] > bestStreak[p.Name]) bestStreak[p.Name] = current[p.Name];
+        } else {
+          current[p.Name] = 0;
+        }
+      });
+    });
+
+    const maxStreak = Math.max(...Object.values(bestStreak));
+    const winners = Object.keys(bestStreak)
+      .filter(n => bestStreak[n] === maxStreak)
+      .sort((a, b) => a.localeCompare(b));
+
+    const description = `Longest winning streak (${maxStreak}). They’ve been on fire — somebody check the thermostat.`;
+
+    return { winners, description };
+  }
+}
     ];
 
       const themeFromHint = (hint) => {
