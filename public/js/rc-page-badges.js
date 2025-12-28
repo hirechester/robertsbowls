@@ -58,9 +58,8 @@ const BadgeCard = ({ emoji, title, winners, description, colorTheme }) => {
         };
 
   const BadgesPage = () => {
-    const { schedule, picksIds, loading, error } = RC.data.useLeagueData();
-
-    const [badges, setBadges] = useState([]);
+    const { schedule, picksIds, teamById, teams, loading, error } = RC.data.useLeagueData();
+const [badges, setBadges] = useState([]);
 
     const { LoadingSpinner, ErrorMessage } = (RC.ui || {});
     const Spinner = LoadingSpinner || (() => <div className="p-6">Loading…</div>);
@@ -73,6 +72,7 @@ const BadgeCard = ({ emoji, title, winners, description, colorTheme }) => {
       { bg: "bg-rose-100", text: "text-rose-800", border: "border-rose-300" },
       { bg: "bg-cyan-100", text: "text-cyan-800", border: "border-cyan-300" },
       { bg: "bg-violet-100", text: "text-violet-800", border: "border-violet-300" },
+      { bg: "bg-slate-100", text: "text-slate-800", border: "border-slate-300" },
     ], []);
 
     useEffect(() => {
@@ -88,7 +88,7 @@ const BadgeCard = ({ emoji, title, winners, description, colorTheme }) => {
         return out;
       };
 
-      const ctx = { schedule, picksIds, THEMES };
+      const ctx = { schedule, picksIds, teamById, teams, THEMES };
 
       const BADGE_DEFS = [
         // Badge #2: The Matriarch (static, no ties)
@@ -273,6 +273,92 @@ const BadgeCard = ({ emoji, title, winners, description, colorTheme }) => {
     return { winners, description };
   }
 },
+
+// Badge #5: Blind Faith (individual)
+{
+  id: "blind-faith",
+  emoji: "🙈",
+  title: "Blind Faith",
+  themeHint: "slate",
+  compute: ({ schedule, picksIds, teamById, teams }) => {
+    const players = picksIds.filter(p => p && p.Name);
+    const completed = Array.isArray(schedule) ? schedule.filter(g => {
+      const bowlId = (g && g["Bowl ID"] !== undefined && g["Bowl ID"] !== null) ? String(g["Bowl ID"]).trim() : "";
+      const winnerId = (g && g["Winner ID"] !== undefined && g["Winner ID"] !== null) ? String(g["Winner ID"]).trim() : "";
+      return Boolean(bowlId && winnerId);
+    }) : [];
+
+    if (!players.length) return { winners: [], description: "Waiting on picks." };
+    if (!completed.length) return { winners: [], description: "Waiting on completed games." };
+
+    const byId = (() => {
+      if (teamById && typeof teamById === "object") return teamById;
+      const map = {};
+      if (Array.isArray(teams)) {
+        teams.forEach(t => {
+          const rawId = (t && (t["Team ID"] ?? t.TeamID ?? t.id)) !== undefined ? (t["Team ID"] ?? t.TeamID ?? t.id) : "";
+          const id = String(rawId || "").trim();
+          if (id) map[id] = t;
+        });
+      }
+      return map;
+    })();
+
+    const pickFirst = (...vals) => {
+      for (const v of vals) {
+        const s = (v === null || v === undefined) ? "" : String(v).trim();
+        if (s) return s;
+      }
+      return "";
+    };
+
+    const cleanNum = (s) => {
+      const raw = String(s || "").trim();
+      if (!raw) return "";
+      const m = raw.match(/(\d+)/);
+      return m ? m[1] : "";
+    };
+
+    const isUnranked = (team) => {
+      if (!team) return false; // unknown team: don't count it
+      const seedRaw = pickFirst(team["Seed"], team["Team Seed"], team["Seed #"], team["Seed Number"], team["Playoff Seed"], team["CFP Seed"]);
+      const rankRaw = pickFirst(team["Ranking"], team["Rank"], team["AP Rank"], team["AP Ranking"], team["Rk"]);
+      const seedNum = cleanNum(seedRaw);
+      const rankNum = cleanNum(rankRaw);
+      return !seedNum && !rankNum;
+    };
+
+    const wins = {};
+    players.forEach(p => { wins[p.Name] = 0; });
+
+    completed.forEach(g => {
+      const bowlId = String(g["Bowl ID"]).trim();
+      const winnerId = String(g["Winner ID"]).trim();
+
+      players.forEach(p => {
+        const pickId = (p[bowlId] !== undefined && p[bowlId] !== null) ? String(p[bowlId]).trim() : "";
+        if (!pickId) return;
+        if (pickId !== winnerId) return;
+
+        const team = byId[pickId];
+        if (isUnranked(team)) wins[p.Name] += 1;
+      });
+    });
+
+    const counts = Object.values(wins);
+    const maxWins = counts.length ? Math.max(...counts) : 0;
+
+    const winners = maxWins > 0
+      ? Object.keys(wins).filter(n => wins[n] === maxWins).sort((a, b) => a.localeCompare(b))
+      : [];
+
+    const description = maxWins > 0
+      ? `Most correct picks with unranked teams (${maxWins}).`
+      : "No unranked winners yet — waiting on chaos.";
+
+    return { winners, description };
+  }
+},
       ];
 
       const themeFromHint = (hint) => {
@@ -284,6 +370,7 @@ const BadgeCard = ({ emoji, title, winners, description, colorTheme }) => {
         if (key.includes("rose") || key.includes("red") || key.includes("pink")) return THEMES[3];
         if (key.includes("cyan") || key.includes("teal") || key.includes("blue")) return THEMES[4];
         if (key.includes("violet") || key.includes("purple")) return THEMES[5];
+        if (key.includes("gray") || key.includes("grey") || key.includes("slate")) return THEMES[6] || THEMES[0];
         return THEMES[Math.floor(Math.random() * THEMES.length)];
       };
 
