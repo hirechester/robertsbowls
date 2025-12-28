@@ -6,12 +6,12 @@
 
   // 5. VERSUS PAGE (Stage 19: uses shared RC.data.useLeagueData())
   const VersusPage = () => {
-    const { schedule, picks, loading, error } = RC.data.useLeagueData();
+    const { schedule, picks, picksIds, teamById, loading, error } = RC.data.useLeagueData();
 
     const players = useMemo(() => {
-      if (!Array.isArray(picks)) return [];
-      return picks.map(p => p.Name).filter(Boolean).sort();
-    }, [picks]);
+      const src = Array.isArray(picksIds) ? picksIds : (Array.isArray(picks) ? picks : []);
+      return src.map(p => p.Name).filter(Boolean).sort();
+    }, [picksIds, picks]);
 
     const scheduleSorted = useMemo(() => {
       if (!Array.isArray(schedule)) return [];
@@ -20,6 +20,23 @@
         .slice()
         .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
     }, [schedule]);
+
+    const bowlKeyFor = (g) => String((g && (g["Bowl ID"] || g.Bowl)) || "").trim();
+    const winnerIdFor = (g) => String((g && g["Winner ID"]) || "").trim();
+    const pickIdFor = (playerRow, g) => {
+      const k = bowlKeyFor(g);
+      if (!k || !playerRow) return "";
+      return String(playerRow[k] || "").trim();
+    };
+    const teamNameFor = (teamId, fallback) => {
+      const key = String(teamId || "").trim();
+      if (key && teamById && teamById[key]) {
+        const t = teamById[key];
+        return String(t["School Name"] || t.School || t.Team || t.Name || "").trim();
+      }
+      return String(fallback || "").trim();
+    };
+
 
     const [selectedP1, setSelectedP1] = useState("");
     const [selectedP2, setSelectedP2] = useState("");
@@ -42,13 +59,29 @@
 
 
             const getStats = (playerName) => {
-                const p = picks.find(x => x.Name === playerName);
+                const src = Array.isArray(picksIds) ? picksIds : picks;
+                const p = (src || []).find(x => x.Name === playerName);
                 if (!p) return { wins: 0, losses: 0, streak: 0 };
-                let wins = 0; let losses = 0; let currentStreak = 0;
+
+                let wins = 0;
+                let losses = 0;
+                let currentStreak = 0;
+
                 scheduleSorted.forEach(g => {
-                    if (g.Winner) {
+                    const wid = winnerIdFor(g);
+                    if (wid) {
+                        const pid = pickIdFor(p, g);
+                        if (pid && pid === wid) {
+                            wins++;
+                            currentStreak = currentStreak >= 0 ? currentStreak + 1 : 1;
+                        } else {
+                            losses++;
+                            currentStreak = currentStreak <= 0 ? currentStreak - 1 : -1;
+                        }
+                    } else if (g.Winner && !Array.isArray(picksIds)) {
+                        // Legacy fallback (should be rare now)
                         const pick = p[g.Bowl];
-                        if (pick && pick.toLowerCase() === g.Winner.toLowerCase()) {
+                        if (pick && pick.toLowerCase() === String(g.Winner).toLowerCase()) {
                             wins++;
                             currentStreak = currentStreak >= 0 ? currentStreak + 1 : 1;
                         } else {
@@ -57,6 +90,7 @@
                         }
                     }
                 });
+
                 return { wins, losses, streak: currentStreak };
             };
 
@@ -67,25 +101,47 @@
             let headToHead = { p1: 0, p2: 0 };
 
             if (selectedP1 && selectedP2) {
-                const p1Data = picks.find(x => x.Name === selectedP1);
-                const p2Data = picks.find(x => x.Name === selectedP2);
-                scheduleSorted.forEach(g => {
-                    const pick1 = p1Data[g.Bowl];
-                    const pick2 = p2Data[g.Bowl];
-                    if (pick1 && pick2 && pick1.toLowerCase() !== pick2.toLowerCase()) {
-                        if (g.Winner) {
+                const src = Array.isArray(picksIds) ? picksIds : picks;
+                const p1Data = (src || []).find(x => x.Name === selectedP1);
+                const p2Data = (src || []).find(x => x.Name === selectedP2);
+
+                if (p1Data && p2Data) {
+                    scheduleSorted.forEach(g => {
+                        const pid1 = pickIdFor(p1Data, g);
+                        const pid2 = pickIdFor(p2Data, g);
+
+                        // If we can't find IDs (mid-migration), fall back to legacy picks by bowl name
+                        const fallbackPick1 = (!pid1 && p1Data && g && g.Bowl) ? (p1Data[g.Bowl] || "") : "";
+                        const fallbackPick2 = (!pid2 && p2Data && g && g.Bowl) ? (p2Data[g.Bowl] || "") : "";
+
+                        const hasDiff = (pid1 && pid2 && pid1 !== pid2) ||
+                                        (!pid1 && !pid2 && fallbackPick1 && fallbackPick2 && String(fallbackPick1).toLowerCase() !== String(fallbackPick2).toLowerCase());
+
+                        if (!hasDiff) return;
+
+                        const wid = winnerIdFor(g);
+                        if (wid) {
                             let winner = null;
-                            if (pick1.toLowerCase() === g.Winner.toLowerCase()) { headToHead.p1++; winner = selectedP1; }
-                            else if (pick2.toLowerCase() === g.Winner.toLowerCase()) { headToHead.p2++; winner = selectedP2; }
+                            if (pid1 && pid1 === wid) { headToHead.p1++; winner = selectedP1; }
+                            else if (pid2 && pid2 === wid) { headToHead.p2++; winner = selectedP2; }
+                            else if (!pid1 && !pid2 && g.Winner) {
+                                const w = String(g.Winner).toLowerCase();
+                                if (String(fallbackPick1).toLowerCase() === w) { headToHead.p1++; winner = selectedP1; }
+                                else if (String(fallbackPick2).toLowerCase() === w) { headToHead.p2++; winner = selectedP2; }
+                            }
+
+                            const pick1 = pid1 ? teamNameFor(pid1, pid1) : String(fallbackPick1 || "");
+                            const pick2 = pid2 ? teamNameFor(pid2, pid2) : String(fallbackPick2 || "");
+
                             historyGames.push({ ...g, pick1, pick2, winner });
                         } else {
+                            const pick1 = pid1 ? teamNameFor(pid1, pid1) : String(fallbackPick1 || "");
+                            const pick2 = pid2 ? teamNameFor(pid2, pid2) : String(fallbackPick2 || "");
                             diffGames.push({ ...g, pick1, pick2 });
                         }
-                    }
-                });
-            }
-
-            return (
+                    });
+                }
+            }return (
                 <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
                     <div className="bg-white pt-8 pb-4 px-4">
                         <div className="max-w-4xl mx-auto text-center">
