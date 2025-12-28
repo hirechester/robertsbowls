@@ -122,30 +122,13 @@
 
                   {/* Wax seal */}
                   <div className="mt-10 flex items-center justify-center">
-                    <div className="relative">
-                      <div className="absolute inset-0 blur-sm opacity-40 rounded-full bg-red-900" />
-                      <div
-                        className="relative w-24 h-24 rounded-full shadow-2xl"
-                        style={{
-                          background:
-                            "radial-gradient(circle at 30% 30%, #ff6b6b, #b91c1c 55%, #7f1d1d 100%)",
-                          boxShadow:
-                            "0 18px 30px rgba(0,0,0,0.25), inset 0 2px 0 rgba(255,255,255,0.15)"
-                        }}
-                      >
-                        <div
-                          className="absolute inset-3 rounded-full"
-                          style={{
-                            border: "2px dashed rgba(255,255,255,0.25)"
-                          }}
-                        />
-                        <div
-                          className="absolute inset-0 flex items-center justify-center text-amber-50 font-bold tracking-widest"
-                          style={{ fontFamily: RULES_FONT }}
-                        >
-                          RC
-                        </div>
-                      </div>
+                    <div className="flex flex-col items-center">
+                      <img
+                        src="images/seal.png"
+                        alt="Wax seal"
+                        className="w-24 h-24 drop-shadow-2xl select-none"
+                        draggable="false"
+                      />
                       <div className="mt-2 text-center text-[11px] text-amber-950/70" style={{ fontFamily: RULES_FONT }}>
                         Sealed with questionable authority
                       </div>
