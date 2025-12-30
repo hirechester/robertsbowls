@@ -167,12 +167,19 @@
     return prefix ? `${prefix} ${school}` : school;
   };
 
+  const getTeamSchoolName = (team, fallback) => {
+    const school = team ? getFirstValue(team, ["School Name", "School", "Team", "Name"]) : "";
+    return school || fallback || "-";
+  };
+
   const teamPrimaryColor = (team) => {
     const color = team && (team["Primary Color"] || team["Primary"] || team.Color || team["Hex"] || team["Hex Color"]);
     if (!color) return "";
     const c = String(color).trim();
     return c ? c : "";
   };
+
+  const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
   const getBowlKey = (g) => {
     const bid = String(g["Bowl ID"] || "").trim();
@@ -866,7 +873,7 @@
           }
         }
 
-        return lines.slice(0, 5);
+        return lines.slice(0, 5).map((line) => String(line || "").replace(/\.$/, ""));
       })();
 
       return {
@@ -877,6 +884,88 @@
         dramaScores
       };
     }, [todayGames, currentStandings, pickCountsByBowl]);
+
+    const todayTop5Breakdown = useMemo(() => {
+      const topRows = (currentStandings.rows || []).slice(0, 5);
+      const topCount = topRows.length;
+      const sortedByTime = [...todayGames].sort((a, b) => {
+        const aTime = a.__timeMinutes ?? 9999;
+        const bTime = b.__timeMinutes ?? 9999;
+        if (aTime !== bTime) return aTime - bTime;
+        return String(a.Bowl || "").localeCompare(String(b.Bowl || ""));
+      });
+
+      const games = sortedByTime.map((g) => {
+        const bowlKey = getBowlKey(g);
+        const bowlName = getFirstValue(g, ["Bowl", "Bowl Name"]) || "Bowl Game";
+        const awayId = normalizeId(getFirstValue(g, ["Away ID", "AwayID"]));
+        const homeId = normalizeId(getFirstValue(g, ["Home ID", "HomeID"]));
+        const awayTeam = awayId && teamById ? teamById[awayId] : null;
+        const homeTeam = homeId && teamById ? teamById[homeId] : null;
+        const awayLabel = formatTeamLabel(awayTeam, getFirstValue(g, ["Team 1"]));
+        const homeLabel = formatTeamLabel(homeTeam, getFirstValue(g, ["Team 2"]));
+
+        const homePickers = [];
+        const awayPickers = [];
+        topRows.forEach((row) => {
+          const pickId = bowlKey ? normalizeId(row.rawPicksIds[bowlKey]) : "";
+          if (!pickId) return;
+          if (pickId === homeId) homePickers.push(row.name);
+          else if (pickId === awayId) awayPickers.push(row.name);
+        });
+
+        const presentCount = homePickers.length + awayPickers.length;
+        let statusLine = "";
+        if (!presentCount) {
+          statusLine = topCount ? `No Top ${topCount} picks yet.` : "No leaderboard data yet.";
+        } else if (homePickers.length === presentCount) {
+          statusLine = `Top ${presentCount} all picked ${homeLabel} 🧠`;
+        } else if (awayPickers.length === presentCount) {
+          statusLine = `Top ${presentCount} all picked ${awayLabel} 🧠`;
+        }
+
+        return {
+          game: g,
+          bowlName,
+          homeLabel,
+          awayLabel,
+          homePickers,
+          awayPickers,
+          statusLine,
+          topCount
+        };
+      });
+
+      return {
+        games,
+        topCount
+      };
+    }, [todayGames, currentStandings, teamById]);
+
+    const stakeNameData = useMemo(() => {
+      const names = (currentStandings.rows || []).map((row) => row.name).filter(Boolean);
+      if (!names.length) {
+        return { names: [], nameSet: new Set(), regex: null };
+      }
+      const sorted = [...new Set(names)].sort((a, b) => b.length - a.length);
+      const pattern = sorted.map(escapeRegExp).join("|");
+      return {
+        names: sorted,
+        nameSet: new Set(sorted),
+        regex: pattern ? new RegExp(`(${pattern})`, "g") : null
+      };
+    }, [currentStandings]);
+
+    const renderStakeLine = (line) => {
+      if (!stakeNameData.regex) return line;
+      const parts = String(line || "").split(stakeNameData.regex);
+      if (parts.length === 1) return line;
+      return parts.map((part, idx) => (
+        stakeNameData.nameSet.has(part)
+          ? <span key={`${idx}-${part}`} className="font-semibold">{part}</span>
+          : <span key={`${idx}-${part}`}>{part}</span>
+      ));
+    };
 
     const wrapTextLines = (ctx, text, maxWidth) => {
       const words = String(text || "").split(/\s+/).filter(Boolean);
@@ -1018,7 +1107,7 @@
       } else {
         sections.push({
           title: "Games Today 📺",
-          accent: BRAND_COLOR,
+          accent: "#16a34a",
           lines: todayGames.length === 0
             ? ["No games today."]
             : todayData.gamesForList.flatMap((g) => {
@@ -1031,10 +1120,13 @@
               const timeLabel = getFirstValue(g, ["Time"]) || "TBD";
               const network = getFirstValue(g, ["Network", "TV"]) || "";
               const split = summarizePickSplit(g);
-              const splitText = split ? `Pick split: ${split.awayPct}% / ${split.homePct}%` : "Pick split: n/a";
+              const splitText = split ? `Pick Split: ${split.awayPct}% / ${split.homePct}%` : "Pick Split: n/a";
               const spreadVal = getFirstValue(g, ["Spread", "Line"]);
               const totalVal = getFirstValue(g, ["O/U", "Over/Under", "Total"]);
-              const oddsText = spreadVal || totalVal ? `${spreadVal ? `Spread ${spreadVal}` : ""}${spreadVal && totalVal ? " - " : ""}${totalVal ? `O/U ${totalVal}` : ""}` : "";
+              const favoriteId = normalizeId(getFirstValue(g, ["Favorite ID", "FavoriteID"]));
+              const favoriteTeam = favoriteId && teamById ? teamById[favoriteId] : null;
+              const favoriteLabel = getTeamSchoolName(favoriteTeam, "Favorite");
+              const oddsText = spreadVal || totalVal ? `${spreadVal ? `${favoriteLabel} ${spreadVal}` : ""}${spreadVal && totalVal ? " - " : ""}${totalVal ? `O/U ${totalVal}` : ""}` : "";
 
               return [
                 `${timeLabel}${network ? ` - ${network}` : ""} - ${getFirstValue(g, ["Bowl", "Bowl Name"]) || "Bowl Game"}`,
@@ -1046,18 +1138,29 @@
         });
         sections.push({
           title: "What's At Stake ⚡",
-          accent: BRAND_COLOR,
+          accent: "#f97316",
           lines: todayData.stakeLines
         });
         sections.push({
-          title: "Must-Watch Games 👀",
-          accent: BRAND_COLOR,
-          lines: todayGames.length === 0
-            ? ["No games today."]
-            : todayData.topDrama.flatMap((item) => [
-              getFirstValue(item.game, ["Bowl", "Bowl Name"]) || "Bowl Game",
-              item.reason
-            ])
+          title: "Where the Top 5 Split 🍌",
+          accent: "#fbbf24",
+          lines: todayTop5Breakdown.games.length
+            ? todayTop5Breakdown.games.flatMap((item) => {
+              if (item.statusLine) {
+                return [
+                  item.bowlName,
+                  item.statusLine
+                ];
+              }
+              const homeNames = item.homePickers.length ? item.homePickers.join(", ") : "none";
+              const awayNames = item.awayPickers.length ? item.awayPickers.join(", ") : "none";
+              return [
+                item.bowlName,
+                `${item.homeLabel}: ${homeNames}`,
+                `${item.awayLabel}: ${awayNames}`
+              ];
+            })
+            : [todayTop5Breakdown.topCount ? `No games today.` : "No leaderboard data yet."]
         });
       }
       return sections;
@@ -1142,10 +1245,8 @@
 
       const subtitle = mode === "yesterday"
         ? `Daily Digest - ${formatDisplayDateNoYear(yesterdayKey)}`
-        : `Today's Watch List - ${formatDisplayDate(todayKey)}`;
-      const meta = mode === "yesterday"
-        ? ""
-        : `Games today: ${todayGames.length}`;
+        : `Today's Watch List - ${formatDisplayDateNoYear(todayKey)}`;
+      const meta = "";
 
       ctx.fillStyle = "#e2e8f0";
       ctx.font = "700 30px 'Chivo', sans-serif";
@@ -1716,8 +1817,7 @@
                     <div className="flex flex-col gap-3">
                       <div className="daily-badge">2025-26 Season</div>
                       <div className="text-5xl font-black tracking-tight daily-header-title">Roberts Cup</div>
-                      <div className="text-3xl font-semibold">Today's Watch List - {formatDisplayDate(todayKey)}</div>
-                      <div className="text-xl text-slate-300">Games today: {todayGames.length}</div>
+                      <div className="text-3xl font-semibold">Today's Watch List - {formatDisplayDateNoYear(todayKey)}</div>
                     </div>
                     <div className="relative">
                       <div className="absolute inset-0 bg-yellow-400 blur-[40px] opacity-20 rounded-full"></div>
@@ -1730,7 +1830,7 @@
 
                 {renderCard(
                   "Games Today 📺",
-                  BRAND_COLOR,
+                  "#16a34a",
                   todayGames.length === 0
                     ? renderEmptyLine("No games today.")
                     : (
@@ -1745,10 +1845,13 @@
                           const timeLabel = getFirstValue(g, ["Time"]) || "TBD";
                           const network = getFirstValue(g, ["Network", "TV"]) || "";
                           const split = summarizePickSplit(g);
-                          const splitText = split ? `Pick split: ${split.awayPct}% / ${split.homePct}%` : "Pick split: n/a";
+                          const splitText = split ? `Pick Split: ${split.awayPct}% / ${split.homePct}%` : "Pick Split: n/a";
                           const spreadVal = getFirstValue(g, ["Spread", "Line"]);
                           const totalVal = getFirstValue(g, ["O/U", "Over/Under", "Total"]);
-                          const oddsText = spreadVal || totalVal ? `${spreadVal ? `Spread ${spreadVal}` : ""}${spreadVal && totalVal ? " - " : ""}${totalVal ? `O/U ${totalVal}` : ""}` : "";
+                          const favoriteId = normalizeId(getFirstValue(g, ["Favorite ID", "FavoriteID"]));
+                          const favoriteTeam = favoriteId && teamById ? teamById[favoriteId] : null;
+                          const favoriteLabel = getTeamSchoolName(favoriteTeam, "Favorite");
+                          const oddsText = spreadVal || totalVal ? `${spreadVal ? `${favoriteLabel} ${spreadVal}` : ""}${spreadVal && totalVal ? " - " : ""}${totalVal ? `O/U ${totalVal}` : ""}` : "";
 
                           return (
                             <div key={getBowlKey(g)} className="rounded-2xl border-2 border-amber-200/70 p-4 bg-white/90 shadow-xl">
@@ -1769,29 +1872,40 @@
 
                 {renderCard(
                   "What's At Stake ⚡",
-                  BRAND_COLOR,
+                  "#f97316",
                   (
                     <div className="flex flex-col gap-2 text-xl text-slate-700">
                       {todayData.stakeLines.map((line, idx) => (
-                        <div key={`${idx}-${line}`}>{line}</div>
+                        <div key={`${idx}-${line}`}>{renderStakeLine(line)}</div>
                       ))}
                     </div>
                   )
                 )}
 
                 {renderCard(
-                  "Must-Watch Games 👀",
-                  BRAND_COLOR,
-                  todayGames.length === 0
-                    ? renderEmptyLine("No games today.")
+                  "Where the Top 5 Split 🍌",
+                  "#fbbf24",
+                  todayTop5Breakdown.games.length === 0
+                    ? renderEmptyLine(todayTop5Breakdown.topCount ? "No games today." : "No leaderboard data yet.")
                     : (
-                      <div className="flex flex-col gap-3 text-xl text-slate-700">
-                        {todayData.topDrama.map((item) => (
-                          <div key={getBowlKey(item.game)} className="flex flex-col">
-                            <div className="text-2xl font-semibold text-slate-900">{getFirstValue(item.game, ["Bowl", "Bowl Name"]) || "Bowl Game"}</div>
-                            <div className="text-slate-600">{item.reason}</div>
-                          </div>
-                        ))}
+                      <div className="flex flex-col gap-4 text-xl text-slate-700">
+                        {todayTop5Breakdown.games.map((item, idx) => {
+                          const homeNames = item.homePickers.length ? item.homePickers.join(", ") : "none";
+                          const awayNames = item.awayPickers.length ? item.awayPickers.join(", ") : "none";
+                          return (
+                            <div key={`${getBowlKey(item.game) || "split"}-${idx}`} className="flex flex-col gap-1">
+                              <div className="font-semibold text-slate-900">{item.bowlName}</div>
+                              {item.statusLine ? (
+                                <div className="text-slate-600">{item.statusLine}</div>
+                              ) : (
+                                <>
+                                  <div className="text-slate-600">{item.homeLabel}: {homeNames}</div>
+                                  <div className="text-slate-600">{item.awayLabel}: {awayNames}</div>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )
                 )}
