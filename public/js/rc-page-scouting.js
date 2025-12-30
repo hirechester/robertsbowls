@@ -716,31 +716,6 @@ useEffect(() => {
                                                                       </div>
                                                                   </div>
   
-                                                                  {/* Style Meter */}
-                                                                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                                                                      <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
-                                                                          <h3 className="text-lg font-bold text-gray-900 font-serif">Style Rating</h3>
-                                                                      </div>
-                                                                      <div className="p-5">
-                                                                          <div className="flex justify-between items-center mb-2">
-                                                                              <span className="text-sm font-bold text-gray-400 uppercase">🐑 Sheep</span>
-                                                                              <span className="text-sm font-bold text-gray-400 uppercase">Maverick 🤠</span>
-                                                                          </div>
-                                                                          <div className="relative h-4 bg-gray-100 rounded-full w-full overflow-hidden">
-                                                                              <div className="absolute top-0 bottom-0 left-0 bg-blue-500/20 w-full"></div>
-                                                                              <div
-                                                                                  className="absolute top-0 bottom-0 bg-blue-600 w-2 rounded-full shadow-md transition-all duration-500"
-                                                                                  style={{ left: `${stats.maverickPct}%` }}
-                                                                              ></div>
-                                                                          </div>
-                                                                          <div className="text-center mt-2 text-sm font-bold text-gray-500">
-                                                                              {stats.maverickPct < 20 ? "Follows the Herd" : stats.maverickPct > 40 ? "Lone Wolf" : "Balanced Picker"} ({stats.maverickPct}%)
-                                                                          </div>
-                                                                          <p className="text-xs text-gray-400 text-center mt-3 px-2 leading-relaxed">
-                                                                              This rating measures how often a player picks with the majority consensus (Sheep) versus picking against the group (Maverick). A lower percentage means you tend to agree with everyone else; a higher percentage means you like to go it alone.
-                                                                          </p>
-                                                                      </div>
-                                                                  </div>
                                                               </>
                                                           )}
                               </div>
