@@ -15,7 +15,7 @@
                       const [selectedPlayer, setSelectedPlayer] = useState("");
     const initialPlayerRef = useRef(null);
 const [players, setPlayers] = useState([]);
-    const { schedule, picksIds, history, teams, teamById, loading, error, refresh, lastUpdated } = RC.data.useLeagueData();
+    const { schedule, bowlGames, picksIds, history, teams, teamById, loading, error, refresh, lastUpdated } = RC.data.useLeagueData();
 // TEAM DATA (from Teams tab in the main Google Sheet)
     // Expected columns: "School Name", "Team Nickname", "Primary Hex", "Logo"
     const normalizeTeamKey = (name) => {
@@ -108,6 +108,34 @@ useEffect(() => {
         if (!t) return "";
         return String(t["School Name"] || t.School || t.Team || t.Name || "").trim();
       };
+      const getFirstValue = (row, keys) => {
+        for (let i = 0; i < keys.length; i++) {
+          const val = row && row[keys[i]];
+          if (val !== undefined && val !== null && String(val).trim() !== "") return val;
+        }
+        return "";
+      };
+      const toNumber = (val) => {
+        const cleaned = String(val == null ? "" : val).replace(/[^0-9.+-]/g, "");
+        const num = parseFloat(cleaned);
+        return Number.isFinite(num) ? num : null;
+      };
+      const gameTimeValue = (g) => {
+        const d = String((g && g.Date) || "").trim();
+        const t = String((g && g.Time) || "").trim();
+        if (!d) return null;
+        const dt = new Date(`${d} ${t}`.trim());
+        const ts = dt.getTime();
+        return Number.isFinite(ts) ? ts : null;
+      };
+      const homeIdFor = (g) => String(getFirstValue(g, ["Home ID", "HomeID", "Home Id", "HomeId"])).trim();
+      const awayIdFor = (g) => String(getFirstValue(g, ["Away ID", "AwayID", "Away Id", "AwayId"])).trim();
+      const favoriteIdFor = (g) => String(getFirstValue(g, ["Favorite ID", "FavoriteID", "Favorite Id", "FavoriteId"])).trim();
+      const bowlNameFor = (g) => String(getFirstValue(g, ["Bowl", "Bowl Name", "BowlName"])).trim();
+      const spreadFor = (g) => toNumber(getFirstValue(g, ["Spread", "Line", "Vegas Spread"]));
+      const homePtsFor = (g) => toNumber(getFirstValue(g, ["Home Pts", "HomePts", "Home Points", "HomeScore", "Home Score", "Home PTS", "Home Final"]));
+      const awayPtsFor = (g) => toNumber(getFirstValue(g, ["Away Pts", "AwayPts", "Away Points", "AwayScore", "Away Score", "Away PTS", "Away Final"]));
+      const totalFor = (g) => toNumber(getFirstValue(g, ["Total", "O/U", "Over/Under", "OU", "O-U", "Vegas Total"]));
 
       // 1) Current Rank & Wins (ID-based)
       const leaderboard = (Array.isArray(picksIds) ? picksIds : [])
@@ -323,6 +351,313 @@ useEffect(() => {
         }
       });
 
+      // 9) Sportsbook (family-friendly)
+      const sportsbookSimple = {
+        oddsPersonality: {
+          labels: [],
+          favoriteRate: 0,
+          underdogRate: 0,
+          upsetCalls: 0,
+          closeShare: 0,
+          totalValid: 0
+        },
+        big4: {
+          favoritesPicked: 0,
+          underdogsPicked: 0,
+          totalValid: 0,
+          upsetsCalled: 0,
+          surprisesMissed: 0,
+          upsetGames: 0
+        },
+        closeGames: {
+          totalScored: 0,
+          oneScoreGames: 0,
+          oneScoreCorrect: 0,
+          blowouts: 0,
+          blowoutCorrect: 0,
+          closeWrong: 0
+        },
+        ats: { w: 0, l: 0, p: 0, total: 0 },
+        bestCalls: [],
+        oofMoments: [],
+        favoritesCorrect: 0,
+        underdogsCorrect: 0,
+        publicGames: 0,
+        publicAligned: 0,
+        contrarianCount: 0,
+        contrarianCorrect: 0,
+        nearTotalCount: 0,
+        nearTotalGames: 0,
+        totalsSum: 0,
+        totalsCount: 0,
+        leagueTotalsSum: 0,
+        leagueTotalsCount: 0
+      };
+
+      const bestCandidates = [];
+      const oofCandidates = [];
+      const pickShareForGame = (g, teamId) => {
+        const key = gameKey(g);
+        if (!key || !teamId) return null;
+        let total = 0;
+        let count = 0;
+        (Array.isArray(picksIds) ? picksIds : []).forEach(p => {
+          const pick = pickIdFor(p, g);
+          if (!pick) return;
+          total++;
+          if (pick === teamId) count++;
+        });
+        if (!total) return null;
+        return { count, total, pct: count / total };
+      };
+      const publicSideForGame = (g) => {
+        const key = gameKey(g);
+        if (!key) return null;
+        const counts = {};
+        let total = 0;
+        (Array.isArray(picksIds) ? picksIds : []).forEach(p => {
+          const pick = pickIdFor(p, g);
+          if (!pick) return;
+          total++;
+          counts[pick] = (counts[pick] || 0) + 1;
+        });
+        if (!total) return null;
+        let max = 0;
+        let leaders = [];
+        Object.entries(counts).forEach(([id, count]) => {
+          if (count > max) {
+            max = count;
+            leaders = [id];
+          } else if (count === max) {
+            leaders.push(id);
+          }
+        });
+        if (leaders.length !== 1) return null;
+        return { teamId: leaders[0], count: max, total, pct: max / total };
+      };
+      const sourceGames = (Array.isArray(bowlGames) && bowlGames.length) ? bowlGames : (Array.isArray(schedule) ? schedule : []);
+
+      sourceGames.forEach(g => {
+        try {
+          const bowlKey = gameKey(g);
+          if (!bowlKey) return;
+          const myPick = pickIdFor(pData, g);
+          if (!myPick) return;
+
+          const homeId = homeIdFor(g);
+          const awayId = awayIdFor(g);
+          const favoriteId = favoriteIdFor(g);
+          const winnerId = winnerIdFor(g);
+          const spread = spreadFor(g);
+          const homePts = homePtsFor(g);
+          const awayPts = awayPtsFor(g);
+          const totalLine = totalFor(g);
+          const hasScores = homePts !== null && awayPts !== null;
+          const margin = hasScores ? Math.abs(homePts - awayPts) : null;
+          const isCompleted = !!winnerId;
+          const isPickOnBoard = myPick === homeId || myPick === awayId;
+          const bowlName = bowlNameFor(g) || "Unknown Bowl";
+          const timeValue = gameTimeValue(g) || 0;
+
+          if (hasScores && isCompleted && totalLine !== null) {
+            sportsbookSimple.leagueTotalsSum += (homePts + awayPts);
+            sportsbookSimple.leagueTotalsCount++;
+          }
+
+          if (isCompleted && favoriteId && isPickOnBoard) {
+            sportsbookSimple.big4.totalValid++;
+            if (myPick === favoriteId) sportsbookSimple.big4.favoritesPicked++;
+            else sportsbookSimple.big4.underdogsPicked++;
+          }
+
+          if (isCompleted && favoriteId && myPick && myPick !== favoriteId && myPick === winnerId) {
+            sportsbookSimple.big4.upsetsCalled++;
+          }
+
+          if (isCompleted && favoriteId && myPick === favoriteId && winnerId && winnerId !== favoriteId) {
+            sportsbookSimple.big4.surprisesMissed++;
+          }
+
+          if (hasScores && isCompleted) {
+            sportsbookSimple.closeGames.totalScored++;
+            if (totalLine !== null) {
+              sportsbookSimple.totalsSum += (homePts + awayPts);
+              sportsbookSimple.totalsCount++;
+              sportsbookSimple.nearTotalGames++;
+              if (Math.abs((homePts + awayPts) - totalLine) <= 3 && (homePts + awayPts) !== totalLine) {
+                sportsbookSimple.nearTotalCount++;
+              }
+            }
+            if (margin !== null && margin <= 8) {
+              sportsbookSimple.closeGames.oneScoreGames++;
+              if (myPick === winnerId) sportsbookSimple.closeGames.oneScoreCorrect++;
+              else sportsbookSimple.closeGames.closeWrong++;
+            }
+            if (margin !== null && margin >= 20) {
+              sportsbookSimple.closeGames.blowouts++;
+              if (myPick === winnerId) sportsbookSimple.closeGames.blowoutCorrect++;
+            }
+          }
+
+          if (isCompleted && favoriteId && isPickOnBoard) {
+            if (myPick === winnerId) {
+              if (myPick === favoriteId) sportsbookSimple.favoritesCorrect++;
+              else sportsbookSimple.underdogsCorrect++;
+            }
+            if (winnerId && favoriteId && winnerId !== favoriteId) {
+              sportsbookSimple.big4.upsetGames++;
+            }
+          }
+
+          if (isCompleted && isPickOnBoard) {
+            const publicInfo = publicSideForGame(g);
+            if (publicInfo) {
+              sportsbookSimple.publicGames++;
+              if (myPick === publicInfo.teamId) sportsbookSimple.publicAligned++;
+              if (publicInfo.pct >= 0.65 && myPick !== publicInfo.teamId) {
+                sportsbookSimple.contrarianCount++;
+                if (myPick === winnerId) sportsbookSimple.contrarianCorrect++;
+              }
+            }
+          }
+
+          if (hasScores && spread !== null && favoriteId && isPickOnBoard) {
+            const line = Math.abs(spread);
+            const favoriteScore = favoriteId === homeId ? homePts : (favoriteId === awayId ? awayPts : null);
+            if (favoriteScore !== null) {
+              const underdogScore = favoriteId === homeId ? awayPts : homePts;
+              const favMargin = favoriteScore - underdogScore;
+              let outcome = "push";
+              if (favMargin > line) outcome = (myPick === favoriteId) ? "win" : "loss";
+              else if (favMargin < line) outcome = (myPick === favoriteId) ? "loss" : "win";
+              if (outcome === "win") sportsbookSimple.ats.w++;
+              else if (outcome === "loss") sportsbookSimple.ats.l++;
+              else sportsbookSimple.ats.p++;
+              sportsbookSimple.ats.total++;
+            }
+          }
+
+          if (isCompleted && myPick === winnerId) {
+            let tier = 4;
+            let reason = "Picked the winner.";
+            if (favoriteId && myPick !== favoriteId) {
+              tier = 1;
+              reason = "Picked the underdog and they won.";
+            } else {
+              const share = pickShareForGame(g, myPick);
+              if (share && share.pct <= 0.35) {
+                tier = 2;
+                reason = "Not many people picked this one.";
+              } else if (margin !== null && margin >= 20) {
+                tier = 3;
+                reason = "Called a big win.";
+              }
+            }
+            bestCandidates.push({ bowl: bowlName, reason, tier, margin: margin || 0, time: timeValue });
+          }
+
+          if (isCompleted && myPick !== winnerId) {
+            let tier = 4;
+            let reason = "Your pick missed.";
+            if (favoriteId && myPick === favoriteId && winnerId && winnerId !== favoriteId) {
+              tier = 1;
+              reason = "Took the favorite, but the underdog won.";
+            } else if (margin !== null && margin <= 8) {
+              tier = 2;
+              reason = `Your team lost by ${margin}.`;
+            } else if (margin !== null) {
+              tier = 3;
+              reason = `Lost by ${margin}.`;
+            }
+            oofCandidates.push({ bowl: bowlName, reason, tier, margin: margin == null ? 999 : margin, time: timeValue });
+          }
+        } catch (err) {
+          // Defensive: skip any malformed game row
+        }
+      });
+
+      sportsbookSimple.oddsPersonality.favoriteRate = sportsbookSimple.big4.totalValid > 0
+        ? sportsbookSimple.big4.favoritesPicked / sportsbookSimple.big4.totalValid
+        : 0;
+      sportsbookSimple.oddsPersonality.underdogRate = sportsbookSimple.big4.totalValid > 0
+        ? sportsbookSimple.big4.underdogsPicked / sportsbookSimple.big4.totalValid
+        : 0;
+      sportsbookSimple.oddsPersonality.upsetCalls = sportsbookSimple.big4.upsetsCalled;
+      const totalPickedWithScores = sportsbookSimple.closeGames.totalScored;
+      const closeShare = totalPickedWithScores > 0
+        ? sportsbookSimple.closeGames.oneScoreGames / totalPickedWithScores
+        : 0;
+      sportsbookSimple.oddsPersonality.closeShare = closeShare;
+      sportsbookSimple.oddsPersonality.totalValid = sportsbookSimple.big4.totalValid;
+
+      const labels = [];
+      const favoriteRate = sportsbookSimple.oddsPersonality.favoriteRate;
+      const underdogRate = sportsbookSimple.oddsPersonality.underdogRate;
+      const totalPicks = sportsbookSimple.big4.totalValid;
+      const upsetCalls = sportsbookSimple.big4.upsetsCalled;
+      const upsetThreshold = Math.max(3, Math.ceil(totalPicks * 0.12));
+      const closeSharePct = sportsbookSimple.oddsPersonality.closeShare;
+      const upsetInvolvedShare = totalPicks > 0 ? (sportsbookSimple.big4.upsetGames / totalPicks) : 0;
+      const favoriteBetrayalRate = sportsbookSimple.big4.favoritesPicked > 0
+        ? (sportsbookSimple.big4.surprisesMissed / sportsbookSimple.big4.favoritesPicked)
+        : 0;
+      const underdogWinRate = sportsbookSimple.big4.underdogsPicked > 0
+        ? (sportsbookSimple.underdogsCorrect / sportsbookSimple.big4.underdogsPicked)
+        : 0;
+      const blowoutShare = totalPickedWithScores > 0
+        ? (sportsbookSimple.closeGames.blowouts / totalPickedWithScores)
+        : 0;
+      const closeLossRate = sportsbookSimple.closeGames.oneScoreGames > 0
+        ? (sportsbookSimple.closeGames.closeWrong / sportsbookSimple.closeGames.oneScoreGames)
+        : 0;
+      const publicAlignmentRate = sportsbookSimple.publicGames > 0
+        ? (sportsbookSimple.publicAligned / sportsbookSimple.publicGames)
+        : 0;
+      const contrarianCorrectRate = sportsbookSimple.contrarianCount > 0
+        ? (sportsbookSimple.contrarianCorrect / sportsbookSimple.contrarianCount)
+        : 0;
+      const atsWinRate = sportsbookSimple.ats.total > 0 ? (sportsbookSimple.ats.w / sportsbookSimple.ats.total) : 0;
+      const atsLossRate = sportsbookSimple.ats.total > 0 ? (sportsbookSimple.ats.l / sportsbookSimple.ats.total) : 0;
+      const atsPushRate = sportsbookSimple.ats.total > 0 ? (sportsbookSimple.ats.p / sportsbookSimple.ats.total) : 0;
+      const avgTotalPoints = sportsbookSimple.totalsCount > 0 ? (sportsbookSimple.totalsSum / sportsbookSimple.totalsCount) : null;
+      const leagueAvgTotal = sportsbookSimple.leagueTotalsCount > 0 ? (sportsbookSimple.leagueTotalsSum / sportsbookSimple.leagueTotalsCount) : null;
+
+      if (favoriteRate >= 0.8) labels.push("🧱 Chalk Wall");
+      if (underdogRate >= 0.6) labels.push("🐕 Dog Days");
+      if (Math.abs(favoriteRate - 0.5) <= 0.05 && totalPicks >= 10) labels.push("🪙 Coin Flipper");
+      if (upsetInvolvedShare >= 0.45) labels.push("🧲 Upset Magnet");
+      if (favoriteBetrayalRate >= 0.3 && favoriteRate >= 0.6) labels.push("😬 Favorite Burned");
+      if (underdogRate <= 0.3 && underdogWinRate >= 0.55) labels.push("🏹 Underdog Sniper");
+      if (underdogRate >= 0.45 && closeSharePct >= 0.45) labels.push("🌪️ Chaos Captain");
+      if (closeSharePct >= 0.6 && totalPickedWithScores >= 8) labels.push("🫣 Nailbiter Resident");
+      if (blowoutShare >= 0.45 && totalPickedWithScores >= 8) labels.push("💥 Blowout Tourist");
+      if (avgTotalPoints !== null && leagueAvgTotal !== null && avgTotalPoints <= (leagueAvgTotal - 6)) labels.push("🧊 Ice Cold Finishes");
+      if (avgTotalPoints !== null && leagueAvgTotal !== null && avgTotalPoints >= (leagueAvgTotal + 6)) labels.push("🔥 Shootout Seeker");
+      if (closeLossRate >= 0.4 && sportsbookSimple.closeGames.oneScoreGames >= 5) labels.push("⏳ Last-Second Heartbreak");
+      if (publicAlignmentRate >= 0.7) labels.push("🐑 Crowd Follower");
+      if (publicAlignmentRate <= 0.4 && sportsbookSimple.publicGames >= 5) labels.push("🦅 Solo Pilot");
+      if (contrarianCorrectRate >= 0.55 && sportsbookSimple.contrarianCount >= 6) labels.push("🧨 Contrarian Hero");
+      if (contrarianCorrectRate <= 0.35 && sportsbookSimple.contrarianCount >= 6) labels.push("😵 Contrarian Pain");
+      if (atsWinRate >= 0.55 && sportsbookSimple.ats.total >= 10) labels.push("📏 Spread Beater");
+      if (atsLossRate >= 0.55 && sportsbookSimple.ats.total >= 10) labels.push("🧻 Spread Slippery");
+      if (atsPushRate >= 0.12 && sportsbookSimple.ats.total >= 10) labels.push("🟰 Push Collector");
+      if (sportsbookSimple.nearTotalGames >= 4 && (sportsbookSimple.nearTotalCount / sportsbookSimple.nearTotalGames) >= 0.25) labels.push("😰 Sweat Specialist");
+
+      if (favoriteRate >= 0.65) labels.push("⭐ Favorite Picker");
+      if (underdogRate >= 0.45) labels.push("🎯 Underdog Believer");
+      if (upsetCalls >= upsetThreshold) labels.push("🦊 Upset Whisperer");
+      if (closeSharePct >= 0.5) labels.push("🎢 Close-Game Magnet");
+      if (labels.length === 0 && favoriteRate >= 0.45 && favoriteRate <= 0.6) labels.push("⚖️ Balanced Picker");
+      if (labels.length === 0) labels.push("⚖️ Balanced Picker");
+      sportsbookSimple.oddsPersonality.labels = labels.slice(0, 3);
+
+      sportsbookSimple.bestCalls = bestCandidates
+        .sort((a, b) => (a.tier - b.tier) || (b.margin - a.margin) || (b.time - a.time))
+        .slice(0, 5);
+      sportsbookSimple.oofMoments = oofCandidates
+        .sort((a, b) => (a.tier - b.tier) || (a.margin - b.margin) || (b.time - a.time))
+        .slice(0, 5);
+
       return {
         rank, isTied, wins,
         titles, titleYears,
@@ -333,12 +668,14 @@ useEffect(() => {
         tiebreaker: pData["Tiebreaker Score"],
         currentStreak, maxWinStreak, maxLossStreak,
         maxPotential, totalGameCount, leaderWins,
-        bestWin
+        bestWin,
+        sportsbookSimple
       };
     };
 
     const stats = calculateStats(selectedPlayer);
-  
+    const sportsbookSimple = stats && stats.sportsbookSimple ? stats.sportsbookSimple : null;
+
                       // Helper component for Team Card
                       const ChampCard = ({ teamName }) => {
       const rawStr = String(teamName || "").trim();
@@ -715,32 +1052,108 @@ useEffect(() => {
                                                                           </div>
                                                                       </div>
                                                                   </div>
+
+                                                                  {/* Sportsbook */}
+                                                                  {sportsbookSimple && (
+                                                                      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                                                                          <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
+                                                                              <h3 className="text-lg font-bold text-gray-900 font-serif">Sportsbook</h3>
+                                                                          </div>
+                                                                          <div className="p-5 space-y-5">
+                                                                              <div>
+                                                                                  <div className="text-xs font-bold text-gray-400 uppercase mb-2">Odds Personality</div>
+                                                                                  <div className="flex flex-wrap gap-2 mb-2">
+                                                                                      {sportsbookSimple.oddsPersonality.labels.map(label => (
+                                                                                          <span key={label} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200">
+                                                                                              {label}
+                                                                                          </span>
+                                                                                      ))}
+                                                                                  </div>
+                                                                                  <div className="text-xs text-gray-500">Based on your picks against favorites, upsets, and close finishes.</div>
+                                                                              </div>
+
+                                                                              <div className="grid grid-cols-2 gap-3">
+                                                                                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                                                                      <div className="text-xs font-bold text-gray-400 uppercase mb-1">Favorites Picked</div>
+                                                                                      <div className="text-xl font-black text-gray-900">
+                                                                                          {sportsbookSimple.big4.favoritesPicked} of {sportsbookSimple.big4.totalValid}
+                                                                                      </div>
+                                                                                  </div>
+                                                                                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                                                                      <div className="text-xs font-bold text-gray-400 uppercase mb-1">Underdogs Picked</div>
+                                                                                      <div className="text-xl font-black text-gray-900">
+                                                                                          {sportsbookSimple.big4.underdogsPicked} of {sportsbookSimple.big4.totalValid}
+                                                                                      </div>
+                                                                                  </div>
+                                                                                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                                                                      <div className="text-xs font-bold text-gray-400 uppercase mb-1">Upsets Called</div>
+                                                                                      <div className="text-xl font-black text-gray-900">{sportsbookSimple.big4.upsetsCalled}</div>
+                                                                                  </div>
+                                                                                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                                                                      <div className="text-xs font-bold text-gray-400 uppercase mb-1">Surprises Missed</div>
+                                                                                      <div className="text-xl font-black text-gray-900">{sportsbookSimple.big4.surprisesMissed}</div>
+                                                                                  </div>
+                                                                                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                                                                      <div className="text-xs font-bold text-gray-400 uppercase mb-1">One-Score Games</div>
+                                                                                      <div className="text-xl font-black text-gray-900">
+                                                                                          {sportsbookSimple.closeGames.oneScoreCorrect} of {sportsbookSimple.closeGames.oneScoreGames}
+                                                                                      </div>
+                                                                                  </div>
+                                                                                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                                                                      <div className="text-xs font-bold text-gray-400 uppercase mb-1">Blowouts</div>
+                                                                                      <div className="text-xl font-black text-gray-900">
+                                                                                          {sportsbookSimple.closeGames.blowoutCorrect} of {sportsbookSimple.closeGames.blowouts}
+                                                                                      </div>
+                                                                                  </div>
+                                                                              </div>
+
+                                                                              <div className="border-t border-gray-100 pt-4">
+                                                                                  <div className="text-xs font-bold text-gray-400 uppercase mb-2">Beat the Spread</div>
+                                                                                  {sportsbookSimple.ats.total > 0 ? (
+                                                                                      <>
+                                                                                          <div className="text-lg font-black text-gray-900">
+                                                                                              {sportsbookSimple.ats.w}-{sportsbookSimple.ats.l}-{sportsbookSimple.ats.p}
+                                                                                          </div>
+                                                                                          <div className="text-xs text-gray-500">Did your picked team win by more than the odds expected.</div>
+                                                                                      </>
+                                                                                  ) : (
+                                                                                      <div className="text-sm text-gray-500">No spread results yet.</div>
+                                                                                  )}
+                                                                              </div>
+
+                                                                              <div className="border-t border-gray-100 pt-4">
+                                                                                  <div className="text-xs font-bold text-gray-400 uppercase mb-2">Best Calls</div>
+                                                                                  {sportsbookSimple.bestCalls.length > 0 ? (
+                                                                                      <div className="space-y-2">
+                                                                                          {sportsbookSimple.bestCalls.map((item, idx) => (
+                                                                                              <div key={`${item.bowl}-${idx}`} className="text-sm text-gray-700">
+                                                                                                  <span className="font-semibold text-gray-900">{item.bowl}</span> - {item.reason}
+                                                                                              </div>
+                                                                                          ))}
+                                                                                      </div>
+                                                                                  ) : (
+                                                                                      <div className="text-sm text-gray-500">No standout calls yet.</div>
+                                                                                  )}
+                                                                              </div>
+
+                                                                              <div className="border-t border-gray-100 pt-4">
+                                                                                  <div className="text-xs font-bold text-gray-400 uppercase mb-2">Oof Moments</div>
+                                                                                  {sportsbookSimple.oofMoments.length > 0 ? (
+                                                                                      <div className="space-y-2">
+                                                                                          {sportsbookSimple.oofMoments.map((item, idx) => (
+                                                                                              <div key={`${item.bowl}-${idx}`} className="text-sm text-gray-700">
+                                                                                                  <span className="font-semibold text-gray-900">{item.bowl}</span> - {item.reason}
+                                                                                              </div>
+                                                                                          ))}
+                                                                                      </div>
+                                                                                  ) : (
+                                                                                      <div className="text-sm text-gray-500">No tough breaks yet.</div>
+                                                                                  )}
+                                                                              </div>
+                                                                          </div>
+                                                                      </div>
+                                                                  )}
   
-                                                                  {/* Style Meter */}
-                                                                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                                                                      <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
-                                                                          <h3 className="text-lg font-bold text-gray-900 font-serif">Style Rating</h3>
-                                                                      </div>
-                                                                      <div className="p-5">
-                                                                          <div className="flex justify-between items-center mb-2">
-                                                                              <span className="text-sm font-bold text-gray-400 uppercase">🐑 Sheep</span>
-                                                                              <span className="text-sm font-bold text-gray-400 uppercase">Maverick 🤠</span>
-                                                                          </div>
-                                                                          <div className="relative h-4 bg-gray-100 rounded-full w-full overflow-hidden">
-                                                                              <div className="absolute top-0 bottom-0 left-0 bg-blue-500/20 w-full"></div>
-                                                                              <div
-                                                                                  className="absolute top-0 bottom-0 bg-blue-600 w-2 rounded-full shadow-md transition-all duration-500"
-                                                                                  style={{ left: `${stats.maverickPct}%` }}
-                                                                              ></div>
-                                                                          </div>
-                                                                          <div className="text-center mt-2 text-sm font-bold text-gray-500">
-                                                                              {stats.maverickPct < 20 ? "Follows the Herd" : stats.maverickPct > 40 ? "Lone Wolf" : "Balanced Picker"} ({stats.maverickPct}%)
-                                                                          </div>
-                                                                          <p className="text-xs text-gray-400 text-center mt-3 px-2 leading-relaxed">
-                                                                              This rating measures how often a player picks with the majority consensus (Sheep) versus picking against the group (Maverick). A lower percentage means you tend to agree with everyone else; a higher percentage means you like to go it alone.
-                                                                          </p>
-                                                                      </div>
-                                                                  </div>
                                                               </>
                                                           )}
                               </div>
