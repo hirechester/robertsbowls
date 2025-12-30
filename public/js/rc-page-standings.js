@@ -12,9 +12,43 @@
 
   // --- STANDINGS PAGE ---
   const StandingsPage = () => {
-    const { schedule, picks, picksIds, history, loading, error, refresh, lastUpdated } = RC.data.useLeagueData();
+    const { schedule, picks, picksIds, history, teamById, loading, error, refresh, lastUpdated } = RC.data.useLeagueData();
     const [standings, setStandings] = useState([]);
     const [sortConfig, setSortConfig] = useState({ key: 'wins', direction: 'descending' });
+
+    const formatTeamWithSeed = (team, fallback) => {
+        if (!team) return fallback || "-";
+
+        const pickFirst = (...vals) => {
+            for (const v of vals) {
+                const s = (v === null || v === undefined) ? "" : String(v).trim();
+                if (s) return s;
+            }
+            return "";
+        };
+
+        const cleanNum = (s) => {
+            const raw = String(s || "").trim();
+            if (!raw) return "";
+            const m = raw.match(/(\d+)/);
+            return m ? m[1] : "";
+        };
+
+        const school = pickFirst(team["School Name"], team.School, team.Team, team.Name);
+        const seedRaw = pickFirst(
+            team["Seed"], team["Team Seed"], team["Seed #"], team["Seed Number"], team["Playoff Seed"], team["CFP Seed"]
+        );
+        const rankRaw = pickFirst(
+            team["Ranking"], team["Rank"], team["AP Rank"], team["AP Ranking"], team["Rk"]
+        );
+
+        const seedNum = cleanNum(seedRaw);
+        const rankNum = cleanNum(rankRaw);
+        const prefix = seedNum ? `#${seedNum}` : (rankNum ? `#${rankNum}` : "");
+
+        if (!school) return fallback || "-";
+        return prefix ? `${prefix} ${school}` : school;
+    };
 
     useEffect(() => {
         // Standings are computed from shared league data (loaded once in rc-data.js).
@@ -80,6 +114,7 @@
 
             const champGame = sortedSchedule.find(g => /national\s+championship/i.test(String(g.Bowl || "")));
             const champBowlName = champGame ? champGame.Bowl : null;
+            const champBowlKey = champGame ? getBowlKey(champGame) : null;
 
             let stats = picksIds.map(playerIds => {
                 let wins = 0;
@@ -111,10 +146,13 @@
                 const winProb = (winProbVal / SIMULATIONS * 100).toFixed(1) + '%';
 
                 const legacy = legacyByName[playerIds.Name] || {};
-                const champPick =
+                const champPickLegacy =
                     (champBowlName && legacy[champBowlName]) ||
                     legacy["National Championship"] ||
                     "-";
+                const champPickId = champBowlKey ? normalizeId(playerIds[champBowlKey]) : "";
+                const champPickTeam = champPickId && teamById ? teamById[champPickId] : null;
+                const champPick = formatTeamWithSeed(champPickTeam, champPickLegacy);
 
                 const tiebreaker =
                     legacy["Tiebreaker Score"] ||
@@ -174,7 +212,7 @@
         } catch (err) {
             console.error(err);
         }
-    }, [schedule, picksIds, picks]);
+    }, [schedule, picksIds, picks, teamById]);
 
     const sortedData = useMemo(() => {
         let sortableItems = [...standings];
