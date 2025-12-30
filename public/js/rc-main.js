@@ -13,7 +13,7 @@ const { Navigation } = window.RC;
 
 // 0. HOME PAGE (loaded from js/rc-page-home.js)
 window.RC.pages = window.RC.pages || {};
-const { HomePage, StandingsPage, PicksPage, RacePage, BadgesPage, VersusPage, SimulatorPage, ScoutingReportPage, HistoryPage, RulesPage, BingoPage } = window.RC.pages;
+const { HomePage, StandingsPage, PicksPage, RacePage, BadgesPage, VersusPage, SimulatorPage, ScoutingReportPage, HistoryPage, RulesPage, BingoPage, DailyPage } = window.RC.pages;
 
 // 1. STANDINGS PAGE (loaded from js/rc-page-standings.js)
 
@@ -53,7 +53,8 @@ const VALID_TABS = new Set([
     'simulator',
     'scouting',
     'history',
-    'rules'
+    'rules',
+    'daily'
 ]);
 
 const getInitialTab = () => {
@@ -65,6 +66,10 @@ const getInitialTab = () => {
 
 const App = () => {
     const [activeTab, setActiveTab] = useState(getInitialTab);
+    const isPosterOnly = useMemo(() => {
+        const params = new URLSearchParams(window.location.search || "");
+        return Boolean(params.get("poster"));
+    }, []);
 
     useEffect(() => {
         const onHashChange = () => {
@@ -75,8 +80,8 @@ const App = () => {
         return () => window.removeEventListener('hashchange', onHashChange);
     }, []);
     return (
-        <div className="min-h-screen bg-white pt-16">
-            <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
+        <div className={isPosterOnly ? "min-h-screen bg-white" : "min-h-screen bg-white pt-16"}>
+            {!isPosterOnly && <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />}
             {activeTab === 'home' && <HomePage />}
             {activeTab === 'standings' && <StandingsPage />}
             {activeTab === 'picks' && <PicksPage />}
@@ -88,6 +93,7 @@ const App = () => {
         {activeTab === 'history' && <HistoryPage />}
         {activeTab === 'rules' && <RulesPage />}
         {activeTab === 'bingo' && <BingoPage />}
+        {activeTab === 'daily' && <DailyPage />}
         </div>
     );
 };
