@@ -160,6 +160,8 @@
                     legacy["Tiebreaker"] ||
                     playerIds["Tiebreaker"] ||
                     "0";
+                const tiebreakerText = String(tiebreaker || "").trim();
+                const champPickDisplay = champPick === "-" ? "-" : `${champPick} (${tiebreakerText || "0"})`;
 
                 return {
                     name: playerIds.Name,
@@ -168,7 +170,7 @@
                     percentage: (wins + losses > 0 ? (wins / (wins + losses)).toFixed(3) : ".000").replace('0.', '.'),
                     currentStreak,
                     maxWinStreak,
-                    champPick,
+                    champPick: champPickDisplay,
                     tiebreaker,
                     rawPicksIds: playerIds,
                     rawPicks: legacy,
@@ -240,8 +242,6 @@
                     } else {
                         aValue = String(aValue).toLowerCase(); bValue = String(bValue).toLowerCase();
                     }
-                } else if (sortConfig.key === 'tiebreaker') {
-                    aValue = parseInt(aValue, 10) || 0; bValue = parseInt(bValue, 10) || 0;
                 } else if (sortConfig.key === 'status') {
                     const statusOrder = { 'leading': 3, 'alive': 2, 'eliminated': 1 };
                     aValue = statusOrder[aValue] || 0; bValue = statusOrder[bValue] || 0;
@@ -322,7 +322,6 @@
                                     <th onClick={() => requestSort('currentStreak')} className="p-2 font-bold border-b border-gray-100 text-center group hover:bg-gray-100 transition-colors">🔥 Current Streak {getSortIcon('currentStreak')}</th>
                                     <th onClick={() => requestSort('maxWinStreak')} className="p-2 font-bold border-b border-gray-100 text-center group hover:bg-gray-100 transition-colors">💪 Longest Streak {getSortIcon('maxWinStreak')}</th>
                                     <th onClick={() => requestSort('champPick')} className="p-2 font-bold border-b border-gray-100 text-center min-w-[180px] group hover:bg-gray-100 transition-colors">👑 Championship Team {getSortIcon('champPick')}</th>
-                                    <th onClick={() => requestSort('tiebreaker')} className="p-2 font-bold border-b border-gray-100 text-center group hover:bg-gray-100 transition-colors">🎯 Tiebreaker Score {getSortIcon('tiebreaker')}</th>
                                     <th onClick={() => requestSort('winProbNum')} className="p-2 font-bold border-b border-gray-100 text-center group hover:bg-gray-100 transition-colors">🔮 Win Probability {getSortIcon('winProb')}</th>
                                     <th onClick={() => requestSort('status')} className="p-2 font-bold border-b border-gray-100 text-center group hover:bg-gray-100 transition-colors">🧮 Elimination Status {getSortIcon('status')}</th>
                                     <th onClick={() => requestSort('swingGames')} className="p-2 font-bold border-b border-gray-100 text-center group hover:bg-gray-100 transition-colors">🪜 Swing Games {getSortIcon('swingGames')}</th>
@@ -339,7 +338,6 @@
                                         <td className="p-2 text-center border-r border-gray-100">{renderStreak(player.currentStreak)}</td>
                                         <td className="p-2 text-center border-r border-gray-100"><span className="inline-block px-2 py-0.5 rounded-lg border border-transparent text-xs font-medium bg-gray-50 text-gray-900">W{player.maxWinStreak}</span></td>
                                         <td className="p-2 text-center border-r border-gray-100 text-gray-900 truncate">{player.champPick}</td>
-                                        <td className="p-2 text-center text-gray-900 border-r border-gray-100">{player.tiebreaker}</td>
                                         <td className="p-2 text-center text-gray-900 border-r border-gray-100">{player.winProb}</td>
                                         <td className="p-2 text-center border-r border-gray-100">{renderStatus(player.status)}</td>
                                         <td className="p-2 text-center text-gray-900">{player.swingGames}</td>
