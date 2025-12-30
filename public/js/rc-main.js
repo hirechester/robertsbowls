@@ -13,7 +13,7 @@ const { Navigation } = window.RC;
 
 // 0. HOME PAGE (loaded from js/rc-page-home.js)
 window.RC.pages = window.RC.pages || {};
-const { HomePage, StandingsPage, PicksPage, RacePage, BadgesPage, VersusPage, SimulatorPage, ScoutingReportPage, HistoryPage } = window.RC.pages;
+const { HomePage, StandingsPage, PicksPage, RacePage, BadgesPage, VersusPage, SimulatorPage, ScoutingReportPage, HistoryPage, RulesPage } = window.RC.pages;
 
 // 1. STANDINGS PAGE (loaded from js/rc-page-standings.js)
 
@@ -56,6 +56,7 @@ const App = () => {
             {activeTab === 'simulator' && <SimulatorPage />}
             {activeTab === 'scouting' && <ScoutingReportPage />}
             {activeTab === 'history' && <HistoryPage />}
+        {activeTab === 'rules' && <RulesPage />}
         </div>
     );
 };
