@@ -11,6 +11,18 @@
   const ET_TZ = "America/New_York";
   const BRAND_COLOR = "#0f172a";
   const POSTER_BG = "#f8fafc";
+  const BIG_GAME_LINES = [
+    "This was the one everybody will pretend they called.",
+    "If you only watched one game yesterday, it was supposed to be this.",
+    "The scoreboard was loud, but the picks were louder.",
+    "This game did the most damage to friendships.",
+    "One winner, one loser, and a whole lot of regret.",
+    "This one separated the calm pickers from the chaos pickers.",
+    "The moment the standings started sweating.",
+    "The game that made the group chat wake up.",
+    "If your pick was wrong here, you felt it.",
+    "This is why we play the bowls."
+  ];
 
   const pad2 = (value) => String(value).padStart(2, "0");
 
@@ -27,6 +39,12 @@
     if (!raw) return null;
     const n = parseFloat(raw);
     return Number.isFinite(n) ? n : null;
+  };
+
+  const pickRandomLine = (lines) => {
+    if (!Array.isArray(lines) || lines.length === 0) return "";
+    const idx = Math.floor(Math.random() * lines.length);
+    return lines[idx];
   };
 
   const getFirstValue = (row, keys) => {
@@ -386,47 +404,65 @@
         ? `Yes (${leaderBefore.name} -> ${leaderAfter.name})`
         : "No";
 
-      const dramaGames = yesterdayGames.map((g) => ({
-        game: g,
-        score: computeDramaScore(g, standingsBeforeYesterday)
-      })).sort((a, b) => b.score - a.score);
+      const excitementCandidates = yesterdayGames.map((g) => {
+        const excitement = parseNumber(getFirstValue(g, ["Excitement"]));
+        if (excitement === null) return null;
+        return { game: g, excitement };
+      }).filter(Boolean);
 
-      const swingGame = dramaGames[0] ? dramaGames[0].game : null;
+      let bigGame = null;
+      if (excitementCandidates.length) {
+        const top = excitementCandidates.reduce((best, cur) => (
+          cur.excitement > best.excitement ? cur : best
+        ));
+        bigGame = top.game;
+      } else {
+        const recent = yesterdayGames.reduce((best, g) => {
+          const time = Number.isFinite(g.__timeMinutes) ? g.__timeMinutes : -1;
+          if (!best || time > best.time) return { game: g, time };
+          return best;
+        }, null);
+        bigGame = recent ? recent.game : null;
+      }
 
-      let swingSummary = null;
-      if (swingGame) {
-        const winnerId = normalizeId(getFirstValue(swingGame, ["Winner ID", "WinnerID"]));
-        const awayId = normalizeId(getFirstValue(swingGame, ["Away ID", "AwayID"]));
-        const homeId = normalizeId(getFirstValue(swingGame, ["Home ID", "HomeID"]));
+      let bigGameSummary = null;
+      if (bigGame) {
+        const winnerId = normalizeId(getFirstValue(bigGame, ["Winner ID", "WinnerID"]));
+        const awayId = normalizeId(getFirstValue(bigGame, ["Away ID", "AwayID"]));
+        const homeId = normalizeId(getFirstValue(bigGame, ["Home ID", "HomeID"]));
         const winnerTeam = winnerId && teamById ? teamById[winnerId] : null;
         const awayTeam = awayId && teamById ? teamById[awayId] : null;
         const homeTeam = homeId && teamById ? teamById[homeId] : null;
 
-        const homePts = parseNumber(getFirstValue(swingGame, ["Home Pts", "HomePts", "Home Score", "HomeScore"]));
-        const awayPts = parseNumber(getFirstValue(swingGame, ["Away Pts", "AwayPts", "Away Score", "AwayScore"]));
+        const homePts = parseNumber(getFirstValue(bigGame, ["Home Pts", "HomePts", "Home Score", "HomeScore"]));
+        const awayPts = parseNumber(getFirstValue(bigGame, ["Away Pts", "AwayPts", "Away Score", "AwayScore"]));
 
-        const winnerName = formatTeamLabel(winnerTeam, getFirstValue(swingGame, ["Winner", "Winning Team"]) || "Winner");
-        const loserName = winnerId === homeId
-          ? formatTeamLabel(awayTeam, getFirstValue(swingGame, ["Team 1"]))
-          : formatTeamLabel(homeTeam, getFirstValue(swingGame, ["Team 2"]));
+        const winnerFallback = winnerId ? `Team ${winnerId}` : "Winner";
+        const loserId = winnerId === homeId ? awayId : homeId;
+        const loserFallback = loserId ? `Team ${loserId}` : "Loser";
+        const winnerName = winnerTeam ? formatTeamLabel(winnerTeam, winnerFallback) : winnerFallback;
+        const loserTeam = winnerId === homeId ? awayTeam : homeTeam;
+        const loserName = loserTeam ? formatTeamLabel(loserTeam, loserFallback) : loserFallback;
         const winnerPts = winnerId === homeId ? homePts : awayPts;
         const loserPts = winnerId === homeId ? awayPts : homePts;
         const hasScore = winnerPts !== null && loserPts !== null;
 
-        const split = summarizePickSplit(swingGame);
-        let splitText = "Pick split: n/a";
-        if (split) {
-          const winnerPct = winnerId === split.awayId ? split.awayPct : split.homePct;
-          const loserPct = winnerId === split.awayId ? split.homePct : split.awayPct;
-          splitText = `Pick split: ${winnerPct}% / ${loserPct}%`;
-        }
+        const bowlKey = getBowlKey(bigGame);
+        const counts = bowlKey ? (pickCountsByBowl[bowlKey] || {}) : {};
+        const winnerPicks = winnerId ? (counts[winnerId] || 0) : 0;
+        const loserPicks = loserId ? (counts[loserId] || 0) : 0;
+        const splitText = (winnerPicks + loserPicks) > 0
+          ? `Pick split: ${winnerPicks}-${loserPicks}`
+          : null;
 
-        swingSummary = {
-          bowlName: getFirstValue(swingGame, ["Bowl", "Bowl Name"]) || "Swing Game",
-          scoreLine: hasScore ? `${winnerName} ${winnerPts} - ${loserPts} ${loserName}` : `${winnerName} over ${loserName}`,
+        bigGameSummary = {
+          bowlName: getFirstValue(bigGame, ["Bowl", "Bowl Name"]) || "Big Game",
+          scoreLine: hasScore
+            ? `Final: ${winnerName} ${winnerPts}, ${loserName} ${loserPts}`
+            : `Final: ${winnerName} over ${loserName}`,
           splitText,
           accent: teamPrimaryColor(winnerTeam),
-          impact: "This game moved the leaderboard."
+          line: pickRandomLine(BIG_GAME_LINES)
         };
       }
 
@@ -509,11 +545,11 @@
         leadChange,
         biggestRise,
         biggestFall,
-        swingSummary,
+        bigGameSummary,
         crowdSummary,
         badBeatSummary
       };
-    }, [yesterdayGames, standingsBeforeYesterday, standingsAfterYesterday, pickCountsByBowl, teamById]);
+    }, [yesterdayGames, standingsBeforeYesterday, standingsAfterYesterday, pickCountsByBowl, teamById, yesterdayKey]);
 
     const todayData = useMemo(() => {
       const todayBowlKeys = todayGames.map(getBowlKey).filter(Boolean);
@@ -689,18 +725,18 @@
             ]
         });
         sections.push({
-          title: "Swing Game of the Day 🎭",
-          accent: buildYesterdayRecap.swingSummary ? buildYesterdayRecap.swingSummary.accent : BRAND_COLOR,
+          title: "Big Game of the Day 🎭",
+          accent: buildYesterdayRecap.bigGameSummary ? buildYesterdayRecap.bigGameSummary.accent : BRAND_COLOR,
           lines: buildYesterdayRecap.completedCount === 0
             ? ["No games yesterday."]
-            : buildYesterdayRecap.swingSummary
+            : buildYesterdayRecap.bigGameSummary
               ? [
-                buildYesterdayRecap.swingSummary.bowlName,
-                buildYesterdayRecap.swingSummary.scoreLine,
-                buildYesterdayRecap.swingSummary.splitText,
-                buildYesterdayRecap.swingSummary.impact
-              ]
-              : ["No swing game found."]
+                buildYesterdayRecap.bigGameSummary.bowlName,
+                buildYesterdayRecap.bigGameSummary.scoreLine,
+                buildYesterdayRecap.bigGameSummary.splitText,
+                buildYesterdayRecap.bigGameSummary.line
+              ].filter(Boolean)
+              : ["No big game found."]
         });
         sections.push({
           title: "Crowd Moment 🔥",
@@ -1231,20 +1267,22 @@
                 )}
 
                 {renderCard(
-                  "Swing Game of the Day 🎭",
-                  buildYesterdayRecap.swingSummary ? buildYesterdayRecap.swingSummary.accent : BRAND_COLOR,
+                  "Big Game of the Day 🎭",
+                  buildYesterdayRecap.bigGameSummary ? buildYesterdayRecap.bigGameSummary.accent : BRAND_COLOR,
                   buildYesterdayRecap.completedCount === 0
                     ? renderEmptyLine("No games yesterday.")
-                    : buildYesterdayRecap.swingSummary
+                    : buildYesterdayRecap.bigGameSummary
                       ? (
                         <div className="flex flex-col gap-2 text-xl text-slate-700">
-                          <div className="text-2xl font-semibold text-slate-900">{buildYesterdayRecap.swingSummary.bowlName}</div>
-                          <div>{buildYesterdayRecap.swingSummary.scoreLine}</div>
-                          <div>{buildYesterdayRecap.swingSummary.splitText}</div>
-                          <div className="text-slate-600">{buildYesterdayRecap.swingSummary.impact}</div>
+                          <div className="text-2xl font-semibold text-slate-900">{buildYesterdayRecap.bigGameSummary.bowlName}</div>
+                          <div>{buildYesterdayRecap.bigGameSummary.scoreLine}</div>
+                          {buildYesterdayRecap.bigGameSummary.splitText ? (
+                            <div>{buildYesterdayRecap.bigGameSummary.splitText}</div>
+                          ) : null}
+                          <div className="text-slate-600">{buildYesterdayRecap.bigGameSummary.line}</div>
                         </div>
                       )
-                      : renderEmptyLine("No swing game found.")
+                      : renderEmptyLine("No big game found.")
                 )}
 
                 {renderCard(
