@@ -140,6 +140,16 @@
     }).format(dateObj);
   };
 
+  const formatDisplayDateNoYear = (dateKey) => {
+    const dateObj = dateFromKey(dateKey);
+    if (!dateObj) return "";
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: ET_TZ,
+      month: "long",
+      day: "numeric"
+    }).format(dateObj);
+  };
+
   const formatTeamLabel = (team, fallback) => {
     if (!team) return fallback || "-";
 
@@ -868,14 +878,17 @@
       pillGrad.addColorStop(0, "rgba(251,191,36,0.2)");
       pillGrad.addColorStop(1, "rgba(251,191,36,0.0)");
       ctx.fillStyle = pillGrad;
-      roundedRectPath(ctx, 64, 64, 260, 28, 14);
+      const seasonLabel = "2025-26 SEASON";
+      const seasonTextWidth = ctx.measureText(seasonLabel).width;
+      const seasonPillWidth = Math.ceil(seasonTextWidth + 40);
+      roundedRectPath(ctx, 64, 64, seasonPillWidth, 28, 14);
       ctx.fill();
       ctx.strokeStyle = "#fbbf24";
       ctx.stroke();
 
       ctx.fillStyle = "#fbbf24";
       ctx.font = "800 14px 'Chivo', sans-serif";
-      drawTrackingText(ctx, "2025-26 SEASON", 80, 85, 4);
+      drawTrackingText(ctx, seasonLabel, 80, 85, 4);
 
       const gold = ctx.createLinearGradient(72, 110, 360, 200);
       gold.addColorStop(0, "#fde68a");
@@ -886,18 +899,20 @@
       ctx.fillText("Roberts Cup", 72, 158);
 
       const subtitle = mode === "yesterday"
-        ? `Daily Recap - ${formatDisplayDate(yesterdayKey)}`
+        ? `Daily Recap - ${formatDisplayDateNoYear(yesterdayKey)}`
         : `Today's Watch List - ${formatDisplayDate(todayKey)}`;
       const meta = mode === "yesterday"
-        ? `Games completed: ${buildYesterdayRecap.completedCount}`
+        ? ""
         : `Games today: ${todayGames.length}`;
 
       ctx.fillStyle = "#e2e8f0";
       ctx.font = "700 30px 'Chivo', sans-serif";
       ctx.fillText(subtitle, 72, 212);
-      ctx.fillStyle = "#cbd5f1";
-      ctx.font = "500 22px 'Chivo', sans-serif";
-      ctx.fillText(meta, 72, 248);
+      if (meta) {
+        ctx.fillStyle = "#cbd5f1";
+        ctx.font = "500 22px 'Chivo', sans-serif";
+        ctx.fillText(meta, 72, 248);
+      }
 
       const trophyPath = new Path2D("M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22M18 2H6v7a6 6 0 0 0 12 0V2Z");
       ctx.save();
@@ -1129,6 +1144,7 @@
               }
               .daily-badge {
                 display: inline-block;
+                align-self: flex-start;
                 background: #1f2937;
                 color: #fbbf24;
                 border: 1px solid rgba(251, 191, 36, 0.35);
@@ -1240,8 +1256,7 @@
                     <div className="flex flex-col gap-3">
                       <div className="daily-badge">2025-26 Season</div>
                       <div className="text-5xl font-black tracking-tight daily-header-title">Roberts Cup</div>
-                      <div className="text-3xl font-semibold">Daily Recap - {formatDisplayDate(yesterdayKey)}</div>
-                      <div className="text-xl text-slate-300">Games completed: {buildYesterdayRecap.completedCount}</div>
+                      <div className="text-3xl font-semibold">Daily Recap - {formatDisplayDateNoYear(yesterdayKey)}</div>
                     </div>
                     <div className="relative">
                       <div className="absolute inset-0 bg-yellow-400 blur-[40px] opacity-20 rounded-full"></div>
@@ -1254,7 +1269,7 @@
 
                 {renderCard(
                   "Standings Movers 📈",
-                  BRAND_COLOR,
+                  "#ef4444",
                   buildYesterdayRecap.completedCount === 0
                     ? renderEmptyLine("No games yesterday.")
                     : (
