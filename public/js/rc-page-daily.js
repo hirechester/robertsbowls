@@ -474,6 +474,64 @@
         ? ""
         : `The top five are only separated by ${spreadTop} wins`;
 
+      const streakGames = scheduleWithDates
+        .filter((g) => {
+          const winnerId = normalizeId(getFirstValue(g, ["Winner ID", "WinnerID"]));
+          if (!winnerId) return false;
+          if (!g.__dateKey) return false;
+          return g.__dateKey <= yesterdayKey;
+        })
+        .sort((a, b) => {
+          if (a.__dateKey !== b.__dateKey) return a.__dateKey.localeCompare(b.__dateKey);
+          const aTime = Number.isFinite(a.__timeMinutes) ? a.__timeMinutes : 9999;
+          const bTime = Number.isFinite(b.__timeMinutes) ? b.__timeMinutes : 9999;
+          return aTime - bTime;
+        });
+
+      const streakStats = (picksIds || []).map((row) => {
+        let winStreak = 0;
+        let missStreak = 0;
+        let lastResult = "";
+
+        streakGames.forEach((g) => {
+          const bowlKey = getBowlKey(g);
+          if (!bowlKey) return;
+          const pickId = normalizeId(row[bowlKey]);
+          if (!pickId) return;
+          const winnerId = normalizeId(getFirstValue(g, ["Winner ID", "WinnerID"]));
+          if (!winnerId) return;
+          const isWin = pickId === winnerId;
+          if (isWin) {
+            winStreak = lastResult === "win" ? winStreak + 1 : 1;
+            missStreak = 0;
+            lastResult = "win";
+          } else {
+            missStreak = lastResult === "loss" ? missStreak + 1 : 1;
+            winStreak = 0;
+            lastResult = "loss";
+          }
+        });
+
+        return {
+          name: row.Name || row.Player || "-",
+          currentWinStreak: lastResult === "win" ? winStreak : 0,
+          currentMissStreak: lastResult === "loss" ? missStreak : 0
+        };
+      });
+
+      const maxWinStreak = streakStats.reduce((max, cur) => (
+        Math.max(max, cur.currentWinStreak || 0)
+      ), 0);
+      const maxMissStreak = streakStats.reduce((max, cur) => (
+        Math.max(max, cur.currentMissStreak || 0)
+      ), 0);
+      const hotHands = maxWinStreak > 0
+        ? streakStats.filter((row) => row.currentWinStreak === maxWinStreak)
+        : [];
+      const coldStreaks = maxMissStreak > 0
+        ? streakStats.filter((row) => row.currentMissStreak === maxMissStreak)
+        : [];
+
       const excitementCandidates = yesterdayGames.map((g) => {
         const excitement = parseNumber(getFirstValue(g, ["Excitement"]));
         if (excitement === null) return null;
@@ -619,11 +677,17 @@
           items: snapshotItems,
           spreadLine
         },
+        streakWatch: {
+          hotHands,
+          coldStreaks,
+          maxWinStreak,
+          maxMissStreak
+        },
         bigGameSummary,
         crowdSummary,
         badBeatSummary
       };
-    }, [yesterdayGames, standingsBeforeYesterday, standingsAfterYesterday, pickCountsByBowl, teamById, yesterdayKey]);
+    }, [yesterdayGames, standingsBeforeYesterday, standingsAfterYesterday, pickCountsByBowl, teamById, yesterdayKey, scheduleWithDates, picksIds]);
 
     const todayData = useMemo(() => {
       const todayBowlKeys = todayGames.map(getBowlKey).filter(Boolean);
@@ -838,17 +902,25 @@
               buildYesterdayRecap.standingsSnapshot.spreadLine
             ].filter(Boolean)
         });
+        const hotHands = buildYesterdayRecap.streakWatch.hotHands || [];
+        const coldStreaks = buildYesterdayRecap.streakWatch.coldStreaks || [];
+        const maxWinStreak = buildYesterdayRecap.streakWatch.maxWinStreak || 0;
+        const maxMissStreak = buildYesterdayRecap.streakWatch.maxMissStreak || 0;
+        const hotNames = hotHands.map((row) => row.name).join(" & ");
+        const coldNames = coldStreaks.map((row) => row.name).join(" & ");
+        const hotLine = hotHands.length && maxWinStreak >= 2
+          ? `Hot hand: ${hotNames} — ${maxWinStreak} straight wins 🔥`
+          : "Hot hand: no big streaks right now";
+        const coldLine = coldStreaks.length && maxMissStreak >= 2
+          ? `Ice cold: ${coldNames} — ${maxMissStreak} straight losses 🧊`
+          : "Cold streak: nobody’s spiraling (yet)";
+
         sections.push({
-          title: "Bad Beat (Totals) 🎯",
-          accent: BRAND_COLOR,
+          title: "Streak Watch 👀",
+          accent: "#2563eb",
           lines: buildYesterdayRecap.completedCount === 0
             ? ["No games yesterday."]
-            : buildYesterdayRecap.badBeatSummary
-              ? [
-                buildYesterdayRecap.badBeatSummary.bowlName,
-                buildYesterdayRecap.badBeatSummary.text
-              ]
-              : ["No close totals yesterday."]
+            : [hotLine, coldLine]
         });
       } else {
         sections.push({
@@ -1480,18 +1552,44 @@
                 )}
 
                 {renderCard(
-                  "Bad Beat (Totals) 🎯",
-                  BRAND_COLOR,
+                  "Streak Watch 👀",
+                  "#2563eb",
                   buildYesterdayRecap.completedCount === 0
                     ? renderEmptyLine("No games yesterday.")
-                    : buildYesterdayRecap.badBeatSummary
-                      ? (
+                    : (() => {
+                      const hotHands = buildYesterdayRecap.streakWatch.hotHands || [];
+                      const coldStreaks = buildYesterdayRecap.streakWatch.coldStreaks || [];
+                      const maxWinStreak = buildYesterdayRecap.streakWatch.maxWinStreak || 0;
+                      const maxMissStreak = buildYesterdayRecap.streakWatch.maxMissStreak || 0;
+                      const hotLine = hotHands.length && maxWinStreak >= 2
+                        ? (
+                          <div>
+                            Hot hand:{" "}
+                            <span className="font-semibold">
+                              {hotHands.map((row) => row.name).join(" & ")}
+                            </span>{" "}
+                            — {maxWinStreak} straight wins 🔥
+                          </div>
+                        )
+                        : <div>Hot hand: no big streaks right now</div>;
+                      const coldLine = coldStreaks.length && maxMissStreak >= 2
+                        ? (
+                          <div>
+                            Ice cold:{" "}
+                            <span className="font-semibold">
+                              {coldStreaks.map((row) => row.name).join(" & ")}
+                            </span>{" "}
+                            — {maxMissStreak} straight losses 🧊
+                          </div>
+                        )
+                        : <div>Cold streak: nobody’s spiraling (yet)</div>;
+                      return (
                         <div className="flex flex-col gap-2 text-xl text-slate-700">
-                          <div className="text-2xl font-semibold text-slate-900">{buildYesterdayRecap.badBeatSummary.bowlName}</div>
-                          <div>{buildYesterdayRecap.badBeatSummary.text}</div>
+                          {hotLine}
+                          {coldLine}
                         </div>
-                      )
-                      : renderEmptyLine("No close totals yesterday.")
+                      );
+                    })()
                 )}
 
                 <div className="mt-auto"></div>
