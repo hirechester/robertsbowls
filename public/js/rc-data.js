@@ -160,6 +160,8 @@
     const awayId = normalizeId(getFirst(row, ["Away ID", "AwayID"]));
     const winnerId = normalizeId(getFirst(row, ["Winner ID", "WinnerID"]));
     const favoriteId = normalizeId(getFirst(row, ["Favorite ID", "FavoriteID"]));
+    const spread = getFirst(row, ["Spread", "Line", "Vegas Spread"]);
+    const total = getFirst(row, ["Total", "O/U", "Over/Under", "OU", "O-U", "Vegas Total"]);
 
     const homeTeam = homeId ? teamById[homeId] : null;
     const awayTeam = awayId ? teamById[awayId] : null;
@@ -196,6 +198,8 @@
       "Away ID": awayId,
       "Winner ID": winnerId,
       "Favorite ID": favoriteId,
+      "Spread": spread,
+      "Total": total,
 
       "_source": "BOWL_GAMES"
     };

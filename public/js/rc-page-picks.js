@@ -57,6 +57,31 @@ const { useMemo, useEffect, useRef } = React;
 
 
 
+    const getTeamSchoolName = (id) => {
+      const key = (id === null || id === undefined) ? "" : String(id).trim();
+      if (!key) return "";
+
+      const t = teamById && teamById[key];
+      if (!t) return "";
+
+      return (t["School Name"] || t.School || t.Team || t.Name || "").toString().trim();
+    };
+
+    const formatGameHeader = (game) => {
+      const favId = (game && (game["Favorite ID"] ?? game["FavoriteID"] ?? game["Fav ID"] ?? game["FavID"] ?? "")).toString().trim();
+      const favoriteName = getTeamSchoolName(favId) || (game && (game["Favorite"] ?? game["Favorite Team"] ?? game["Fav"] ?? "")).toString().trim();
+      const spreadRaw = (game && (game["Spread"] ?? game["Line"] ?? game["Vegas Spread"] ?? "")).toString().trim();
+      const totalRaw = (game && (game["Total"] ?? game["O/U"] ?? game["Over/Under"] ?? game["OU"] ?? game["O-U"] ?? game["Vegas Total"] ?? "")).toString().trim();
+
+      const left = favoriteName ? (spreadRaw ? `${favoriteName} ${spreadRaw}` : favoriteName) : "";
+      const totalPart = totalRaw ? `Total: ${totalRaw}` : "";
+
+      if (left && totalPart) return `${left} • ${totalPart}`;
+      if (left) return left;
+      if (totalPart) return totalPart;
+      return (game && game.Bowl) ? String(game.Bowl) : "";
+    };
+
     const getTeamLabel = (id) => {
       const key = (id === null || id === undefined) ? "" : String(id).trim();
       if (!key) return "";
@@ -158,6 +183,7 @@ const { useMemo, useEffect, useRef } = React;
                           <span className="text-gray-500 text-[11px] font-normal">
                             {game.Date} • {game.Time} • {game.Network}
                           </span>
+                          <span className="text-gray-500 text-[11px] font-normal">{formatGameHeader(game)}</span>
                         </div>
                       </th>
                     ))}
