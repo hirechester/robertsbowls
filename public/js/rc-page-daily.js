@@ -11,20 +11,13 @@
   const ET_TZ = "America/New_York";
   const BRAND_COLOR = "#0f172a";
   const POSTER_BG = "#f8fafc";
-  const BIG_GAME_LINES = [
-    "This was the one everybody will pretend they called.",
-    "If you only watched one game yesterday, it was supposed to be this.",
-    "The scoreboard was loud, but the picks were louder.",
-    "This game did the most damage to friendships.",
-    "One winner, one loser, and a whole lot of regret.",
-    "This one separated the calm pickers from the chaos pickers.",
-    "The moment the standings started sweating.",
-    "The game that made the group chat wake up.",
-    "If your pick was wrong here, you felt it.",
-    "This is why we play the bowls."
-  ];
-
   const pad2 = (value) => String(value).padStart(2, "0");
+
+  const formatRankLabel = (rank) => {
+    const s = ["th", "st", "nd", "rd"];
+    const v = rank % 100;
+    return `${rank}${(s[(v - 20) % 10] || s[v] || s[0])}`;
+  };
 
   const normalizeId = (val) => {
     const s = String(val ?? "").trim();
@@ -39,12 +32,6 @@
     if (!raw) return null;
     const n = parseFloat(raw);
     return Number.isFinite(n) ? n : null;
-  };
-
-  const pickRandomLine = (lines) => {
-    if (!Array.isArray(lines) || lines.length === 0) return "";
-    const idx = Math.floor(Math.random() * lines.length);
-    return lines[idx];
   };
 
   const getFirstValue = (row, keys) => {
@@ -460,6 +447,33 @@
         ? `Yes (${leaderBefore.name} -> ${leaderAfter.name})`
         : "No";
 
+      const standingsRows = Array.isArray(standingsAfterYesterday.rows) ? standingsAfterYesterday.rows : [];
+      const topCount = Math.min(5, standingsRows.length);
+      const topRows = standingsRows.slice(0, topCount);
+      const leaderScore = topRows.length ? topRows[0].wins : null;
+      const hasLeaderScore = Number.isFinite(leaderScore);
+      const leaderCount = hasLeaderScore
+        ? topRows.filter((row) => Number.isFinite(row.wins) && row.wins === leaderScore).length
+        : 0;
+      const snapshotItems = topRows.map((row, index) => {
+        const scoreValue = Number.isFinite(row.wins) ? row.wins : null;
+        const behindLeader = (hasLeaderScore && Number.isFinite(scoreValue)) ? (leaderScore - scoreValue) : null;
+        const isLeader = hasLeaderScore && Number.isFinite(scoreValue) && scoreValue === leaderScore;
+        return {
+          rank: row.rank || (index + 1),
+          name: row.name,
+          score: scoreValue,
+          gb: behindLeader,
+          isLeader,
+          leaderCount
+        };
+      });
+      const lastScore = topRows.length ? topRows[topRows.length - 1].wins : null;
+      const spreadTop = (hasLeaderScore && Number.isFinite(lastScore)) ? (leaderScore - lastScore) : null;
+      const spreadLine = (spreadTop === null || topRows.length < 2)
+        ? ""
+        : `The top five are only separated by ${spreadTop} wins`;
+
       const excitementCandidates = yesterdayGames.map((g) => {
         const excitement = parseNumber(getFirstValue(g, ["Excitement"]));
         if (excitement === null) return null;
@@ -518,7 +532,7 @@
             : `Final: ${winnerName} over ${loserName}`,
           splitText,
           accent: teamPrimaryColor(winnerTeam),
-          line: pickRandomLine(BIG_GAME_LINES)
+          line: null
         };
       }
 
@@ -601,6 +615,10 @@
         leadChange,
         biggestRise,
         biggestFall,
+        standingsSnapshot: {
+          items: snapshotItems,
+          spreadLine
+        },
         bigGameSummary,
         crowdSummary,
         badBeatSummary
@@ -769,15 +787,19 @@
     const buildSections = (mode) => {
       const sections = [];
       if (mode === "yesterday") {
+        const leadChangeLine = buildYesterdayRecap.leadChange === "No"
+          ? "No movement at the top yesterday"
+          : `Lead change: ${buildYesterdayRecap.leadChange}`;
+
         sections.push({
           title: "Standings Movers 📈",
           accent: BRAND_COLOR,
           lines: buildYesterdayRecap.completedCount === 0
             ? ["No games yesterday."]
             : [
-              `Biggest riser: ${buildYesterdayRecap.biggestRise ? `${buildYesterdayRecap.biggestRise.name} (+${buildYesterdayRecap.biggestRise.diff})` : "-"}`,
-              `Biggest faller: ${buildYesterdayRecap.biggestFall ? `${buildYesterdayRecap.biggestFall.name} (${buildYesterdayRecap.biggestFall.diff})` : "-"}`,
-              `Lead change: ${buildYesterdayRecap.leadChange}`
+              `Biggest Rise: ${buildYesterdayRecap.biggestRise ? `${buildYesterdayRecap.biggestRise.name} (+${buildYesterdayRecap.biggestRise.diff})` : "-"}`,
+              `Biggest Drop: ${buildYesterdayRecap.biggestFall ? `${buildYesterdayRecap.biggestFall.name} (${buildYesterdayRecap.biggestFall.diff})` : "-"}`,
+              leadChangeLine
             ]
         });
         sections.push({
@@ -789,23 +811,32 @@
               ? [
                 buildYesterdayRecap.bigGameSummary.bowlName,
                 buildYesterdayRecap.bigGameSummary.scoreLine,
-                buildYesterdayRecap.bigGameSummary.splitText,
-                buildYesterdayRecap.bigGameSummary.line
+                buildYesterdayRecap.bigGameSummary.splitText
               ].filter(Boolean)
               : ["No big game found."]
         });
+        const snapshotLines = (buildYesterdayRecap.standingsSnapshot.items || []).map((item) => {
+          const rankText = formatRankLabel(item.rank);
+          const scoreText = Number.isFinite(item.score) ? `${item.score} wins` : "-";
+          let suffix = "";
+          if (item.isLeader) {
+            const leaderLabel = item.leaderCount > 1 ? "Leader (co-leader)" : "Leader";
+            suffix = ` (${leaderLabel})`;
+          } else if (item.gb !== null && item.gb !== undefined) {
+            suffix = ` (${item.gb} GB)`;
+          }
+          return `${rankText} ${item.name} — ${scoreText}${suffix}`;
+        });
+
         sections.push({
-          title: "Crowd Moment 🔥",
-          accent: buildYesterdayRecap.crowdSummary ? buildYesterdayRecap.crowdSummary.accent : BRAND_COLOR,
+          title: "Standings Snapshot 🥇",
+          accent: "#fbbf24",
           lines: buildYesterdayRecap.completedCount === 0
             ? ["No games yesterday."]
-            : buildYesterdayRecap.crowdSummary
-              ? [
-                buildYesterdayRecap.crowdSummary.bowlName,
-                buildYesterdayRecap.crowdSummary.label,
-                buildYesterdayRecap.crowdSummary.pctText
-              ]
-              : ["No big crowd swing yesterday."]
+            : [
+              ...snapshotLines,
+              buildYesterdayRecap.standingsSnapshot.spreadLine
+            ].filter(Boolean)
         });
         sections.push({
           title: "Bad Beat (Totals) 🎯",
@@ -1088,6 +1119,14 @@
       <div className="text-xl text-slate-500">{text}</div>
     );
 
+    const renderRankPill = (rank) => {
+      const text = formatRankLabel(rank);
+      if (rank === 1) return <span className="inline-block px-3 py-1 rounded-full bg-yellow-100 text-yellow-800 font-bold text-sm whitespace-nowrap">{text}</span>;
+      if (rank === 2) return <span className="inline-block px-3 py-1 rounded-full bg-gray-100 text-gray-600 font-bold text-sm whitespace-nowrap">{text}</span>;
+      if (rank === 3) return <span className="inline-block px-3 py-1 rounded-full bg-orange-100 text-orange-800 font-bold text-sm whitespace-nowrap">{text}</span>;
+      return <span className="inline-block px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-semibold text-sm whitespace-nowrap">{text}</span>;
+    };
+
     const showYesterdayPoster = !isPosterOnly || posterMode === "yesterday";
     const showTodayPoster = !isPosterOnly || posterMode === "today";
 
@@ -1361,9 +1400,29 @@
                     ? renderEmptyLine("No games yesterday.")
                     : (
                       <div className="flex flex-col gap-2 text-xl text-slate-700">
-                        <div>Biggest riser: {buildYesterdayRecap.biggestRise ? `${buildYesterdayRecap.biggestRise.name} (+${buildYesterdayRecap.biggestRise.diff})` : "-"}</div>
-                        <div>Biggest faller: {buildYesterdayRecap.biggestFall ? `${buildYesterdayRecap.biggestFall.name} (${buildYesterdayRecap.biggestFall.diff})` : "-"}</div>
-                        <div>Lead change: {buildYesterdayRecap.leadChange}</div>
+                        <div>
+                          Biggest Rise:{" "}
+                          {buildYesterdayRecap.biggestRise ? (
+                            <>
+                              <span className="font-semibold">{buildYesterdayRecap.biggestRise.name}</span>
+                              {` (+${buildYesterdayRecap.biggestRise.diff})`}
+                            </>
+                          ) : "-"}
+                        </div>
+                        <div>
+                          Biggest Drop:{" "}
+                          {buildYesterdayRecap.biggestFall ? (
+                            <>
+                              <span className="font-semibold">{buildYesterdayRecap.biggestFall.name}</span>
+                              {` (${buildYesterdayRecap.biggestFall.diff})`}
+                            </>
+                          ) : "-"}
+                        </div>
+                        <div>
+                          {buildYesterdayRecap.leadChange === "No"
+                            ? "No movement at the top yesterday"
+                            : `Lead Change: ${buildYesterdayRecap.leadChange}`}
+                        </div>
                       </div>
                     )
                 )}
@@ -1381,26 +1440,43 @@
                           {buildYesterdayRecap.bigGameSummary.splitText ? (
                             <div>{buildYesterdayRecap.bigGameSummary.splitText}</div>
                           ) : null}
-                          <div className="text-slate-600">{buildYesterdayRecap.bigGameSummary.line}</div>
                         </div>
                       )
                       : renderEmptyLine("No big game found.")
                 )}
 
                 {renderCard(
-                  "Crowd Moment 🔥",
-                  buildYesterdayRecap.crowdSummary ? buildYesterdayRecap.crowdSummary.accent : BRAND_COLOR,
+                  "Standings Snapshot 🥇",
+                  "#fbbf24",
                   buildYesterdayRecap.completedCount === 0
                     ? renderEmptyLine("No games yesterday.")
-                    : buildYesterdayRecap.crowdSummary
-                      ? (
-                        <div className="flex flex-col gap-2 text-xl text-slate-700">
-                          <div className="text-2xl font-semibold text-slate-900">{buildYesterdayRecap.crowdSummary.bowlName}</div>
-                          <div className="text-slate-600">{buildYesterdayRecap.crowdSummary.label}</div>
-                          <div>{buildYesterdayRecap.crowdSummary.pctText}</div>
-                        </div>
-                      )
-                      : renderEmptyLine("No big crowd swing yesterday.")
+                    : (
+                      <div className="flex flex-col gap-2 text-xl text-slate-700">
+                        {(buildYesterdayRecap.standingsSnapshot.items || []).map((item) => {
+                          const scoreText = Number.isFinite(item.score) ? `${item.score} wins` : "-";
+                          let suffix = "";
+                          if (item.isLeader) {
+                            const leaderLabel = item.leaderCount > 1 ? "Leader (co-leader)" : "Leader";
+                            suffix = ` (${leaderLabel})`;
+                          } else if (item.gb !== null && item.gb !== undefined) {
+                            suffix = ` (${item.gb} GB)`;
+                          }
+
+                          return (
+                            <div key={`${item.rank}-${item.name}`} className="flex items-center gap-3">
+                              {renderRankPill(item.rank)}
+                              <div className="flex flex-wrap items-baseline gap-2">
+                                <span className="font-semibold text-slate-900">{item.name}</span>
+                                <span className="text-slate-700">— {scoreText}{suffix}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {buildYesterdayRecap.standingsSnapshot.spreadLine ? (
+                          <div className="text-slate-600">{buildYesterdayRecap.standingsSnapshot.spreadLine}</div>
+                        ) : null}
+                      </div>
+                    )
                 )}
 
                 {renderCard(
