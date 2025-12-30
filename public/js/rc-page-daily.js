@@ -264,6 +264,53 @@
       };
     }, []);
 
+    const posterMode = useMemo(() => {
+      const params = new URLSearchParams(window.location.search || "");
+      const mode = (params.get("poster") || "").toLowerCase();
+      return (mode === "yesterday" || mode === "today") ? mode : "";
+    }, []);
+
+    const isPosterOnly = Boolean(posterMode);
+
+    const [viewportSize, setViewportSize] = useState(() => ({
+      width: window.innerWidth,
+      height: window.innerHeight
+    }));
+
+    useEffect(() => {
+      if (!isPosterOnly) return;
+
+      const updateViewport = () => {
+        const viewport = window.visualViewport;
+        const width = viewport ? viewport.width : window.innerWidth;
+        const height = viewport ? viewport.height : window.innerHeight;
+        setViewportSize({ width, height });
+      };
+
+      updateViewport();
+      window.addEventListener("resize", updateViewport);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", updateViewport);
+        window.visualViewport.addEventListener("scroll", updateViewport);
+      }
+
+      return () => {
+        window.removeEventListener("resize", updateViewport);
+        if (window.visualViewport) {
+          window.visualViewport.removeEventListener("resize", updateViewport);
+          window.visualViewport.removeEventListener("scroll", updateViewport);
+        }
+      };
+    }, [isPosterOnly]);
+
+    const posterScale = useMemo(() => {
+      if (!isPosterOnly) return 1;
+      const availableWidth = Math.max(1, viewportSize.width);
+      const availableHeight = Math.max(1, viewportSize.height);
+      const scale = Math.min(availableWidth / 1080, availableHeight / 1920);
+      return Math.max(0.2, Math.min(1, scale));
+    }, [isPosterOnly, viewportSize]);
+
     const todayKey = useMemo(() => toEtDateKey(new Date()), []);
     const yesterdayKey = useMemo(() => {
       const todayDate = dateFromKey(todayKey);
@@ -1020,6 +1067,14 @@
       height: "1920px"
     };
 
+    const posterInnerStyle = isPosterOnly
+      ? { transform: `scale(${posterScale})`, transformOrigin: "top left" }
+      : null;
+
+    const posterFrameStyle = isPosterOnly
+      ? { width: `${1080 * posterScale}px`, height: `${1920 * posterScale}px` }
+      : null;
+
     const renderCard = (title, accentColor, body) => (
       <div
         className="daily-section"
@@ -1039,10 +1094,14 @@
       <div className="text-xl text-slate-500">{text}</div>
     );
 
+    const showYesterdayPoster = !isPosterOnly || posterMode === "yesterday";
+    const showTodayPoster = !isPosterOnly || posterMode === "today";
+
     return (
-      <div className="min-h-screen bg-slate-100 pt-16 pb-16">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="mb-8 flex flex-col gap-4">
+      <div className={isPosterOnly ? "min-h-screen bg-slate-900 flex items-center justify-center p-2" : "min-h-screen bg-slate-100 pt-16 pb-16"}>
+        <div className={isPosterOnly ? "" : "max-w-6xl mx-auto px-4"}>
+          {!isPosterOnly && (
+            <div className="mb-8 flex flex-col gap-4">
             <div>
               <div className="text-3xl font-serif text-slate-900">Daily Recap Export</div>
               <div className="text-slate-600">Hidden route for generating phone-friendly recap images.</div>
@@ -1062,13 +1121,32 @@
               >
                 Download Today PNG
               </button>
+              <button
+                className="px-4 py-2 rounded-lg bg-slate-700 text-white font-semibold shadow"
+                onClick={() => {
+                  const base = `${window.location.origin}${window.location.pathname}`;
+                  window.open(`${base}?poster=yesterday#daily`, "_blank", "noopener,noreferrer");
+                }}
+              >
+                Open Yesterday Fullscreen
+              </button>
+              <button
+                className="px-4 py-2 rounded-lg bg-slate-700 text-white font-semibold shadow"
+                onClick={() => {
+                  const base = `${window.location.origin}${window.location.pathname}`;
+                  window.open(`${base}?poster=today#daily`, "_blank", "noopener,noreferrer");
+                }}
+              >
+                Open Today Fullscreen
+              </button>
               {!html2CanvasReady && (
                 <span className="text-sm text-slate-500 self-center">Loading export tools...</span>
               )}
             </div>
           </div>
+          )}
 
-          <div className="flex flex-col gap-12 items-start">
+          <div className={isPosterOnly ? "flex items-center justify-center" : "flex flex-col gap-12 items-start"}>
             <style>{`
               .daily-poster {
                 position: relative;
@@ -1247,7 +1325,9 @@
                 to { opacity: 1; transform: translateY(0); }
               }
             `}</style>
-            <div ref={yesterdayPosterRef} style={posterStyle} className="daily-poster rounded-[36px] overflow-hidden daily-glow">
+            {showYesterdayPoster && (
+              <div style={isPosterOnly ? posterFrameStyle : null}>
+                <div ref={yesterdayPosterRef} style={isPosterOnly ? { ...posterStyle, ...posterInnerStyle } : posterStyle} className="daily-poster rounded-[36px] overflow-hidden daily-glow">
               <div className="h-full w-full flex flex-col p-12 gap-8 daily-fade-in">
                 <div className="daily-header rounded-[32px] px-10 py-10 shadow-2xl">
                   <div className="daily-header-orb left"></div>
@@ -1333,9 +1413,13 @@
 
                 <div className="mt-auto text-center text-slate-200 text-lg tracking-widest uppercase">Made for phone screenshots</div>
               </div>
-            </div>
+                </div>
+              </div>
+            )}
 
-            <div ref={todayPosterRef} style={posterStyle} className="daily-poster rounded-[36px] overflow-hidden daily-glow">
+            {showTodayPoster && (
+              <div style={isPosterOnly ? posterFrameStyle : null}>
+                <div ref={todayPosterRef} style={isPosterOnly ? { ...posterStyle, ...posterInnerStyle } : posterStyle} className="daily-poster rounded-[36px] overflow-hidden daily-glow">
               <div className="h-full w-full flex flex-col p-12 gap-8 daily-fade-in">
                 <div className="daily-header rounded-[32px] px-10 py-10 shadow-2xl">
                   <div className="daily-header-orb left"></div>
@@ -1426,7 +1510,9 @@
 
                 <div className="mt-auto text-center text-slate-200 text-lg tracking-widest uppercase">Made for phone screenshots</div>
               </div>
-            </div>
+                </div>
+              </div>
+            )}
 
           </div>
         </div>

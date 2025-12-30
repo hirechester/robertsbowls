@@ -66,6 +66,10 @@ const getInitialTab = () => {
 
 const App = () => {
     const [activeTab, setActiveTab] = useState(getInitialTab);
+    const isPosterOnly = useMemo(() => {
+        const params = new URLSearchParams(window.location.search || "");
+        return Boolean(params.get("poster"));
+    }, []);
 
     useEffect(() => {
         const onHashChange = () => {
@@ -76,8 +80,8 @@ const App = () => {
         return () => window.removeEventListener('hashchange', onHashChange);
     }, []);
     return (
-        <div className="min-h-screen bg-white pt-16">
-            <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
+        <div className={isPosterOnly ? "min-h-screen bg-white" : "min-h-screen bg-white pt-16"}>
+            {!isPosterOnly && <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />}
             {activeTab === 'home' && <HomePage />}
             {activeTab === 'standings' && <StandingsPage />}
             {activeTab === 'picks' && <PicksPage />}
