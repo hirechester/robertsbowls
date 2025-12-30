@@ -180,7 +180,8 @@
             });
 
             stats.sort((a, b) => b.wins - a.wins);
-            const leader = stats[0];
+            const leaderWins = stats[0] ? stats[0].wins : 0;
+            const leaders = stats.filter(p => p.wins === leaderWins);
             let currentRank = 1;
 
             for (let i = 0; i < stats.length; i++) {
@@ -188,24 +189,28 @@
 
                 stats[i].rank = currentRank;
 
-                const winDeficit = leader.wins - stats[i].wins;
+                const winDeficit = leaderWins - stats[i].wins;
                 let status = "alive";
 
                 if (stats[i].rank === 1) {
                     stats[i].swingGames = "-";
                     status = "leading";
                 } else {
-                    let diffs = 0;
-                    sortedSchedule.forEach(game => {
-                        if (!normalizeId(game["Winner ID"])) {
-                            const bowlKey = getBowlKey(game);
-                            const lp = normalizeId(leader.rawPicksIds[bowlKey]);
-                            const pp = normalizeId(stats[i].rawPicksIds[bowlKey]);
-                            if (lp && pp && lp !== pp) diffs++;
-                        }
+                    let maxDiffs = 0;
+                    leaders.forEach(currentLeader => {
+                        let diffs = 0;
+                        sortedSchedule.forEach(game => {
+                            if (!normalizeId(game["Winner ID"])) {
+                                const bowlKey = getBowlKey(game);
+                                const lp = normalizeId(currentLeader.rawPicksIds[bowlKey]);
+                                const pp = normalizeId(stats[i].rawPicksIds[bowlKey]);
+                                if (lp && pp && lp !== pp) diffs++;
+                            }
+                        });
+                        if (diffs > maxDiffs) maxDiffs = diffs;
                     });
-                    stats[i].swingGames = diffs;
-                    if (diffs < winDeficit) status = "eliminated";
+                    stats[i].swingGames = maxDiffs;
+                    if (maxDiffs < winDeficit) status = "eliminated";
                 }
                 stats[i].status = status;
             }
@@ -353,12 +358,12 @@
                     <div className="px-4 py-3 border-b border-gray-100"><h3 className="text-lg font-bold text-gray-900 font-serif">Legend</h3></div>
                     <div className="p-4 space-y-4 text-sm text-gray-600">
                         <div className="space-y-1"><div className="flex gap-2 items-start"><span className="font-bold text-gray-900 whitespace-nowrap text-base">🔮 Win Probability:</span></div><p className="mb-2">Based on 2,000 Monte Carlo simulations of the remaining games (treated as 50/50 coin flips).</p></div>
-                        <div className="border-t border-gray-100 pt-3 space-y-1"><div className="flex gap-2 items-start"><span className="font-bold text-gray-900 whitespace-nowrap text-base">🧮 Elimination Status:</span></div><p className="mb-2">Compares how many wins you’re behind the lead to your remaining swing chances.</p>
-                            <ul className="list-disc pl-5 space-y-1"><li><span className="font-bold text-yellow-700">Leading</span> — currently in 1st place (or tied for it)</li><li><span className="font-bold text-green-700">Alive</span> — mathematically possible to catch the leader</li><li><span className="font-bold text-red-700">Eliminated</span> — not enough swing games remaining to overcome the deficit</li></ul>
+                        <div className="border-t border-gray-100 pt-3 space-y-1"><div className="flex gap-2 items-start"><span className="font-bold text-gray-900 whitespace-nowrap text-base">🧮 Elimination Status:</span></div><p className="mb-2">Compares how many wins you’re behind the lead to your remaining swing chances against any current leader.</p>
+                            <ul className="list-disc pl-5 space-y-1"><li><span className="font-bold text-yellow-700">Leading</span> — currently in 1st place (or tied for it)</li><li><span className="font-bold text-green-700">Alive</span> — mathematically possible to catch at least one current leader</li><li><span className="font-bold text-red-700">Eliminated</span> — not enough swing games remaining to overcome the deficit against all current leaders</li></ul>
                         </div>
                         <div className="border-t border-gray-100 pt-3 space-y-1">
                             <div className="flex gap-2 items-start"><span className="font-bold text-gray-900 whitespace-nowrap text-base">🪜 Swing Games:</span></div>
-                            <p className="mb-2">The number of remaining games where your pick differs from the current leader. You can only gain ground on the leader in these specific games. If this number is lower than your win deficit, you are eliminated.</p>
+                            <p className="mb-2">The number of remaining games where your pick differs from the current leaders (best-case path). You can only gain ground on the lead in these specific games. If this number is lower than your win deficit, you are eliminated.</p>
                         </div>
                     </div>
                 </div>
