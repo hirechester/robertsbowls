@@ -229,7 +229,7 @@
   };
 
   const DailyPage = () => {
-    const { schedule, picksIds, teamById, loading, error } = RC.data.useLeagueData();
+    const { schedule, bowlGames, picksIds, teamById, loading, error } = RC.data.useLeagueData();
     const [html2CanvasReady, setHtml2CanvasReady] = useState(Boolean(window.html2canvas));
     const yesterdayPosterRef = useRef(null);
     const todayPosterRef = useRef(null);
@@ -309,10 +309,19 @@
       if (!Array.isArray(schedule)) return [];
       return schedule.map((g) => ({
         ...g,
-        __dateKey: normalizeDateKey(getFirstValue(g, ["Date"])),
-        __timeMinutes: parseTimeToMinutes(getFirstValue(g, ["Time"]))
+        __dateKey: normalizeDateKey(getFirstValue(g, ["Date", "Game Date", "Date ET", "Date (ET)", "Date (EST)", "GameDay"])),
+        __timeMinutes: parseTimeToMinutes(getFirstValue(g, ["Time", "Time ET", "Time (ET)", "Kickoff", "Kickoff Time"]))
       })).filter(g => g.__dateKey);
     }, [schedule]);
+
+    const bowlGamesWithDates = useMemo(() => {
+      if (!Array.isArray(bowlGames)) return [];
+      return bowlGames.map((g) => ({
+        ...g,
+        __dateKey: normalizeDateKey(getFirstValue(g, ["Date", "Game Date", "Date ET", "Date (ET)", "Date (EST)", "GameDay"])),
+        __timeMinutes: parseTimeToMinutes(getFirstValue(g, ["Time", "Time ET", "Time (ET)", "Kickoff", "Kickoff Time"]))
+      })).filter(g => g.__dateKey);
+    }, [bowlGames]);
 
     const pickCountsByBowl = useMemo(() => {
       const map = {};
@@ -340,6 +349,83 @@
         return Boolean(winnerId);
       });
     }, [scheduleWithDates, yesterdayKey]);
+
+    const scoreboardData = useMemo(() => {
+      const homeIdKeys = ["Home ID", "HomeID", "Home Team ID", "HomeTeamID", "Home Team Id"];
+      const awayIdKeys = ["Away ID", "AwayID", "Away Team ID", "AwayTeamID", "Away Team Id"];
+      const homeNameKeys = ["Home Team", "Home", "Home School", "Team 1", "Team1", "Home Name"];
+      const awayNameKeys = ["Away Team", "Away", "Away School", "Team 2", "Team2", "Away Name"];
+      const formatPts = (raw) => (raw ? raw : "-");
+      const formatSeededName = (team, fallbackName) => {
+        const name = getFirstValue(team, ["School", "School Name", "Team", "Team Name", "Name"]) || fallbackName || "-";
+        const seedRaw = getFirstValue(team, ["Seed", "Team Seed", "Seed #", "Seed Number", "Playoff Seed", "CFP Seed"]);
+        const seedMatch = String(seedRaw || "").match(/(\d+)/);
+        if (!seedMatch) return name;
+        return `#${seedMatch[1]} ${name}`;
+      };
+      const yesterdayMatches = bowlGamesWithDates
+        .map((g, idx) => ({ g, idx }))
+        .filter(({ g }) => {
+          if (g.__dateKey !== yesterdayKey) return false;
+          return true;
+        })
+        .sort((a, b) => {
+          const aTime = Number.isFinite(a.g.__timeMinutes) ? a.g.__timeMinutes : null;
+          const bTime = Number.isFinite(b.g.__timeMinutes) ? b.g.__timeMinutes : null;
+          if (aTime !== null && bTime !== null && aTime !== bTime) return aTime - bTime;
+          if (aTime !== null && bTime === null) return -1;
+          if (aTime === null && bTime !== null) return 1;
+          return a.idx - b.idx;
+        });
+
+      const lines = [];
+      yesterdayMatches.forEach(({ g }) => {
+        const homeId = normalizeId(getFirstValue(g, homeIdKeys));
+        const awayId = normalizeId(getFirstValue(g, awayIdKeys));
+        const homePtsStr = String(g["Home Pts"] ?? "").trim();
+        const awayPtsStr = String(g["Away Pts"] ?? "").trim();
+        const homePtsRaw = parseNumber(homePtsStr);
+        const awayPtsRaw = parseNumber(awayPtsStr);
+
+        const winnerId = normalizeId(getFirstValue(g, ["Winner ID", "WinnerID"]));
+        const homeNameFallback = getFirstValue(g, homeNameKeys) || (homeId ? `Team ${homeId}` : "Home");
+        const awayNameFallback = getFirstValue(g, awayNameKeys) || (awayId ? `Team ${awayId}` : "Away");
+        let homePts = homePtsRaw;
+        let awayPts = awayPtsRaw;
+        let winnerIsHome = Number.isFinite(homePts) && Number.isFinite(awayPts)
+          ? homePts >= awayPts
+          : true;
+        if (winnerId) {
+          winnerIsHome = winnerId === homeId;
+          if (!winnerIsHome && winnerId !== awayId) {
+            winnerIsHome = Number.isFinite(homePts) && Number.isFinite(awayPts)
+              ? homePts >= awayPts
+              : true;
+          }
+        }
+
+        const winnerTeam = winnerIsHome ? (teamById ? teamById[homeId] : null) : (teamById ? teamById[awayId] : null);
+        const loserTeam = winnerIsHome ? (teamById ? teamById[awayId] : null) : (teamById ? teamById[homeId] : null);
+        const winnerName = formatSeededName(
+          winnerTeam,
+          winnerIsHome ? homeNameFallback : awayNameFallback
+        );
+        const loserName = formatSeededName(
+          loserTeam,
+          winnerIsHome ? awayNameFallback : homeNameFallback
+        );
+        const winnerPts = winnerIsHome ? homePts : awayPts;
+        const loserPts = winnerIsHome ? awayPts : homePts;
+        const winnerPtsStr = winnerIsHome ? formatPts(homePtsStr) : formatPts(awayPtsStr);
+        const loserPtsStr = winnerIsHome ? formatPts(awayPtsStr) : formatPts(homePtsStr);
+        lines.push(`${winnerName} def. ${loserName} ${winnerPtsStr}-${loserPtsStr}`);
+      });
+
+      if (!lines.length) {
+        return { lines: ["No finals yesterday."] };
+      }
+      return { lines };
+    }, [bowlGamesWithDates, yesterdayKey, teamById]);
 
     const todayGames = useMemo(() => {
       return scheduleWithDates.filter((g) => g.__dateKey === todayKey);
@@ -878,6 +964,13 @@
                 buildYesterdayRecap.bigGameSummary.splitText
               ].filter(Boolean)
               : ["No big game found."]
+        });
+        sections.push({
+          title: "Scoreboard Watching 🏈",
+          accent: "#16a34a",
+          lines: buildYesterdayRecap.completedCount === 0
+            ? ["No games yesterday."]
+            : scoreboardData.lines
         });
         const snapshotLines = (buildYesterdayRecap.standingsSnapshot.items || []).map((item) => {
           const rankText = formatRankLabel(item.rank);
@@ -1507,7 +1600,7 @@
                     : buildYesterdayRecap.bigGameSummary
                       ? (
                         <div className="flex flex-col gap-2 text-xl text-slate-700">
-                          <div className="text-2xl font-semibold text-slate-900">{buildYesterdayRecap.bigGameSummary.bowlName}</div>
+                          <div className="text-xl font-semibold text-slate-900">{buildYesterdayRecap.bigGameSummary.bowlName}</div>
                           <div>{buildYesterdayRecap.bigGameSummary.scoreLine}</div>
                           {buildYesterdayRecap.bigGameSummary.splitText ? (
                             <div>{buildYesterdayRecap.bigGameSummary.splitText}</div>
@@ -1515,6 +1608,20 @@
                         </div>
                       )
                       : renderEmptyLine("No big game found.")
+                )}
+
+                {renderCard(
+                  "Scoreboard Watching 🏈",
+                  "#16a34a",
+                  buildYesterdayRecap.completedCount === 0
+                    ? renderEmptyLine("No games yesterday.")
+                    : (
+                      <div className="flex flex-col gap-2 text-xl text-slate-700">
+                        {(scoreboardData.lines || []).map((line) => (
+                          <div key={line}>{line}</div>
+                        ))}
+                      </div>
+                    )
                 )}
 
                 {renderCard(
