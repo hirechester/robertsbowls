@@ -1062,26 +1062,33 @@
         </div>
 
         <div className="max-w-6xl mx-auto px-4 pb-16 rc-bingo-shell">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-6">
-              <div className="text-sm text-slate-600">
-                <span className="font-semibold text-slate-900">Squares hit:</span> {stats.hits}/25
-              </div>
-              <div className="text-sm text-slate-600">
-                <span className="font-semibold text-slate-900">Bingos:</span> {stats.bingos}
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Player</label>
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative w-full max-w-md">
               <select
-                className="mt-1 block w-full sm:w-60 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm"
                 value={selectedPlayer}
                 onChange={(e) => setSelectedPlayer(e.target.value)}
+                className="appearance-none bg-white border border-gray-300 text-gray-900 text-lg rounded-xl focus:ring-blue-500 focus:border-blue-500 block w-full p-4 font-bold shadow-sm text-center"
               >
                 {players.map((p) => (
                   <option key={p.name} value={p.name}>{p.name}</option>
                 ))}
               </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
+                <svg className="fill-current h-4 w-4" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 w-full max-w-md">
+              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center shadow-sm">
+                <div className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Squares Hit</div>
+                <div className="text-2xl font-black text-slate-900 mt-1">
+                  {stats.hits}<span className="text-sm font-bold text-slate-400">/25</span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center shadow-sm">
+                <div className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Bingos</div>
+                <div className="text-2xl font-black text-slate-900 mt-1">{stats.bingos}</div>
+              </div>
             </div>
           </div>
 
