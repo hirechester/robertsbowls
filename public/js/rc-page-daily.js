@@ -865,14 +865,6 @@
           }
         }
 
-        if (last && rows.length > 4) {
-          const above = rows[rows.length - 2];
-          const diff = above.wins - last.wins;
-          if (diff <= todayGames.length) {
-            lines.push(`${last.name} can climb out of last with a clean day.`);
-          }
-        }
-
         return lines.slice(0, 5).map((line) => String(line || "").replace(/\.$/, ""));
       })();
 
