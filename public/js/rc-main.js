@@ -13,7 +13,7 @@ const { Navigation } = window.RC;
 
 // 0. HOME PAGE (loaded from js/rc-page-home.js)
 window.RC.pages = window.RC.pages || {};
-const { HomePage, StandingsPage, PicksPage, RacePage, BadgesPage, VersusPage, SimulatorPage, ScoutingReportPage, HistoryPage, RulesPage } = window.RC.pages;
+const { HomePage, StandingsPage, PicksPage, RacePage, BadgesPage, VersusPage, SimulatorPage, ScoutingReportPage, HistoryPage, RulesPage, BingoPage } = window.RC.pages;
 
 // 1. STANDINGS PAGE (loaded from js/rc-page-standings.js)
 
@@ -42,8 +42,38 @@ const { HomePage, StandingsPage, PicksPage, RacePage, BadgesPage, VersusPage, Si
 // 8. HISTORY PAGE (loaded from js/rc-page-history.js)
 // (HistoryPage extracted)
 
+const VALID_TABS = new Set([
+    'home',
+    'standings',
+    'picks',
+    'bingo',
+    'race',
+    'badges',
+    'versus',
+    'simulator',
+    'scouting',
+    'history',
+    'rules'
+]);
+
+const getInitialTab = () => {
+    const hash = (window.location.hash || '').replace('#', '').trim().toLowerCase();
+    const path = (window.location.pathname || '').split('/').filter(Boolean).pop() || '';
+    const candidate = hash || path.toLowerCase();
+    return VALID_TABS.has(candidate) ? candidate : 'home';
+};
+
 const App = () => {
-    const [activeTab, setActiveTab] = useState('home');
+    const [activeTab, setActiveTab] = useState(getInitialTab);
+
+    useEffect(() => {
+        const onHashChange = () => {
+            const nextTab = getInitialTab();
+            setActiveTab(nextTab);
+        };
+        window.addEventListener('hashchange', onHashChange);
+        return () => window.removeEventListener('hashchange', onHashChange);
+    }, []);
     return (
         <div className="min-h-screen bg-white pt-16">
             <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -54,9 +84,10 @@ const App = () => {
             {activeTab === 'badges' && <BadgesPage />}
             {activeTab === 'versus' && <VersusPage />}
             {activeTab === 'simulator' && <SimulatorPage />}
-            {activeTab === 'scouting' && <ScoutingReportPage />}
-            {activeTab === 'history' && <HistoryPage />}
+        {activeTab === 'scouting' && <ScoutingReportPage />}
+        {activeTab === 'history' && <HistoryPage />}
         {activeTab === 'rules' && <RulesPage />}
+        {activeTab === 'bingo' && <BingoPage />}
         </div>
     );
 };
