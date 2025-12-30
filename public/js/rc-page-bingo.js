@@ -873,6 +873,7 @@
   const BingoPage = () => {
     const { schedule, bowlGames, picksIds, teamById, loading, error } = RC.data.useLeagueData();
     const [selectedPlayer, setSelectedPlayer] = useState("");
+    const [expandedId, setExpandedId] = useState("");
 
     const players = useMemo(() => {
       if (!Array.isArray(picksIds)) return [];
@@ -880,8 +881,15 @@
     }, [picksIds]);
 
     useEffect(() => {
-      if (!selectedPlayer && players.length) {
-        setSelectedPlayer(players[0].name);
+      if (!players.length) return;
+      if (!selectedPlayer) {
+        const pick = players[Math.floor(Math.random() * players.length)];
+        setSelectedPlayer(pick ? pick.name : "");
+        return;
+      }
+      if (!players.some(p => p.name === selectedPlayer)) {
+        const pick = players[Math.floor(Math.random() * players.length)];
+        setSelectedPlayer(pick ? pick.name : "");
       }
     }, [players, selectedPlayer]);
 
@@ -1052,8 +1060,16 @@
     if (loading) return <Spinner text="Loading Bingo..." />;
     if (error) return <Err message={(error && (error.message || String(error))) || "Failed to load bingo data"} />;
 
+    const expandedSquare = cardSquares.find(sq => sq && sq.id === expandedId) || null;
+    const triggeredBowl = expandedSquare && expandedSquare.triggeredBy
+      ? dataCtx.bowls.find(b => normalizeText(b.bowlName) === normalizeText(expandedSquare.triggeredBy))
+      : null;
+    const triggeredScore = triggeredBowl && Number.isFinite(triggeredBowl.homePts) && Number.isFinite(triggeredBowl.awayPts)
+      ? `${teamNameFromId(dataCtx.teamById, triggeredBowl.awayId) || "Away"} ${triggeredBowl.awayPts} - ${teamNameFromId(dataCtx.teamById, triggeredBowl.homeId) || "Home"} ${triggeredBowl.homePts}`
+      : "";
+
     return (
-      <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
+      <div className="flex flex-col min-h-screen bg-white font-sans pb-12">
         <div className="bg-white pt-8 pb-8 px-4">
           <div className="max-w-7xl mx-auto text-center">
             <h2 className="text-3xl text-blue-900 font-bold mb-1">Bowl Bingo</h2>
@@ -1106,18 +1122,19 @@
               return (
                 <div
                   key={square.id}
-                  className={`min-h-[120px] rounded-xl border p-3 shadow-sm transition-colors ${hit ? "bg-emerald-50 border-emerald-200" : "bg-white border-slate-200"}`}
+                  className={`min-h-[120px] rounded-xl border p-3 shadow-sm transition-colors cursor-pointer overflow-hidden ${hit ? "bg-emerald-50 border-emerald-200" : "bg-white border-slate-200"}`}
+                  onClick={() => setExpandedId(square.id)}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">{square.title}</h3>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${hit ? "bg-emerald-200 text-emerald-900" : "bg-slate-100 text-slate-500"}`}>
+                    <h3 className={`text-[11px] leading-tight font-bold uppercase tracking-wide break-words hyphens-auto sm:text-xs ${hit ? "text-emerald-700" : "text-slate-500"}`}>{square.title}</h3>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase hidden sm:inline-flex ${hit ? "bg-emerald-200 text-emerald-900" : "bg-slate-100 text-slate-500"}`}>
                       {hit ? "Hit" : "Pending"}
                     </span>
                   </div>
-                  <p className="mt-2 text-xs leading-snug text-slate-700">{square.description}</p>
+                  <p className="mt-2 text-[11px] leading-snug text-slate-700 hidden sm:block sm:text-xs">{square.description}</p>
                   {hit && square.triggeredBy ? (
-                    <div className="mt-3 text-[11px] font-medium text-slate-500">
-                      Triggered by: {square.triggeredBy}
+                    <div className="mt-2 text-[10px] font-medium text-slate-500 hidden sm:block sm:text-[11px]">
+                      ✅ {square.triggeredBy}
                     </div>
                   ) : null}
                 </div>
@@ -1125,6 +1142,41 @@
             })}
           </div>
         </div>
+
+        {expandedSquare ? (
+          <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center bg-slate-900/60 p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Bowl Bingo</div>
+                  <h3 className="text-lg font-black text-slate-900 mt-1">{expandedSquare.title}</h3>
+                </div>
+                <button
+                  onClick={() => setExpandedId("")}
+                  className="text-slate-500 text-sm font-bold"
+                >
+                  Close
+                </button>
+              </div>
+              <p className="mt-3 text-sm text-slate-700 leading-relaxed">{expandedSquare.description}</p>
+              {expandedSquare.hit ? (
+                <div className="mt-3 text-xs font-semibold text-emerald-700 uppercase tracking-widest">Hit</div>
+              ) : (
+                <div className="mt-3 text-xs font-semibold text-slate-400 uppercase tracking-widest">Pending</div>
+              )}
+              {expandedSquare.triggeredBy ? (
+                <div className="mt-2 text-sm text-slate-800">
+                  Triggered by: {expandedSquare.triggeredBy}
+                </div>
+              ) : null}
+              {triggeredScore ? (
+                <div className="mt-1 text-sm text-slate-800">
+                  Final: {triggeredScore}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   };
@@ -1402,6 +1454,13 @@
     if (token === "espn") return net.includes("espn") && !net.includes("espn2");
     if (token === "cw") return net.includes("cw");
     return net.includes(token);
+  }
+
+  function teamNameFromId(teamById, teamId) {
+    if (!teamId) return "";
+    const team = teamById && teamById[teamId];
+    if (!team) return "";
+    return getFirst(team, ["School Name", "School", "Team", "Name"]);
   }
 
   RC.pages.BingoPage = BingoPage;
