@@ -306,8 +306,7 @@
     const posterScale = useMemo(() => {
       if (!isPosterOnly) return 1;
       const availableWidth = Math.max(1, viewportSize.width);
-      const availableHeight = Math.max(1, viewportSize.height);
-      const scale = Math.min(availableWidth / 1080, availableHeight / 1920);
+      const scale = availableWidth / 1080;
       return Math.max(0.2, Math.min(1, scale));
     }, [isPosterOnly, viewportSize]);
 
@@ -509,7 +508,7 @@
         const winnerPicks = winnerId ? (counts[winnerId] || 0) : 0;
         const loserPicks = loserId ? (counts[loserId] || 0) : 0;
         const splitText = (winnerPicks + loserPicks) > 0
-          ? `Pick split: ${winnerPicks}-${loserPicks}`
+          ? `Pick Split: ${winnerPicks} got it right, and ${loserPicks} missed the mark`
           : null;
 
         bigGameSummary = {
@@ -946,7 +945,7 @@
       ctx.fillText("Roberts Cup", 72, 158);
 
       const subtitle = mode === "yesterday"
-        ? `Daily Recap - ${formatDisplayDateNoYear(yesterdayKey)}`
+        ? `Daily Digest - ${formatDisplayDateNoYear(yesterdayKey)}`
         : `Today's Watch List - ${formatDisplayDate(todayKey)}`;
       const meta = mode === "yesterday"
         ? ""
@@ -1037,12 +1036,7 @@
         currentY += cardHeight + cardGap;
       });
 
-      ctx.fillStyle = "#cbd5f1";
-      ctx.font = "500 18px 'Chivo', sans-serif";
-      const footer = "MADE FOR PHONE SCREENSHOTS";
-      const footerWidth = ctx.measureText(footer).width + (footer.length - 1) * 6;
-      const footerX = (width - footerWidth) / 2;
-      drawTrackingText(ctx, footer, footerX, height - 80, 6);
+      // footer removed
 
       const link = document.createElement("a");
       link.download = filename;
@@ -1098,12 +1092,12 @@
     const showTodayPoster = !isPosterOnly || posterMode === "today";
 
     return (
-      <div className={isPosterOnly ? "min-h-screen bg-slate-900 flex items-center justify-center p-2" : "min-h-screen bg-slate-100 pt-16 pb-16"}>
+      <div className={isPosterOnly ? "poster-only min-h-screen bg-slate-900 flex items-start justify-center p-0 overflow-y-auto" : "min-h-screen bg-slate-100 pt-16 pb-16"}>
         <div className={isPosterOnly ? "" : "max-w-6xl mx-auto px-4"}>
           {!isPosterOnly && (
             <div className="mb-8 flex flex-col gap-4">
             <div>
-              <div className="text-3xl font-serif text-slate-900">Daily Recap Export</div>
+              <div className="text-3xl font-serif text-slate-900">Daily Digest Export</div>
               <div className="text-slate-600">Hidden route for generating phone-friendly recap images.</div>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -1324,6 +1318,19 @@
                 from { opacity: 0; transform: translateY(12px); }
                 to { opacity: 1; transform: translateY(0); }
               }
+              .poster-only .daily-header .daily-badge {
+                font-size: 15.6px;
+              }
+              .poster-only .daily-header .text-5xl { font-size: 3.9rem; }
+              .poster-only .daily-header .text-3xl { font-size: 2.4375rem; }
+              .poster-only .daily-header .text-xl { font-size: 1.95rem; }
+              .poster-only .daily-banner-title {
+                font-size: 33.6px;
+              }
+              .poster-only .daily-section .text-2xl { font-size: 2.1rem; }
+              .poster-only .daily-section .text-xl { font-size: 1.75rem; }
+              .poster-only .daily-section .text-lg { font-size: 1.575rem; }
+              .poster-only .daily-section .text-sm { font-size: 1.225rem; }
             `}</style>
             {showYesterdayPoster && (
               <div style={isPosterOnly ? posterFrameStyle : null}>
@@ -1336,7 +1343,7 @@
                     <div className="flex flex-col gap-3">
                       <div className="daily-badge">2025-26 Season</div>
                       <div className="text-5xl font-black tracking-tight daily-header-title">Roberts Cup</div>
-                      <div className="text-3xl font-semibold">Daily Recap - {formatDisplayDateNoYear(yesterdayKey)}</div>
+                      <div className="text-3xl font-semibold">Daily Digest - {formatDisplayDateNoYear(yesterdayKey)}</div>
                     </div>
                     <div className="relative">
                       <div className="absolute inset-0 bg-yellow-400 blur-[40px] opacity-20 rounded-full"></div>
@@ -1411,7 +1418,7 @@
                       : renderEmptyLine("No close totals yesterday.")
                 )}
 
-                <div className="mt-auto text-center text-slate-200 text-lg tracking-widest uppercase">Made for phone screenshots</div>
+                <div className="mt-auto"></div>
               </div>
                 </div>
               </div>
@@ -1508,7 +1515,7 @@
                     )
                 )}
 
-                <div className="mt-auto text-center text-slate-200 text-lg tracking-widest uppercase">Made for phone screenshots</div>
+                <div className="mt-auto"></div>
               </div>
                 </div>
               </div>
