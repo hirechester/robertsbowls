@@ -276,9 +276,7 @@
     const yesterdayGames = useMemo(() => {
       return scheduleWithDates.filter((g) => g.__dateKey === yesterdayKey).filter((g) => {
         const winnerId = normalizeId(getFirstValue(g, ["Winner ID", "WinnerID"]));
-        const homePts = parseNumber(getFirstValue(g, ["Home Pts", "HomePts", "Home Score", "HomeScore"]));
-        const awayPts = parseNumber(getFirstValue(g, ["Away Pts", "AwayPts", "Away Score", "AwayScore"]));
-        return Boolean(winnerId) && homePts !== null && awayPts !== null;
+        return Boolean(winnerId);
       });
     }, [scheduleWithDates, yesterdayKey]);
 
@@ -413,6 +411,7 @@
           : formatTeamLabel(homeTeam, getFirstValue(swingGame, ["Team 2"]));
         const winnerPts = winnerId === homeId ? homePts : awayPts;
         const loserPts = winnerId === homeId ? awayPts : homePts;
+        const hasScore = winnerPts !== null && loserPts !== null;
 
         const split = summarizePickSplit(swingGame);
         let splitText = "Pick split: n/a";
@@ -424,7 +423,7 @@
 
         swingSummary = {
           bowlName: getFirstValue(swingGame, ["Bowl", "Bowl Name"]) || "Swing Game",
-          scoreLine: `${winnerName} ${winnerPts} - ${loserPts} ${loserName}`,
+          scoreLine: hasScore ? `${winnerName} ${winnerPts} - ${loserPts} ${loserName}` : `${winnerName} over ${loserName}`,
           splitText,
           accent: teamPrimaryColor(winnerTeam),
           impact: "This game moved the leaderboard."
@@ -619,14 +618,334 @@
       };
     }, [todayGames, currentStandings, pickCountsByBowl]);
 
-    const exportPoster = async (node, filename) => {
-      if (!node || !window.html2canvas) return;
-      const scale = Math.min(2.5, Math.max(2, window.devicePixelRatio || 1));
-      const canvas = await window.html2canvas(node, {
-        backgroundColor: POSTER_BG,
-        scale,
-        useCORS: true
+    const wrapTextLines = (ctx, text, maxWidth) => {
+      const words = String(text || "").split(/\s+/).filter(Boolean);
+      const lines = [];
+      let cur = "";
+      words.forEach((word) => {
+        const next = cur ? `${cur} ${word}` : word;
+        if (ctx.measureText(next).width > maxWidth && cur) {
+          lines.push(cur);
+          cur = word;
+        } else {
+          cur = next;
+        }
       });
+      if (cur) lines.push(cur);
+      return lines.length ? lines : [""];
+    };
+
+    const roundedRectPath = (ctx, x, y, w, h, r) => {
+      const radius = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.arcTo(x + w, y, x + w, y + h, radius);
+      ctx.arcTo(x + w, y + h, x, y + h, radius);
+      ctx.arcTo(x, y + h, x, y, radius);
+      ctx.arcTo(x, y, x + w, y, radius);
+      ctx.closePath();
+    };
+
+    const drawTrackingText = (ctx, text, x, y, spacing) => {
+      let cursor = x;
+      String(text || "").split("").forEach((ch) => {
+        ctx.fillText(ch, cursor, y);
+        cursor += ctx.measureText(ch).width + spacing;
+      });
+    };
+
+    const mixHex = (hex, mixHexColor, amount) => {
+      const clamp = (v) => Math.max(0, Math.min(255, v));
+      const toRgb = (h) => {
+        const clean = String(h || "").replace("#", "");
+        if (clean.length !== 6) return { r: 0, g: 0, b: 0 };
+        return {
+          r: parseInt(clean.slice(0, 2), 16),
+          g: parseInt(clean.slice(2, 4), 16),
+          b: parseInt(clean.slice(4, 6), 16)
+        };
+      };
+      const a = toRgb(hex);
+      const b = toRgb(mixHexColor);
+      const t = Math.max(0, Math.min(1, amount));
+      const r = clamp(Math.round(a.r + (b.r - a.r) * t));
+      const g = clamp(Math.round(a.g + (b.g - a.g) * t));
+      const bVal = clamp(Math.round(a.b + (b.b - a.b) * t));
+      return `rgb(${r}, ${g}, ${bVal})`;
+    };
+
+    const buildSections = (mode) => {
+      const sections = [];
+      if (mode === "yesterday") {
+        sections.push({
+          title: "Standings Movers 📈",
+          accent: BRAND_COLOR,
+          lines: buildYesterdayRecap.completedCount === 0
+            ? ["No games yesterday."]
+            : [
+              `Biggest riser: ${buildYesterdayRecap.biggestRise ? `${buildYesterdayRecap.biggestRise.name} (+${buildYesterdayRecap.biggestRise.diff})` : "-"}`,
+              `Biggest faller: ${buildYesterdayRecap.biggestFall ? `${buildYesterdayRecap.biggestFall.name} (${buildYesterdayRecap.biggestFall.diff})` : "-"}`,
+              `Lead change: ${buildYesterdayRecap.leadChange}`
+            ]
+        });
+        sections.push({
+          title: "Swing Game of the Day 🎭",
+          accent: buildYesterdayRecap.swingSummary ? buildYesterdayRecap.swingSummary.accent : BRAND_COLOR,
+          lines: buildYesterdayRecap.completedCount === 0
+            ? ["No games yesterday."]
+            : buildYesterdayRecap.swingSummary
+              ? [
+                buildYesterdayRecap.swingSummary.bowlName,
+                buildYesterdayRecap.swingSummary.scoreLine,
+                buildYesterdayRecap.swingSummary.splitText,
+                buildYesterdayRecap.swingSummary.impact
+              ]
+              : ["No swing game found."]
+        });
+        sections.push({
+          title: "Crowd Moment 🔥",
+          accent: buildYesterdayRecap.crowdSummary ? buildYesterdayRecap.crowdSummary.accent : BRAND_COLOR,
+          lines: buildYesterdayRecap.completedCount === 0
+            ? ["No games yesterday."]
+            : buildYesterdayRecap.crowdSummary
+              ? [
+                buildYesterdayRecap.crowdSummary.bowlName,
+                buildYesterdayRecap.crowdSummary.label,
+                buildYesterdayRecap.crowdSummary.pctText
+              ]
+              : ["No big crowd swing yesterday."]
+        });
+        sections.push({
+          title: "Bad Beat (Totals) 🎯",
+          accent: BRAND_COLOR,
+          lines: buildYesterdayRecap.completedCount === 0
+            ? ["No games yesterday."]
+            : buildYesterdayRecap.badBeatSummary
+              ? [
+                buildYesterdayRecap.badBeatSummary.bowlName,
+                buildYesterdayRecap.badBeatSummary.text
+              ]
+              : ["No close totals yesterday."]
+        });
+      } else {
+        sections.push({
+          title: "Games Today 📺",
+          accent: BRAND_COLOR,
+          lines: todayGames.length === 0
+            ? ["No games today."]
+            : todayData.gamesForList.flatMap((g) => {
+              const awayId = normalizeId(getFirstValue(g, ["Away ID", "AwayID"]));
+              const homeId = normalizeId(getFirstValue(g, ["Home ID", "HomeID"]));
+              const awayTeam = awayId && teamById ? teamById[awayId] : null;
+              const homeTeam = homeId && teamById ? teamById[homeId] : null;
+              const matchup = `${formatTeamLabel(awayTeam, getFirstValue(g, ["Team 1"]))} vs ${formatTeamLabel(homeTeam, getFirstValue(g, ["Team 2"]))}`;
+
+              const timeLabel = getFirstValue(g, ["Time"]) || "TBD";
+              const network = getFirstValue(g, ["Network", "TV"]) || "";
+              const split = summarizePickSplit(g);
+              const splitText = split ? `Pick split: ${split.awayPct}% / ${split.homePct}%` : "Pick split: n/a";
+              const spreadVal = getFirstValue(g, ["Spread", "Line"]);
+              const totalVal = getFirstValue(g, ["O/U", "Over/Under", "Total"]);
+              const oddsText = spreadVal || totalVal ? `${spreadVal ? `Spread ${spreadVal}` : ""}${spreadVal && totalVal ? " - " : ""}${totalVal ? `O/U ${totalVal}` : ""}` : "";
+
+              return [
+                `${timeLabel}${network ? ` - ${network}` : ""} - ${getFirstValue(g, ["Bowl", "Bowl Name"]) || "Bowl Game"}`,
+                matchup,
+                splitText,
+                oddsText ? oddsText : null
+              ].filter(Boolean);
+            }).concat(todayData.moreCount > 0 ? [`+${todayData.moreCount} more games`] : [])
+        });
+        sections.push({
+          title: "What's At Stake ⚡",
+          accent: BRAND_COLOR,
+          lines: todayData.stakeLines
+        });
+        sections.push({
+          title: "Must-Watch Games 👀",
+          accent: BRAND_COLOR,
+          lines: todayGames.length === 0
+            ? ["No games today."]
+            : todayData.topDrama.flatMap((item) => [
+              getFirstValue(item.game, ["Bowl", "Bowl Name"]) || "Bowl Game",
+              item.reason
+            ])
+        });
+      }
+      return sections;
+    };
+
+    const exportCanvasPoster = async (mode, filename) => {
+      if (document.fonts && document.fonts.ready) {
+        try { await document.fonts.ready; } catch (e) {}
+      }
+
+      const width = 1080;
+      const height = 1920;
+      const headerHeight = 320;
+      const paddingX = 60;
+      const cardGap = 26;
+      const cardRadius = 34;
+      const cardWidth = width - paddingX * 2;
+
+      const scale = Math.min(2.5, Math.max(2, window.devicePixelRatio || 1));
+      const canvas = document.createElement("canvas");
+      canvas.width = width * scale;
+      canvas.height = height * scale;
+      const ctx = canvas.getContext("2d");
+      ctx.scale(scale, scale);
+
+      const bg = ctx.createLinearGradient(0, 0, width, height);
+      bg.addColorStop(0, "#0f172a");
+      bg.addColorStop(0.5, "#0b1220");
+      bg.addColorStop(1, "#111827");
+      ctx.fillStyle = bg;
+      roundedRectPath(ctx, 0, 0, width, height, 36);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255,255,255,0.16)";
+      ctx.lineWidth = 2;
+      roundedRectPath(ctx, 24, 24, width - 48, height - 48, 32);
+      ctx.stroke();
+
+      const headerGrad = ctx.createLinearGradient(40, 40, width - 40, headerHeight);
+      headerGrad.addColorStop(0, "#0b1220");
+      headerGrad.addColorStop(0.6, "#111827");
+      headerGrad.addColorStop(1, "#0f172a");
+      ctx.fillStyle = headerGrad;
+      roundedRectPath(ctx, 40, 40, width - 80, headerHeight - 40, 28);
+      ctx.fill();
+
+      const headerGlow = ctx.createRadialGradient(240, 140, 40, 240, 140, 300);
+      headerGlow.addColorStop(0, "rgba(245,158,11,0.18)");
+      headerGlow.addColorStop(1, "rgba(245,158,11,0)");
+      ctx.fillStyle = headerGlow;
+      roundedRectPath(ctx, 40, 40, width - 80, headerHeight - 40, 28);
+      ctx.fill();
+
+      ctx.fillStyle = "#f59e0b";
+      ctx.fillRect(40, headerHeight, width - 80, 6);
+
+      ctx.strokeStyle = "#fbbf24";
+      ctx.lineWidth = 2;
+      const pillGrad = ctx.createLinearGradient(64, 64, 320, 92);
+      pillGrad.addColorStop(0, "rgba(251,191,36,0.2)");
+      pillGrad.addColorStop(1, "rgba(251,191,36,0.0)");
+      ctx.fillStyle = pillGrad;
+      roundedRectPath(ctx, 64, 64, 260, 28, 14);
+      ctx.fill();
+      ctx.strokeStyle = "#fbbf24";
+      ctx.stroke();
+
+      ctx.fillStyle = "#fbbf24";
+      ctx.font = "800 14px 'Chivo', sans-serif";
+      drawTrackingText(ctx, "2025-26 SEASON", 80, 85, 4);
+
+      const gold = ctx.createLinearGradient(72, 110, 360, 200);
+      gold.addColorStop(0, "#fde68a");
+      gold.addColorStop(0.45, "#fbbf24");
+      gold.addColorStop(1, "#f59e0b");
+      ctx.fillStyle = gold;
+      ctx.font = "900 68px 'Patua One', serif";
+      ctx.fillText("Roberts Cup", 72, 158);
+
+      const subtitle = mode === "yesterday"
+        ? `Daily Recap - ${formatDisplayDate(yesterdayKey)}`
+        : `Today's Watch List - ${formatDisplayDate(todayKey)}`;
+      const meta = mode === "yesterday"
+        ? `Games completed: ${buildYesterdayRecap.completedCount}`
+        : `Games today: ${todayGames.length}`;
+
+      ctx.fillStyle = "#e2e8f0";
+      ctx.font = "700 30px 'Chivo', sans-serif";
+      ctx.fillText(subtitle, 72, 212);
+      ctx.fillStyle = "#cbd5f1";
+      ctx.font = "500 22px 'Chivo', sans-serif";
+      ctx.fillText(meta, 72, 248);
+
+      const trophyPath = new Path2D("M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22M18 2H6v7a6 6 0 0 0 12 0V2Z");
+      ctx.save();
+      ctx.translate(width - 170, 90);
+      ctx.scale(88 / 24, 88 / 24);
+      ctx.strokeStyle = "#fbbf24";
+      ctx.lineWidth = 2.2;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.shadowColor = "rgba(251,191,36,0.45)";
+      ctx.shadowBlur = 12;
+      ctx.stroke(trophyPath);
+      ctx.restore();
+
+      let currentY = headerHeight + 40;
+      const sections = buildSections(mode);
+      ctx.font = "500 22px 'Chivo', sans-serif";
+
+      sections.forEach((section) => {
+        const titleX = paddingX + 22;
+        const titleY = currentY + 48;
+        const bodyStartY = currentY + 92;
+        const maxWidth = cardWidth - 60;
+        const lineHeight = 30;
+
+        const wrappedLines = section.lines.flatMap((line) => wrapTextLines(ctx, line, maxWidth));
+        const bodyHeight = wrappedLines.length * lineHeight;
+        const cardHeight = Math.max(160, bodyHeight + 110);
+
+        ctx.save();
+        ctx.shadowColor = "rgba(15,23,42,0.25)";
+        ctx.shadowBlur = 18;
+        ctx.shadowOffsetY = 10;
+        ctx.fillStyle = "#f8fafc";
+        roundedRectPath(ctx, paddingX, currentY, cardWidth, cardHeight, cardRadius);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.fillStyle = section.accent || BRAND_COLOR;
+        roundedRectPath(ctx, paddingX, currentY, 12, cardHeight, cardRadius);
+        ctx.fill();
+        ctx.fillStyle = mixHex(section.accent || BRAND_COLOR, "#ffffff", 0.35);
+        roundedRectPath(ctx, paddingX + 8, currentY + 4, 4, cardHeight - 8, cardRadius);
+        ctx.fill();
+
+        const pillX = paddingX + 22;
+        const pillY = currentY + 24;
+        const pillW = Math.min(420, cardWidth - 44);
+        const pillH = 44;
+        const skew = -8 * Math.PI / 180;
+        const pillGrad = ctx.createLinearGradient(pillX, pillY, pillX + pillW, pillY + pillH);
+        pillGrad.addColorStop(0, "#0f172a");
+        pillGrad.addColorStop(1, "#111827");
+        ctx.save();
+        ctx.shadowColor = "rgba(15,23,42,0.35)";
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetY = 6;
+        ctx.translate(pillX, pillY);
+        ctx.transform(1, 0, Math.tan(skew), 1, 0, 0);
+        ctx.fillStyle = pillGrad;
+        roundedRectPath(ctx, 0, 0, pillW, pillH, 16);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.fillStyle = "#f8fafc";
+        ctx.font = "800 22px 'Chivo', sans-serif";
+        ctx.fillText(section.title, titleX + 18, titleY);
+
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "500 22px 'Chivo', sans-serif";
+        wrappedLines.forEach((line, idx) => {
+          ctx.fillText(line, paddingX + 30, bodyStartY + idx * lineHeight);
+        });
+
+        currentY += cardHeight + cardGap;
+      });
+
+      ctx.fillStyle = "#cbd5f1";
+      ctx.font = "500 18px 'Chivo', sans-serif";
+      const footer = "MADE FOR PHONE SCREENSHOTS";
+      const footerWidth = ctx.measureText(footer).width + (footer.length - 1) * 6;
+      const footerX = (width - footerWidth) / 2;
+      drawTrackingText(ctx, footer, footerX, height - 80, 6);
+
       const link = document.createElement("a");
       link.download = filename;
       link.href = canvas.toDataURL("image/png");
@@ -647,19 +966,21 @@
 
     const posterStyle = {
       width: "1080px",
-      height: "1920px",
-      background: POSTER_BG
+      height: "1920px"
     };
-
-    const cardBase = "rounded-3xl bg-white shadow-md border border-slate-100";
 
     const renderCard = (title, accentColor, body) => (
       <div
-        className={`${cardBase} p-8 flex flex-col gap-3`}
-        style={{ borderLeft: `8px solid ${accentColor || BRAND_COLOR}` }}
+        className="daily-section"
+        style={{ borderLeft: `10px solid ${accentColor || "#f59e0b"}` }}
       >
-        <div className="text-2xl font-semibold text-slate-900">{title}</div>
-        {body}
+        <div className="daily-cutout"></div>
+        <div className="daily-banner">
+          <div className="daily-banner-title">{title}</div>
+        </div>
+        <div className="daily-section-body">
+          {body}
+        </div>
       </div>
     );
 
@@ -678,14 +999,14 @@
             <div className="flex flex-wrap gap-3">
               <button
                 className="px-4 py-2 rounded-lg bg-slate-900 text-white font-semibold shadow disabled:opacity-40"
-                onClick={() => exportPoster(yesterdayPosterRef.current, `RobertsCup_Recap_${yesterdayKey}.png`)}
+                onClick={() => exportCanvasPoster("yesterday", `RobertsCup_Recap_${yesterdayKey}.png`)}
                 disabled={!html2CanvasReady}
               >
                 Download Yesterday PNG
               </button>
               <button
                 className="px-4 py-2 rounded-lg bg-slate-900 text-white font-semibold shadow disabled:opacity-40"
-                onClick={() => exportPoster(todayPosterRef.current, `RobertsCup_Today_${todayKey}.png`)}
+                onClick={() => exportCanvasPoster("today", `RobertsCup_Today_${todayKey}.png`)}
                 disabled={!html2CanvasReady}
               >
                 Download Today PNG
@@ -697,16 +1018,206 @@
           </div>
 
           <div className="flex flex-col gap-12 items-start">
-            <div ref={yesterdayPosterRef} style={posterStyle} className="rounded-[36px] overflow-hidden">
-              <div className="h-full w-full flex flex-col p-12 gap-8">
-                <div className="rounded-3xl bg-slate-900 text-white px-10 py-10 shadow-lg">
-                  <div className="text-4xl font-serif tracking-wide">Roberts Cup</div>
-                  <div className="text-3xl font-semibold">Daily Recap - {formatDisplayDate(yesterdayKey)}</div>
-                  <div className="text-xl opacity-90">Games completed: {buildYesterdayRecap.completedCount}</div>
+            <style>{`
+              .daily-poster {
+                position: relative;
+                background:
+                  radial-gradient(circle at 15% 20%, rgba(14, 116, 144, 0.25), transparent 45%),
+                  radial-gradient(circle at 85% 10%, rgba(245, 158, 11, 0.25), transparent 40%),
+                  radial-gradient(circle at 20% 85%, rgba(30, 64, 175, 0.22), transparent 45%),
+                  linear-gradient(135deg, #0f172a 0%, #111827 35%, #1f2937 100%);
+                overflow: hidden;
+              }
+              .daily-poster::before {
+                content: "";
+                position: absolute;
+                inset: 24px;
+                border-radius: 36px;
+                border: 2px solid rgba(248, 250, 252, 0.18);
+                pointer-events: none;
+              }
+              .daily-poster::after {
+                content: "";
+                position: absolute;
+                inset: 0;
+                background: repeating-linear-gradient(135deg, rgba(255,255,255,0.04) 0 2px, transparent 2px 10px);
+                opacity: 0.4;
+                pointer-events: none;
+                mix-blend-mode: screen;
+              }
+              .daily-poster.exporting::after {
+                opacity: 0;
+              }
+              .daily-glow {
+                box-shadow: 0 24px 60px rgba(15, 23, 42, 0.45);
+              }
+              .daily-header {
+                position: relative;
+                background: #0f172a;
+                color: #f8fafc;
+                border-bottom: 6px solid #f59e0b;
+                overflow: hidden;
+              }
+              .daily-poster.exporting .daily-header {
+                background: #0f172a;
+              }
+              .daily-header-orb {
+                position: absolute;
+                width: 320px;
+                height: 320px;
+                border-radius: 999px;
+                filter: blur(50px);
+                opacity: 0.6;
+                pointer-events: none;
+              }
+              .daily-poster.exporting .daily-header-orb {
+                opacity: 0.2;
+                filter: none;
+              }
+              .daily-header-orb.left {
+                background: rgba(59, 130, 246, 0.35);
+                bottom: -160px;
+                left: -120px;
+              }
+              .daily-header-orb.right {
+                background: rgba(245, 158, 11, 0.35);
+                top: -160px;
+                right: -120px;
+              }
+              .daily-header-title {
+                background: linear-gradient(135deg, #fef3c7 0%, #fbbf24 45%, #f59e0b 100%);
+                -webkit-background-clip: text;
+                background-clip: text;
+                color: transparent;
+                text-shadow: 0 6px 22px rgba(15, 23, 42, 0.4);
+              }
+              .daily-badge {
+                display: inline-block;
+                background: #1f2937;
+                color: #fbbf24;
+                border: 1px solid rgba(251, 191, 36, 0.35);
+                padding: 4px 14px;
+                border-radius: 999px;
+                font-size: 12px;
+                font-weight: 800;
+                letter-spacing: 0.2em;
+                text-transform: uppercase;
+              }
+              .daily-card {
+                backdrop-filter: blur(6px);
+              }
+              .daily-poster.exporting .daily-card {
+                backdrop-filter: none;
+              }
+              .daily-section {
+                position: relative;
+                background: rgba(255, 255, 255, 0.92);
+                border-radius: 28px;
+                padding: 24px 28px 28px;
+                box-shadow: 0 24px 50px rgba(15, 23, 42, 0.18);
+                border: 1px solid rgba(255, 255, 255, 0.7);
+                overflow: hidden;
+              }
+              .daily-poster.exporting .daily-section {
+                background: #ffffff !important;
+                box-shadow: 0 16px 36px rgba(15, 23, 42, 0.18);
+              }
+              .daily-section::after {
+                content: "";
+                position: absolute;
+                right: -60px;
+                top: -60px;
+                width: 160px;
+                height: 160px;
+                border-radius: 50%;
+                background: rgba(245, 158, 11, 0.15);
+                filter: blur(4px);
+              }
+              .daily-poster.exporting .daily-section::after {
+                opacity: 0.2;
+                filter: none;
+              }
+              .daily-banner {
+                display: inline-flex;
+                align-items: center;
+                gap: 10px;
+                background: linear-gradient(120deg, #111827 0%, #1f2937 60%, #0f172a 100%);
+                color: #f8fafc;
+                padding: 10px 22px;
+                border-radius: 18px;
+                transform: skew(-8deg);
+                box-shadow: 0 14px 28px rgba(15, 23, 42, 0.35);
+                border: 1px solid rgba(248, 250, 252, 0.2);
+              }
+              .daily-poster.exporting .daily-banner {
+                transform: none;
+                background: #111827 !important;
+              }
+              .daily-banner-title {
+                transform: skew(8deg);
+                font-size: 24px;
+                font-weight: 800;
+                letter-spacing: 0.04em;
+              }
+              .daily-poster.exporting .daily-banner-title {
+                transform: none;
+                color: #f8fafc !important;
+                text-shadow: none;
+              }
+              .daily-cutout {
+                position: absolute;
+                left: -26px;
+                bottom: -26px;
+                width: 90px;
+                height: 90px;
+                border-radius: 20px;
+                background: rgba(15, 23, 42, 0.08);
+                transform: rotate(12deg);
+              }
+              .daily-section-body {
+                margin-top: 18px;
+              }
+              .daily-poster.exporting .daily-section-body,
+              .daily-poster.exporting .daily-section-body * {
+                color: #0f172a !important;
+                text-shadow: none;
+              }
+              .daily-divider {
+                height: 2px;
+                width: 140px;
+                background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.6), rgba(255,255,255,0));
+              }
+              .daily-fade-in {
+                animation: dailyFade 0.8s ease-out both;
+              }
+              @keyframes dailyFade {
+                from { opacity: 0; transform: translateY(12px); }
+                to { opacity: 1; transform: translateY(0); }
+              }
+            `}</style>
+            <div ref={yesterdayPosterRef} style={posterStyle} className="daily-poster rounded-[36px] overflow-hidden daily-glow">
+              <div className="h-full w-full flex flex-col p-12 gap-8 daily-fade-in">
+                <div className="daily-header rounded-[32px] px-10 py-10 shadow-2xl">
+                  <div className="daily-header-orb left"></div>
+                  <div className="daily-header-orb right"></div>
+                  <div className="relative z-10 flex items-center justify-between gap-8">
+                    <div className="flex flex-col gap-3">
+                      <div className="daily-badge">2025-26 Season</div>
+                      <div className="text-5xl font-black tracking-tight daily-header-title">Roberts Cup</div>
+                      <div className="text-3xl font-semibold">Daily Recap - {formatDisplayDate(yesterdayKey)}</div>
+                      <div className="text-xl text-slate-300">Games completed: {buildYesterdayRecap.completedCount}</div>
+                    </div>
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-yellow-400 blur-[40px] opacity-20 rounded-full"></div>
+                      <svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-yellow-400 drop-shadow-[0_0_25px_rgba(250,204,21,0.45)] relative z-10">
+                        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+                      </svg>
+                    </div>
+                  </div>
                 </div>
 
                 {renderCard(
-                  "Standings Movers",
+                  "Standings Movers 📈",
                   BRAND_COLOR,
                   buildYesterdayRecap.completedCount === 0
                     ? renderEmptyLine("No games yesterday.")
@@ -720,7 +1231,7 @@
                 )}
 
                 {renderCard(
-                  "Swing Game of the Day",
+                  "Swing Game of the Day 🎭",
                   buildYesterdayRecap.swingSummary ? buildYesterdayRecap.swingSummary.accent : BRAND_COLOR,
                   buildYesterdayRecap.completedCount === 0
                     ? renderEmptyLine("No games yesterday.")
@@ -737,7 +1248,7 @@
                 )}
 
                 {renderCard(
-                  "Crowd Moment",
+                  "Crowd Moment 🔥",
                   buildYesterdayRecap.crowdSummary ? buildYesterdayRecap.crowdSummary.accent : BRAND_COLOR,
                   buildYesterdayRecap.completedCount === 0
                     ? renderEmptyLine("No games yesterday.")
@@ -753,7 +1264,7 @@
                 )}
 
                 {renderCard(
-                  "Bad Beat (Totals)",
+                  "Bad Beat (Totals) 🎯",
                   BRAND_COLOR,
                   buildYesterdayRecap.completedCount === 0
                     ? renderEmptyLine("No games yesterday.")
@@ -767,20 +1278,33 @@
                       : renderEmptyLine("No close totals yesterday.")
                 )}
 
-                <div className="mt-auto text-center text-slate-500 text-lg">Made for phone screenshots</div>
+                <div className="mt-auto text-center text-slate-200 text-lg tracking-widest uppercase">Made for phone screenshots</div>
               </div>
             </div>
 
-            <div ref={todayPosterRef} style={posterStyle} className="rounded-[36px] overflow-hidden">
-              <div className="h-full w-full flex flex-col p-12 gap-8">
-                <div className="rounded-3xl bg-slate-900 text-white px-10 py-10 shadow-lg">
-                  <div className="text-4xl font-serif tracking-wide">Roberts Cup</div>
-                  <div className="text-3xl font-semibold">Today's Watch List - {formatDisplayDate(todayKey)}</div>
-                  <div className="text-xl opacity-90">Games today: {todayGames.length}</div>
+            <div ref={todayPosterRef} style={posterStyle} className="daily-poster rounded-[36px] overflow-hidden daily-glow">
+              <div className="h-full w-full flex flex-col p-12 gap-8 daily-fade-in">
+                <div className="daily-header rounded-[32px] px-10 py-10 shadow-2xl">
+                  <div className="daily-header-orb left"></div>
+                  <div className="daily-header-orb right"></div>
+                  <div className="relative z-10 flex items-center justify-between gap-8">
+                    <div className="flex flex-col gap-3">
+                      <div className="daily-badge">2025-26 Season</div>
+                      <div className="text-5xl font-black tracking-tight daily-header-title">Roberts Cup</div>
+                      <div className="text-3xl font-semibold">Today's Watch List - {formatDisplayDate(todayKey)}</div>
+                      <div className="text-xl text-slate-300">Games today: {todayGames.length}</div>
+                    </div>
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-yellow-400 blur-[40px] opacity-20 rounded-full"></div>
+                      <svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-yellow-400 drop-shadow-[0_0_25px_rgba(250,204,21,0.45)] relative z-10">
+                        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+                      </svg>
+                    </div>
+                  </div>
                 </div>
 
                 {renderCard(
-                  "Games Today",
+                  "Games Today 📺",
                   BRAND_COLOR,
                   todayGames.length === 0
                     ? renderEmptyLine("No games today.")
@@ -802,10 +1326,10 @@
                           const oddsText = spreadVal || totalVal ? `${spreadVal ? `Spread ${spreadVal}` : ""}${spreadVal && totalVal ? " - " : ""}${totalVal ? `O/U ${totalVal}` : ""}` : "";
 
                           return (
-                            <div key={getBowlKey(g)} className="rounded-2xl border border-slate-100 p-4 bg-slate-50">
-                              <div className="text-slate-500">{timeLabel}{network ? ` - ${network}` : ""}</div>
+                            <div key={getBowlKey(g)} className="rounded-2xl border-2 border-amber-200/70 p-4 bg-white/90 shadow-xl">
+                              <div className="text-slate-500 tracking-wide">{timeLabel}{network ? ` - ${network}` : ""}</div>
                               <div className="text-2xl font-semibold text-slate-900">{getFirstValue(g, ["Bowl", "Bowl Name"]) || "Bowl Game"}</div>
-                              <div>{matchup}</div>
+                              <div className="text-slate-700">{matchup}</div>
                               <div className="text-slate-600">{splitText}</div>
                               {oddsText && <div className="text-slate-500 text-lg">{oddsText}</div>}
                             </div>
@@ -819,7 +1343,7 @@
                 )}
 
                 {renderCard(
-                  "What's At Stake",
+                  "What's At Stake ⚡",
                   BRAND_COLOR,
                   (
                     <div className="flex flex-col gap-2 text-xl text-slate-700">
@@ -831,7 +1355,7 @@
                 )}
 
                 {renderCard(
-                  "Must-Watch Games",
+                  "Must-Watch Games 👀",
                   BRAND_COLOR,
                   todayGames.length === 0
                     ? renderEmptyLine("No games today.")
@@ -847,9 +1371,10 @@
                     )
                 )}
 
-                <div className="mt-auto text-center text-slate-500 text-lg">Made for phone screenshots</div>
+                <div className="mt-auto text-center text-slate-200 text-lg tracking-widest uppercase">Made for phone screenshots</div>
               </div>
             </div>
+
           </div>
         </div>
       </div>
