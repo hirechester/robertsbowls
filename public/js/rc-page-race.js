@@ -14,7 +14,6 @@
           const RacePage = () => {
               const { schedule, picks, picksIds, loading, error, refresh } = RC.data.useLeagueData();
               const [chartData, setChartData] = useState({ series: [], maxWins: 0, gameCount: 0 });
-              const [hoveredPlayer, setHoveredPlayer] = useState(null);
               const [selectedPlayer, setSelectedPlayer] = useState(null);
               const [tableData, setTableData] = useState([]);
 
@@ -105,7 +104,7 @@
                   }
               }, [schedule, picks, picksIds]);
 
-              const activePlayer = selectedPlayer || hoveredPlayer;
+              const activePlayer = selectedPlayer;
 
               const getLineStyle = (player) => {
                   if (activePlayer === player.name) {
@@ -230,7 +229,7 @@
                                                           strokeLinecap="round"
                                                           strokeLinejoin="round"
                                                           opacity={style.opacity}
-                                                          className="transition-all duration-300 ease-in-out"
+                                                          className={activePlayer === player.name ? "transition-all duration-300 ease-out" : ""}
                                                       />
                                                       <circle
                                                           cx={lastX}
@@ -238,7 +237,7 @@
                                                           r={activePlayer === player.name ? 6 : 3}
                                                           fill={style.stroke}
                                                           opacity={style.opacity}
-                                                          className="transition-all duration-300 ease-in-out"
+                                                          className={activePlayer === player.name ? "transition-all duration-300 ease-out" : ""}
                                                       />
                                                   </g>
                                               );
@@ -258,30 +257,25 @@
                               </div>
                               <div
                                   className="p-4"
-                                  onMouseLeave={() => setHoveredPlayer(null)}
                               >
                                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                                       {tableData.map((player) => {
                                           const isSelected = selectedPlayer === player.name;
-                                          const isHighlighted = activePlayer === player.name;
 
-                                          // Dynamic styles for the card
-                                          let cardStyle = "border-transparent hover:bg-gray-50 hover:border-gray-100";
+                                          // Dynamic styles for the card (no hover styles)
+                                          let cardStyle = "border-transparent";
                                           if (isSelected) {
                                               cardStyle = "bg-blue-50 border-blue-200 ring-1 ring-blue-300";
-                                          } else if (isHighlighted) {
-                                              cardStyle = "bg-gray-100 border-gray-200";
                                           }
 
                                           // Text styles
-                                          const nameStyle = isSelected || isHighlighted ? 'text-gray-900 font-bold' : 'text-gray-700 font-medium';
+                                          const nameStyle = isSelected ? 'text-gray-900 font-bold' : 'text-gray-700 font-medium';
 
                                           return (
                                               <div
                                                   key={player.name}
-                                                  onMouseEnter={() => setHoveredPlayer(player.name)}
                                                   onClick={() => setSelectedPlayer(selectedPlayer === player.name ? null : player.name)}
-                                                  className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all border ${cardStyle}`}
+                                                  className={`flex items-center justify-between p-3 rounded-lg cursor-pointer border ${cardStyle}`}
                                               >
                                                   <div className="flex items-center gap-3">
                                                       <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: player.color }}></div>
