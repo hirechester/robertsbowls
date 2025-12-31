@@ -10,6 +10,7 @@
     const { history, loading, error, hallOfFameByYear, teamById, peopleById, peopleByName } = RC.data.useLeagueData();
     const [expandedYear, setExpandedYear] = useState(null);
     const [tableSort, setTableSort] = useState({ key: "pct", direction: "desc" });
+    const [activeView, setActiveView] = useState("history");
 
     const { LoadingSpinner, ErrorMessage } = (RC.ui || {});
     const Spinner = LoadingSpinner || (({ text }) => <div className="px-4 py-8 text-gray-600">{text || "Loading..."}</div>);
@@ -145,6 +146,17 @@
     }, [history, hallComputed]);
 
     const hallDetailsByYear = hallComputed.details;
+    const earliestHallYear = useMemo(() => {
+      const rowsByYear = hallOfFameByYear instanceof Map ? hallOfFameByYear : new Map();
+      if (!rowsByYear.size) return null;
+      let minYear = null;
+      rowsByYear.forEach((_rows, year) => {
+        const yearNum = parseInt(year, 10);
+        if (!Number.isFinite(yearNum)) return;
+        if (minYear === null || yearNum < minYear) minYear = yearNum;
+      });
+      return minYear;
+    }, [hallOfFameByYear]);
 
     const allTimeStandings = useMemo(() => {
       const rowsByYear = hallOfFameByYear instanceof Map ? hallOfFameByYear : new Map();
@@ -197,7 +209,19 @@
         return a.name.localeCompare(b.name);
       });
       const rankByName = {};
-      ranked.forEach((row, idx) => { rankByName[row.name] = idx + 1; });
+      let currentRank = 1;
+      let lastPctKey = null;
+      ranked.forEach((row, idx) => {
+        const pctKey = row.pct === null ? "null" : row.pct.toFixed(6);
+        if (idx === 0) {
+          currentRank = 1;
+          lastPctKey = pctKey;
+        } else if (pctKey !== lastPctKey) {
+          currentRank = idx + 1;
+          lastPctKey = pctKey;
+        }
+        rankByName[row.name] = currentRank;
+      });
 
       return list.map((row) => ({ ...row, rank: rankByName[row.name] }));
     }, [hallOfFameByYear, peopleById, peopleByName, history]);
@@ -249,7 +273,31 @@
     if (error) return <Err message={(error && (error.message || String(error))) || "Failed to load history"} />;
     return (
       <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
-        <div className="bg-white pt-8 pb-8 px-4"><div className="max-w-7xl mx-auto text-center"><h2 className="text-3xl text-blue-900 font-bold mb-1">Hall of Fame</h2><p className="text-gray-600 text-sm">The legends of the family pool.</p></div></div>
+        <div className="bg-white pt-8 pb-6 px-4">
+          <div className="max-w-7xl mx-auto text-center">
+            <h2 className="text-3xl text-blue-900 font-bold mb-1">Hall of Fame</h2>
+            <p className="text-gray-600 text-sm">The legends of the family pool.</p>
+          </div>
+          <div className="mt-5 px-4 max-w-2xl mx-auto w-full">
+            <div className="flex w-full rounded-full border border-gray-200 bg-white p-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setActiveView("history")}
+                className={`flex-1 px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${activeView === "history" ? "bg-blue-900 text-white" : "text-gray-600 hover:text-blue-900"}`}
+              >
+                Title History
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveView("standings")}
+                className={`flex-1 px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${activeView === "standings" ? "bg-blue-900 text-white" : "text-gray-600 hover:text-blue-900"}`}
+              >
+                All-Time Standings
+              </button>
+            </div>
+          </div>
+        </div>
+        {activeView === "history" && (
         <div className="relative px-4 max-w-2xl mx-auto w-full"><div className="space-y-8">
           {historyData.map((item, index) => {
             const yearNum = parseInt(item.Year, 10);
@@ -302,22 +350,21 @@
             );
           })}
         </div>
-          <div className="mt-10">
-            <div className="text-center mb-4">
-              <h3 className="text-xl font-bold text-blue-900">All-Time Standings</h3>
-              <p className="text-gray-600 text-sm">Hall of Fame records by player.</p>
-            </div>
+        </div>
+        )}
+        {activeView === "standings" && (
+          <div className="relative px-4 max-w-2xl mx-auto w-full mt-10">
             <div className="w-full shadow-sm border border-gray-100 rounded-2xl bg-white overflow-hidden">
               <div className="overflow-x-auto w-full">
                 <table className="min-w-full border-collapse w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-gray-800">
-                      <th onClick={() => toggleTableSort("name")} className="p-2 text-left font-bold border-b border-gray-100 min-w-[140px] cursor-pointer select-none hover:bg-gray-100 transition-colors">Player <span className="text-gray-400">{sortIcon("name")}</span></th>
-                      <th onClick={() => toggleTableSort("rank")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors">Rank <span className="text-gray-400">{sortIcon("rank")}</span></th>
-                      <th onClick={() => toggleTableSort("wins")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors">Wins <span className="text-gray-400">{sortIcon("wins")}</span></th>
-                      <th onClick={() => toggleTableSort("losses")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors">Losses <span className="text-gray-400">{sortIcon("losses")}</span></th>
-                      <th onClick={() => toggleTableSort("titles")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors">Titles <span className="text-gray-400">{sortIcon("titles")}</span></th>
-                      <th onClick={() => toggleTableSort("pct")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors">Win % <span className="text-gray-400">{sortIcon("pct")}</span></th>
+                      <th onClick={() => toggleTableSort("name")} className="p-2 text-left font-bold border-b border-gray-100 min-w-[100px] w-[140px] cursor-pointer select-none hover:bg-gray-100 transition-colors">Player <span className="text-gray-400">{sortIcon("name")}</span></th>
+                      <th onClick={() => toggleTableSort("rank")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors w-[90px]">Rank <span className="text-gray-400">{sortIcon("rank")}</span></th>
+                      <th onClick={() => toggleTableSort("wins")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors w-[90px]">Wins <span className="text-gray-400">{sortIcon("wins")}</span></th>
+                      <th onClick={() => toggleTableSort("losses")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors w-[90px]">Losses <span className="text-gray-400">{sortIcon("losses")}</span></th>
+                      <th onClick={() => toggleTableSort("titles")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors w-[90px]">Titles <span className="text-gray-400">{sortIcon("titles")}</span></th>
+                      <th onClick={() => toggleTableSort("pct")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors w-[90px]">Win % <span className="text-gray-400">{sortIcon("pct")}</span></th>
                     </tr>
                   </thead>
                   <tbody className="bg-white">
@@ -340,8 +387,11 @@
                 </table>
               </div>
             </div>
+            <div className="mt-3 text-xs text-gray-500 text-center">
+              {earliestHallYear ? `Standings include every season back to ${earliestHallYear}.` : "Standings include every season available."}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   };
