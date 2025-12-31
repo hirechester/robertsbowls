@@ -32,9 +32,49 @@
                 const key = network.trim().toUpperCase();
                 return networkLogoMap[key] || null;
             };
+            const normalizeId = (value) => {
+                const s = String(value ?? "").trim();
+                if (!s) return "";
+                const n = parseInt(s, 10);
+                return Number.isFinite(n) ? String(n) : s;
+            };
+            const pickFirst = (...vals) => {
+                for (const v of vals) {
+                    const s = (v === null || v === undefined) ? "" : String(v).trim();
+                    if (s) return s;
+                }
+                return "";
+            };
+            const cleanNum = (s) => {
+                const raw = String(s || "").trim();
+                if (!raw) return "";
+                const m = raw.match(/(\d+)/);
+                return m ? m[1] : "";
+            };
+            const getTeamLabel = (team, fallback) => {
+                const school = pickFirst(team?.["School Name"], team?.School, team?.Team, team?.Name, fallback);
+                const seedRaw = pickFirst(
+                    team?.["Seed"], team?.["Team Seed"], team?.["Seed #"], team?.["Seed Number"], team?.["Playoff Seed"], team?.["CFP Seed"]
+                );
+                const rankRaw = pickFirst(
+                    team?.["Ranking"], team?.["Rank"], team?.["AP Rank"], team?.["AP Ranking"], team?.["Rk"]
+                );
+                const seedNum = cleanNum(seedRaw);
+                const rankNum = cleanNum(rankRaw);
+                const prefix = seedNum ? `#${seedNum}` : (rankNum ? `#${rankNum}` : "");
+                return { name: school || fallback || "-", prefix };
+            };
 
             // Shared league data (fetched once per session by rc-data.js)
             const { schedule: scheduleData, picks: picksData, teams: teamsData, loading: dataLoading, error: dataError } = RC.data.useLeagueData();
+            const teamById = useMemo(() => {
+                const map = new Map();
+                (teamsData || []).forEach((team) => {
+                    const id = normalizeId(team?.["Team ID"] ?? team?.["ID"] ?? team?.["Id"] ?? team?.Id);
+                    if (id) map.set(id, team);
+                });
+                return map;
+            }, [teamsData]);
 
             useEffect(() => {
                 if (dataLoading) {
@@ -511,6 +551,10 @@
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {slateGames.map((game, idx) => {
                                     const logoSrc = getNetworkLogo(game.Network);
+                                    const homeId = normalizeId(game["Home ID"]);
+                                    const awayId = normalizeId(game["Away ID"]);
+                                    const homeLabel = getTeamLabel(teamById.get(homeId), game["Team 1"]);
+                                    const awayLabel = getTeamLabel(teamById.get(awayId), game["Team 2"]);
                                     return (
                                     <div key={idx} className="bg-white p-5 rounded-xl shadow-xl border border-gray-100 flex flex-col justify-between hover:shadow-2xl transition-shadow group">
                                         <div>
@@ -530,7 +574,19 @@
                                             </div>
                                             <div className="mb-2">
                                                 <div className="text-lg font-black text-gray-800 leading-tight">
-                                                    {game["Team 1"]} <span className="text-gray-300 font-normal mx-1">vs</span> {game["Team 2"]}
+                                                    <span className="inline-flex items-baseline">
+                                                        {homeLabel.prefix ? (
+                                                            <span className="text-xs font-semibold text-gray-400 mr-1">{homeLabel.prefix}</span>
+                                                        ) : null}
+                                                        <span>{homeLabel.name}</span>
+                                                    </span>
+                                                    <span className="text-gray-300 font-normal mx-1">vs</span>
+                                                    <span className="inline-flex items-baseline">
+                                                        {awayLabel.prefix ? (
+                                                            <span className="text-xs font-semibold text-gray-400 mr-1">{awayLabel.prefix}</span>
+                                                        ) : null}
+                                                        <span>{awayLabel.name}</span>
+                                                    </span>
                                                 </div>
                                             </div>
                                             <div className="mb-2 text-xs font-bold text-gray-500 uppercase tracking-wider">
