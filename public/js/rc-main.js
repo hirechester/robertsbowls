@@ -80,20 +80,22 @@ const App = () => {
         return () => window.removeEventListener('hashchange', onHashChange);
     }, []);
     return (
-        <div className={isPosterOnly ? "min-h-screen bg-white" : "min-h-screen bg-white pt-16"}>
+        <div className={isPosterOnly ? "min-h-screen bg-white" : "min-h-screen bg-slate-900 pt-16"}>
             {!isPosterOnly && <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />}
-            {activeTab === 'home' && <HomePage />}
-            {activeTab === 'standings' && <StandingsPage />}
-            {activeTab === 'picks' && <PicksPage />}
-            {activeTab === 'race' && <RacePage />}
-            {activeTab === 'badges' && <BadgesPage />}
-            {activeTab === 'versus' && <VersusPage />}
-            {activeTab === 'simulator' && <SimulatorPage />}
-        {activeTab === 'scouting' && <ScoutingReportPage />}
-        {activeTab === 'history' && <HistoryPage />}
-        {activeTab === 'rules' && <RulesPage />}
-        {activeTab === 'bingo' && <BingoPage />}
-        {activeTab === 'daily' && <DailyPage />}
+            <div className="min-h-screen bg-white">
+                {activeTab === 'home' && <HomePage />}
+                {activeTab === 'standings' && <StandingsPage />}
+                {activeTab === 'picks' && <PicksPage />}
+                {activeTab === 'race' && <RacePage />}
+                {activeTab === 'badges' && <BadgesPage />}
+                {activeTab === 'versus' && <VersusPage />}
+                {activeTab === 'simulator' && <SimulatorPage />}
+                {activeTab === 'scouting' && <ScoutingReportPage />}
+                {activeTab === 'history' && <HistoryPage />}
+                {activeTab === 'rules' && <RulesPage />}
+                {activeTab === 'bingo' && <BingoPage />}
+                {activeTab === 'daily' && <DailyPage />}
+            </div>
         </div>
     );
 };
