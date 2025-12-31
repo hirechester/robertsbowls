@@ -78,6 +78,11 @@
         };
 
         const isCfpGame = (g) => truthy01(g["CFP?"] ?? g["CFP"] ?? g["Playoff"] ?? g["Playoff?"]);
+        const weightForGame = (g) => {
+            const raw = (g && g["Weight"] !== undefined) ? String(g["Weight"]).trim() : "";
+            const val = raw ? Number(raw) : 1;
+            return Number.isFinite(val) && val > 0 ? val : 1;
+        };
 
         try {
             const sortedSchedule = schedule
@@ -139,7 +144,7 @@
                         const bowlKey = getBowlKey(g);
                         const pickId = normalizeId(player[bowlKey]);
                         const winnerId = normalizeId(g["Winner ID"]) || simOutcomes[bowlKey];
-                        if (pickId && winnerId && pickId === winnerId) sWins++;
+                        if (pickId && winnerId && pickId === winnerId) sWins += weightForGame(g);
                     });
                     currentSimScores[player.Name] = sWins;
                     if (sWins > maxWins) maxWins = sWins;
@@ -171,14 +176,15 @@
 
                     const bowlKey = getBowlKey(game);
                     const pickId = normalizeId(playerIds[bowlKey]);
+                    const weight = weightForGame(game);
 
                     if (pickId && pickId === winnerId) {
-                        wins++;
+                        wins += weight;
                         currentStreak = currentStreak >= 0 ? currentStreak + 1 : 1;
                         tempWinStreak++;
                         if (tempWinStreak > maxWinStreak) maxWinStreak = tempWinStreak;
                     } else {
-                        losses++;
+                        losses += weight;
                         currentStreak = currentStreak <= 0 ? currentStreak - 1 : -1;
                         tempWinStreak = 0;
                     }
@@ -192,7 +198,7 @@
                 const remainingWins = unplayedGames.reduce((acc, game) => {
                     const bowlKey = getBowlKey(game);
                     const pickId = normalizeId(playerIds[bowlKey]);
-                    return isAlivePickForGame(game, pickId) ? acc + 1 : acc;
+                    return isAlivePickForGame(game, pickId) ? acc + weightForGame(game) : acc;
                 }, 0);
                 const maxPossibleWins = wins + remainingWins;
 
@@ -256,7 +262,7 @@
                                 const bowlKey = getBowlKey(game);
                                 const lp = normalizeId(currentLeader.rawPicksIds[bowlKey]);
                                 const pp = normalizeId(stats[i].rawPicksIds[bowlKey]);
-                                if (lp && pp && lp !== pp) diffs++;
+                                if (lp && pp && lp !== pp) diffs += weightForGame(game);
                             }
                         });
                         if (diffs > maxDiffs) maxDiffs = diffs;
@@ -271,7 +277,7 @@
                             const candidatePick = normalizeId(stats[i].rawPicksIds[bowlKey]);
                             if (!isAlivePickForGame(game, candidatePick)) return;
                             const otherPick = normalizeId(other.rawPicksIds[bowlKey]);
-                            if (otherPick && otherPick === candidatePick) scenarioWins++;
+                            if (otherPick && otherPick === candidatePick) scenarioWins += weightForGame(game);
                         });
                         if (scenarioWins > maxOpponentWins) maxOpponentWins = scenarioWins;
                     });
