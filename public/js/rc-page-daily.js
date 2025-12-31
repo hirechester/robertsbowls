@@ -536,9 +536,50 @@
         }
       });
 
-      const leadChange = leaderBefore && leaderAfter && leaderBefore.name !== leaderAfter.name
-        ? `Yes (${leaderBefore.name} -> ${leaderAfter.name})`
-        : "No";
+      const getLeaderNames = (standings) => {
+        const rows = Array.isArray(standings.rows) ? standings.rows : [];
+        if (!rows.length) return [];
+        const hasRank = rows.every((row) => Number.isFinite(row.rank));
+        if (hasRank) {
+          const topRank = rows.reduce((best, row) => Math.min(best, row.rank), Infinity);
+          return rows.filter((row) => row.rank === topRank).map((row) => row.name);
+        }
+        const topWins = rows.reduce((best, row) => {
+          const wins = Number(row.wins);
+          return Number.isFinite(wins) ? Math.max(best, wins) : best;
+        }, -Infinity);
+        if (!Number.isFinite(topWins)) return [];
+        return rows.filter((row) => Number(row.wins) === topWins).map((row) => row.name);
+      };
+
+      const leadersBefore = getLeaderNames(standingsBeforeYesterday);
+      const leadersAfter = getLeaderNames(standingsAfterYesterday);
+      const sameLeaders = leadersBefore.length === leadersAfter.length &&
+        leadersBefore.every((name) => leadersAfter.includes(name));
+
+      let leadChange = "No";
+      let leadChangeInfo = { type: "none" };
+      if (!sameLeaders && leadersAfter.length) {
+        if (leadersAfter.length > 1) {
+          if (leadersBefore.length === 1 && leadersAfter.includes(leadersBefore[0])) {
+            const joiners = leadersAfter.filter((name) => name !== leadersBefore[0]);
+            leadChange = `Tie at the Top — ${joiners.join(" & ")} joined ${leadersBefore[0]}`;
+            leadChangeInfo = { type: "tie-join", joiners, leader: leadersBefore[0] };
+          } else {
+            leadChange = `Tie at the Top — ${leadersAfter.join(" & ")}`;
+            leadChangeInfo = { type: "tie", leaders: leadersAfter };
+          }
+        } else if (leadersAfter.length === 1) {
+          if (leadersBefore.length > 1 && leadersBefore.includes(leadersAfter[0])) {
+            leadChange = `Solo Leader — ${leadersAfter[0]}`;
+            leadChangeInfo = { type: "solo", leader: leadersAfter[0] };
+          } else {
+            const beforeLabel = leadersBefore.length ? leadersBefore.join(" & ") : "No leader";
+            leadChange = `Yes (${beforeLabel} -> ${leadersAfter[0]})`;
+            leadChangeInfo = { type: "swap", before: leadersBefore, after: leadersAfter[0] };
+          }
+        }
+      }
 
       const standingsRows = Array.isArray(standingsAfterYesterday.rows) ? standingsAfterYesterday.rows : [];
       const topCount = Math.min(5, standingsRows.length);
@@ -764,6 +805,7 @@
       return {
         completedCount,
         leadChange,
+        leadChangeInfo,
         biggestRise,
         biggestFall,
         standingsSnapshot: {
@@ -1058,7 +1100,7 @@
           const scoreText = Number.isFinite(item.score) ? `${item.score} wins` : "-";
           let suffix = "";
           if (item.isLeader) {
-            const leaderLabel = item.leaderCount > 1 ? "Leader (co-leader)" : "Leader";
+            const leaderLabel = item.leaderCount > 1 ? "Co-Leader" : "Leader";
             suffix = ` (${leaderLabel})`;
           } else if (item.gb !== null && item.gb !== undefined) {
             suffix = ` (${item.gb} GB)`;
@@ -1083,11 +1125,11 @@
         const hotNames = hotHands.map((row) => row.name).join(" & ");
         const coldNames = coldStreaks.map((row) => row.name).join(" & ");
         const hotLine = hotHands.length && maxWinStreak >= 2
-          ? `Hot hand: ${hotNames} — ${maxWinStreak} straight wins 🔥`
-          : "Hot hand: no big streaks right now";
+          ? `Hot Hand: ${hotNames} — ${maxWinStreak} straight wins 🔥`
+          : "Hot Hand: no big streaks right now";
         const coldLine = coldStreaks.length && maxMissStreak >= 2
-          ? `Ice cold: ${coldNames} — ${maxMissStreak} straight losses 🧊`
-          : "Cold streak: nobody’s spiraling (yet)";
+          ? `Ice Cold: ${coldNames} — ${maxMissStreak} straight losses 🧊`
+          : "Ice Cold: nobody’s spiraling (yet)";
 
         sections.push({
           title: "Streak Watch 👀",
@@ -1640,7 +1682,7 @@
                     <div className="flex flex-col gap-3">
                       <div className="daily-badge">2025-26 Season</div>
                       <div className="text-5xl font-black tracking-tight daily-header-title">Roberts Cup</div>
-                      <div className="text-3xl font-semibold">Daily Digest - {formatDisplayDateNoYear(yesterdayKey)}</div>
+                      <div className="text-3xl font-semibold">Yesterday's Recap - {formatDisplayDateNoYear(yesterdayKey)}</div>
                     </div>
                     <div className="relative">
                       <div className="absolute inset-0 bg-yellow-400 blur-[40px] opacity-20 rounded-full"></div>
@@ -1679,7 +1721,44 @@
                         <div>
                           {buildYesterdayRecap.leadChange === "No"
                             ? "No movement at the top yesterday"
-                            : `Lead Change: ${buildYesterdayRecap.leadChange}`}
+                            : (() => {
+                              const info = buildYesterdayRecap.leadChangeInfo || { type: "swap" };
+                              if (info.type === "tie-join") {
+                                return (
+                                  <>
+                                    <span>Lead Change: Tie at the Top — </span>
+                                    {info.joiners.map((name, index) => (
+                                      <span key={name} className="font-semibold">
+                                        {name}{index < info.joiners.length - 1 ? " & " : ""}
+                                      </span>
+                                    ))}
+                                    <span> joined </span>
+                                    <span className="font-semibold">{info.leader}</span>
+                                  </>
+                                );
+                              }
+                              if (info.type === "tie") {
+                                return (
+                                  <>
+                                    <span>Lead Change: Tie at the Top — </span>
+                                    {(info.leaders || []).map((name, index) => (
+                                      <span key={name} className="font-semibold">
+                                        {name}{index < (info.leaders || []).length - 1 ? " & " : ""}
+                                      </span>
+                                    ))}
+                                  </>
+                                );
+                              }
+                              if (info.type === "solo") {
+                                return (
+                                  <>
+                                    <span>Lead Change: Solo Leader — </span>
+                                    <span className="font-semibold">{info.leader}</span>
+                                  </>
+                                );
+                              }
+                              return `Lead Change: ${buildYesterdayRecap.leadChange}`;
+                            })()}
                         </div>
                       </div>
                     )
@@ -1728,7 +1807,7 @@
                           const scoreText = Number.isFinite(item.score) ? `${item.score} wins` : "-";
                           let suffix = "";
                           if (item.isLeader) {
-                            const leaderLabel = item.leaderCount > 1 ? "Leader (co-leader)" : "Leader";
+                            const leaderLabel = item.leaderCount > 1 ? "Co-Leader" : "Leader";
                             suffix = ` (${leaderLabel})`;
                           } else if (item.gb !== null && item.gb !== undefined) {
                             suffix = ` (${item.gb} GB)`;
