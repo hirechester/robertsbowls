@@ -136,13 +136,18 @@ useEffect(() => {
       const homePtsFor = (g) => toNumber(getFirstValue(g, ["Home Pts", "HomePts", "Home Points", "HomeScore", "Home Score", "Home PTS", "Home Final"]));
       const awayPtsFor = (g) => toNumber(getFirstValue(g, ["Away Pts", "AwayPts", "Away Points", "AwayScore", "Away Score", "Away PTS", "Away Final"]));
       const totalFor = (g) => toNumber(getFirstValue(g, ["Total", "O/U", "Over/Under", "OU", "O-U", "Vegas Total"]));
+      const weightForGame = (g) => {
+        const raw = String((g && g["Weight"]) ?? "").trim();
+        const val = raw ? Number(raw) : 1;
+        return Number.isFinite(val) && val > 0 ? val : 1;
+      };
 
       // 1) Current Rank & Wins (ID-based)
       const leaderboard = (Array.isArray(picksIds) ? picksIds : [])
         .map(p => {
           let w = 0;
           (Array.isArray(schedule) ? schedule : []).forEach(g => {
-            if (isCorrect(p, g)) w++;
+            if (isCorrect(p, g)) w += weightForGame(g);
           });
           return { name: p.Name, wins: w };
         })
@@ -325,8 +330,14 @@ useEffect(() => {
       });
 
       // 7) Ceiling Tracker
-      const totalGameCount = (Array.isArray(schedule) ? schedule : []).filter(g => g.Bowl && (g["Away ID"] || g["Home ID"] || g["Team 1"])).length;
-      const unplayedCount = (Array.isArray(schedule) ? schedule : []).filter(g => g.Bowl && (g["Away ID"] || g["Home ID"] || g["Team 1"]) && !winnerIdFor(g)).length;
+      const totalGameCount = (Array.isArray(schedule) ? schedule : []).reduce((acc, g) => {
+        if (!g || !g.Bowl) return acc;
+        return acc + weightForGame(g);
+      }, 0);
+      const unplayedCount = (Array.isArray(schedule) ? schedule : []).reduce((acc, g) => {
+        if (!g || !g.Bowl || winnerIdFor(g)) return acc;
+        return acc + weightForGame(g);
+      }, 0);
       const maxPotential = wins + unplayedCount;
       const leaderWins = leaderboard.length ? Math.max(...leaderboard.map(p => p.wins)) : 0;
 

@@ -19,6 +19,11 @@
           const bid = (game && game["Bowl ID"] !== undefined) ? String(game["Bowl ID"]).trim() : "";
           return bid || String(game && game.Bowl ? game.Bowl : "").trim();
       };
+      const weightForGame = (game) => {
+          const raw = (game && game["Weight"] !== undefined) ? String(game["Weight"]).trim() : "";
+          const val = raw ? Number(raw) : 1;
+          return Number.isFinite(val) && val > 0 ? val : 1;
+      };
 
       const getTeamNameById = (id, fallbackName) => {
           const key = (id === null || id === undefined) ? "" : String(id).trim();
@@ -59,11 +64,14 @@
           if (!player) return;
           setSimulatedWinners(prev => {
               const next = { ...prev };
-              schedule.forEach(game => {
+              (Array.isArray(schedule) ? schedule : [])
+                  .filter(game => {
+                      const realWinnerId = (game && game["Winner ID"] !== undefined) ? String(game["Winner ID"]).trim() : "";
+                      return !realWinnerId;
+                  })
+                  .forEach(game => {
                   const bowlKey = keyForGame(game);
                   if (!bowlKey) return;
-                  const realWinnerId = (game && game["Winner ID"] !== undefined) ? String(game["Winner ID"]).trim() : "";
-                  if (realWinnerId) return;
                   const pickId = player[bowlKey] !== undefined ? String(player[bowlKey]).trim() : "";
                   if (pickId) {
                       next[bowlKey] = pickId;
@@ -90,7 +98,7 @@
                   if (winnerToUseId) {
                       const pickId = bowlKey && player[bowlKey] !== undefined ? String(player[bowlKey]).trim() : "";
                       if (pickId && pickId === winnerToUseId) {
-                          wins++;
+                          wins += weightForGame(game);
                       }
                   }
               });
