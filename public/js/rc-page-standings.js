@@ -185,7 +185,10 @@
                 });
 
                 const winProbVal = playerSimWins[playerIds.Name] || 0;
-                const winProb = (winProbVal / SIMULATIONS * 100).toFixed(1) + '%';
+                const winProbPct = winProbVal / SIMULATIONS * 100;
+                const winProb = (winProbVal > 0 && winProbPct < 0.1)
+                    ? "<0.1%"
+                    : winProbPct.toFixed(1) + '%';
                 const remainingWins = unplayedGames.reduce((acc, game) => {
                     const bowlKey = getBowlKey(game);
                     const pickId = normalizeId(playerIds[bowlKey]);
@@ -275,6 +278,7 @@
                     if (stats[i].maxPossibleWins < maxOpponentWins) status = "eliminated";
                 }
                 stats[i].status = status;
+                if (status === "alive" && stats[i].winProbNum === 0) stats[i].winProb = "<0.1%";
             }
 
             setStandings(stats);
