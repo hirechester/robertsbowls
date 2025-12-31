@@ -62,6 +62,23 @@
             return Number.isFinite(n) ? String(n) : s;
         };
 
+        const truthy01 = (v) => {
+            const s = String(v ?? "").trim().toLowerCase();
+            return s === "1" || s === "true" || s === "yes" || s === "y" || s === "x";
+        };
+
+        const getFirstValue = (obj, keys) => {
+            if (!obj) return "";
+            for (const key of keys) {
+                const raw = obj[key];
+                const s = (raw === null || raw === undefined) ? "" : String(raw).trim();
+                if (s) return s;
+            }
+            return "";
+        };
+
+        const isCfpGame = (g) => truthy01(g["CFP?"] ?? g["CFP"] ?? g["Playoff"] ?? g["Playoff?"]);
+
         try {
             const sortedSchedule = schedule
                 .filter(g => g.Date && g.Time)
@@ -70,6 +87,31 @@
             const getBowlKey = (g) => {
                 const bid = String(g["Bowl ID"] || "").trim();
                 return bid || String(g.Bowl || "").trim();
+            };
+
+            const seedKeys = ["Seed", "Team Seed", "Seed #", "Seed Number", "Playoff Seed", "CFP Seed"];
+            const playoffTeamIds = new Set();
+            if (teamById) {
+                Object.keys(teamById).forEach(id => {
+                    const seedVal = getFirstValue(teamById[id], seedKeys);
+                    if (seedVal) playoffTeamIds.add(normalizeId(id));
+                });
+            }
+            const alivePlayoffTeams = new Set(playoffTeamIds);
+            sortedSchedule.forEach(game => {
+                if (!isCfpGame(game)) return;
+                const winnerId = normalizeId(game["Winner ID"]);
+                if (!winnerId) return;
+                const homeId = normalizeId(game["Home ID"]);
+                const awayId = normalizeId(game["Away ID"]);
+                if (homeId && winnerId !== homeId) alivePlayoffTeams.delete(homeId);
+                if (awayId && winnerId !== awayId) alivePlayoffTeams.delete(awayId);
+            });
+
+            const isAlivePickForGame = (game, pickId) => {
+                if (!pickId) return false;
+                if (!isCfpGame(game)) return true;
+                return alivePlayoffTeams.has(pickId);
             };
 
             const unplayedGames = sortedSchedule.filter(g => !normalizeId(g["Winner ID"]));
@@ -144,6 +186,12 @@
 
                 const winProbVal = playerSimWins[playerIds.Name] || 0;
                 const winProb = (winProbVal / SIMULATIONS * 100).toFixed(1) + '%';
+                const remainingWins = unplayedGames.reduce((acc, game) => {
+                    const bowlKey = getBowlKey(game);
+                    const pickId = normalizeId(playerIds[bowlKey]);
+                    return isAlivePickForGame(game, pickId) ? acc + 1 : acc;
+                }, 0);
+                const maxPossibleWins = wins + remainingWins;
 
                 const legacy = legacyByName[playerIds.Name] || {};
                 const champPickLegacy =
@@ -175,7 +223,9 @@
                     rawPicksIds: playerIds,
                     rawPicks: legacy,
                     winProb,
-                    winProbNum: winProbVal
+                    winProbNum: winProbVal,
+                    remainingWins,
+                    maxPossibleWins
                 };
             });
 
@@ -189,7 +239,6 @@
 
                 stats[i].rank = currentRank;
 
-                const winDeficit = leaderWins - stats[i].wins;
                 let status = "alive";
 
                 if (stats[i].rank === 1) {
@@ -210,7 +259,20 @@
                         if (diffs > maxDiffs) maxDiffs = diffs;
                     });
                     stats[i].swingGames = maxDiffs;
-                    if (maxDiffs < winDeficit) status = "eliminated";
+                    let maxOpponentWins = 0;
+                    stats.forEach(other => {
+                        if (other.name === stats[i].name) return;
+                        let scenarioWins = other.wins;
+                        unplayedGames.forEach(game => {
+                            const bowlKey = getBowlKey(game);
+                            const candidatePick = normalizeId(stats[i].rawPicksIds[bowlKey]);
+                            if (!isAlivePickForGame(game, candidatePick)) return;
+                            const otherPick = normalizeId(other.rawPicksIds[bowlKey]);
+                            if (otherPick && otherPick === candidatePick) scenarioWins++;
+                        });
+                        if (scenarioWins > maxOpponentWins) maxOpponentWins = scenarioWins;
+                    });
+                    if (stats[i].maxPossibleWins < maxOpponentWins) status = "eliminated";
                 }
                 stats[i].status = status;
             }
@@ -358,12 +420,12 @@
                     <div className="px-4 py-3 border-b border-gray-100"><h3 className="text-lg font-bold text-gray-900 font-serif">Legend</h3></div>
                     <div className="p-4 space-y-4 text-sm text-gray-600">
                         <div className="space-y-1"><div className="flex gap-2 items-start"><span className="font-bold text-gray-900 whitespace-nowrap text-base">🔮 Win Probability:</span></div><p className="mb-2">Based on 2,000 Monte Carlo simulations of the remaining games (treated as 50/50 coin flips).</p></div>
-                        <div className="border-t border-gray-100 pt-3 space-y-1"><div className="flex gap-2 items-start"><span className="font-bold text-gray-900 whitespace-nowrap text-base">🧮 Elimination Status:</span></div><p className="mb-2">Compares how many wins you’re behind the lead to your remaining swing chances against any current leader.</p>
-                            <ul className="list-disc pl-5 space-y-1"><li><span className="font-bold text-yellow-700">Leading</span> — currently in 1st place (or tied for it)</li><li><span className="font-bold text-green-700">Alive</span> — mathematically possible to catch at least one current leader</li><li><span className="font-bold text-red-700">Eliminated</span> — not enough swing games remaining to overcome the deficit against all current leaders</li></ul>
+                        <div className="border-t border-gray-100 pt-3 space-y-1"><div className="flex gap-2 items-start"><span className="font-bold text-gray-900 whitespace-nowrap text-base">🧮 Elimination Status:</span></div><p className="mb-2">Assumes all of your remaining picks are correct. If those exact outcomes happen, can you still finish with the most wins?</p>
+                            <ul className="list-disc pl-5 space-y-1"><li><span className="font-bold text-yellow-700">Leading</span> — currently in 1st place (or tied for it)</li><li><span className="font-bold text-green-700">Alive</span> — with your picks going perfect, you can still reach the top total</li><li><span className="font-bold text-red-700">Eliminated</span> — even with perfect picks, you can’t reach the top total</li></ul>
                         </div>
                         <div className="border-t border-gray-100 pt-3 space-y-1">
                             <div className="flex gap-2 items-start"><span className="font-bold text-gray-900 whitespace-nowrap text-base">🪜 Swing Games:</span></div>
-                            <p className="mb-2">The number of remaining games where your pick differs from the current leaders (best-case path). You can only gain ground on the lead in these specific games. If this number is lower than your win deficit, you are eliminated.</p>
+                            <p className="mb-2">The number of remaining games where your pick differs from the current leaders (best-case path). You can only gain ground on the lead in these specific games.</p>
                         </div>
                     </div>
                 </div>
