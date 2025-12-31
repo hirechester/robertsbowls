@@ -1064,20 +1064,19 @@ useEffect(() => {
                                                                                           {sportsbookSimple.closeGames.blowoutCorrect} of {sportsbookSimple.closeGames.blowouts}
                                                                                       </div>
                                                                                   </div>
-                                                                              </div>
-
-                                                                              <div className="border-t border-gray-100 pt-4">
-                                                                                  <div className="text-xs font-bold text-gray-400 uppercase mb-2">Beat the Spread</div>
-                                                                                  {sportsbookSimple.ats.total > 0 ? (
-                                                                                      <>
-                                                                                          <div className="text-lg font-black text-gray-900">
-                                                                                              {sportsbookSimple.ats.w}-{sportsbookSimple.ats.l}-{sportsbookSimple.ats.p}
-                                                                                          </div>
-                                                                                          <div className="text-xs text-gray-500">Did your picked team win by more than the odds expected.</div>
-                                                                                      </>
-                                                                                  ) : (
-                                                                                      <div className="text-sm text-gray-500">No spread results yet.</div>
-                                                                                  )}
+                                                                                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 col-span-2">
+                                                                                      <div className="text-xs font-bold text-gray-400 uppercase mb-2">Beat the Spread</div>
+                                                                                      {sportsbookSimple.ats.total > 0 ? (
+                                                                                          <>
+                                                                                              <div className="text-lg font-black text-gray-900">
+                                                                                                  {sportsbookSimple.ats.w}-{sportsbookSimple.ats.l}-{sportsbookSimple.ats.p}
+                                                                                              </div>
+                                                                                              <div className="text-xs text-gray-500">Record when your picked team wins by more than the odds expected.</div>
+                                                                                          </>
+                                                                                      ) : (
+                                                                                          <div className="text-sm text-gray-500">No spread results yet.</div>
+                                                                                      )}
+                                                                                  </div>
                                                                               </div>
 
                                                                               <div className="border-t border-gray-100 pt-4">
@@ -1096,7 +1095,7 @@ useEffect(() => {
                                                                               </div>
 
                                                                               <div className="border-t border-gray-100 pt-4">
-                                                                                  <div className="text-xs font-bold text-gray-400 uppercase mb-2">Oof Moments</div>
+                                                                                  <div className="text-xs font-bold text-gray-400 uppercase mb-2">Bad Beats</div>
                                                                                   {sportsbookSimple.oofMoments.length > 0 ? (
                                                                                       <div className="space-y-2">
                                                                                           {sportsbookSimple.oofMoments.map((item, idx) => (
