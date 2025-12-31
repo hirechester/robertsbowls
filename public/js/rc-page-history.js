@@ -9,6 +9,7 @@
     // Shared league data (loaded once per session by rc-data.js)
     const { history, loading, error, hallOfFameByYear, teamById, peopleById, peopleByName } = RC.data.useLeagueData();
     const [expandedYear, setExpandedYear] = useState(null);
+    const [tableSort, setTableSort] = useState({ key: "pct", direction: "desc" });
 
     const { LoadingSpinner, ErrorMessage } = (RC.ui || {});
     const Spinner = LoadingSpinner || (({ text }) => <div className="px-4 py-8 text-gray-600">{text || "Loading..."}</div>);
@@ -145,6 +146,101 @@
 
     const hallDetailsByYear = hallComputed.details;
 
+    const allTimeStandings = useMemo(() => {
+      const rowsByYear = hallOfFameByYear instanceof Map ? hallOfFameByYear : new Map();
+      const totals = {};
+      const hallTitleYears = new Set();
+
+      rowsByYear.forEach((rows) => {
+        (rows || []).forEach((row) => {
+          const name = resolvePlayerName(row?.playerRaw);
+          if (!name || name === "—") return;
+          if (!totals[name]) totals[name] = { name, wins: 0, losses: 0, titles: 0 };
+          totals[name].wins += row?.wins || 0;
+          totals[name].losses += row?.losses || 0;
+          if (row?.title) {
+            totals[name].titles += 1;
+            if (Number.isFinite(row?.year)) hallTitleYears.add(row.year);
+          }
+        });
+      });
+
+      if (Array.isArray(history)) {
+        history.forEach((entry) => {
+          const yearNum = parseInt(entry?.Year, 10);
+          const winner = String(entry?.Winner || "").trim();
+          if (!Number.isFinite(yearNum) || !winner) return;
+          if (hallTitleYears.has(yearNum)) return;
+          const name = resolvePlayerName(winner);
+          if (!name || name === "—") return;
+          if (!totals[name]) totals[name] = { name, wins: 0, losses: 0, titles: 0 };
+          totals[name].titles += 1;
+        });
+      }
+
+      const list = Object.values(totals).map((row) => {
+        const total = row.wins + row.losses;
+        const pct = total > 0 ? (row.wins / total) : null;
+        return {
+          ...row,
+          pct,
+          pctText: pct !== null ? pct.toFixed(3).replace(/^0\./, ".") + "%" : "—"
+        };
+      });
+      const ranked = list.slice().sort((a, b) => {
+        const pctDiff = (b.pct ?? -1) - (a.pct ?? -1);
+        if (pctDiff) return pctDiff;
+        const winsDiff = b.wins - a.wins;
+        if (winsDiff) return winsDiff;
+        const lossesDiff = a.losses - b.losses;
+        if (lossesDiff) return lossesDiff;
+        return a.name.localeCompare(b.name);
+      });
+      const rankByName = {};
+      ranked.forEach((row, idx) => { rankByName[row.name] = idx + 1; });
+
+      return list.map((row) => ({ ...row, rank: rankByName[row.name] }));
+    }, [hallOfFameByYear, peopleById, peopleByName, history]);
+
+    const sortedAllTimeStandings = useMemo(() => {
+      const dir = tableSort.direction === "asc" ? 1 : -1;
+      const key = tableSort.key;
+      return allTimeStandings.slice().sort((a, b) => {
+        if (key === "name") return a.name.localeCompare(b.name) * dir;
+        if (key === "rank") return (a.rank - b.rank) * dir;
+        if (key === "wins") return (a.wins - b.wins) * dir;
+        if (key === "losses") return (a.losses - b.losses) * dir;
+        if (key === "pct") return ((a.pct ?? -1) - (b.pct ?? -1)) * dir;
+        if (key === "titles") return ((a.titles ?? 0) - (b.titles ?? 0)) * dir;
+        return 0;
+      });
+    }, [allTimeStandings, tableSort]);
+
+    const toggleTableSort = (key) => {
+      setTableSort((prev) => {
+        if (prev.key === key) {
+          return { key, direction: prev.direction === "asc" ? "desc" : "asc" };
+        }
+        const defaultDir = key === "name" ? "asc" : "desc";
+        return { key, direction: defaultDir };
+      });
+    };
+
+    const sortIcon = (key) => {
+      if (tableSort.key !== key) return "↕";
+      return tableSort.direction === "asc" ? "↑" : "↓";
+    };
+
+    const renderRankPill = (rank) => {
+      const s = ["th", "st", "nd", "rd"];
+      const v = rank % 100;
+      const text = rank + (s[(v - 20) % 10] || s[v] || s[0]);
+      if (rank === 1) return <span className="inline-block px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-bold text-xs whitespace-nowrap">{text}</span>;
+      if (rank === 2) return <span className="inline-block px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-bold text-xs whitespace-nowrap">{text}</span>;
+      if (rank === 3) return <span className="inline-block px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 font-bold text-xs whitespace-nowrap">{text}</span>;
+      return <span className="text-gray-900 text-sm">{text}</span>;
+    };
+
     const toggleYear = (year) => {
       setExpandedYear((prev) => (prev === year ? null : year));
     };
@@ -188,7 +284,7 @@
                     <div className="relative z-10 ml-4 flex items-center gap-2">
                       <div className="bg-gray-50 px-3 py-1 md:px-4 md:py-2 rounded-lg border border-gray-100 text-center"><span className="text-lg md:text-xl font-bold text-blue-900 block leading-none">{item.Year}</span></div>
                       {hasDetails && (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}><polyline points="6 9 12 15 18 9"/></svg>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`hidden sm:inline-block text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}><polyline points="6 9 12 15 18 9"/></svg>
                       )}
                     </div>
                   </div>
@@ -205,7 +301,47 @@
               </div>
             );
           })}
-        </div></div>
+        </div>
+          <div className="mt-10">
+            <div className="text-center mb-4">
+              <h3 className="text-xl font-bold text-blue-900">All-Time Standings</h3>
+              <p className="text-gray-600 text-sm">Hall of Fame records by player.</p>
+            </div>
+            <div className="w-full shadow-sm border border-gray-100 rounded-2xl bg-white overflow-hidden">
+              <div className="overflow-x-auto w-full">
+                <table className="min-w-full border-collapse w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-800">
+                      <th onClick={() => toggleTableSort("name")} className="p-2 text-left font-bold border-b border-gray-100 min-w-[140px] cursor-pointer select-none hover:bg-gray-100 transition-colors">Player <span className="text-gray-400">{sortIcon("name")}</span></th>
+                      <th onClick={() => toggleTableSort("rank")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors">Rank <span className="text-gray-400">{sortIcon("rank")}</span></th>
+                      <th onClick={() => toggleTableSort("wins")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors">Wins <span className="text-gray-400">{sortIcon("wins")}</span></th>
+                      <th onClick={() => toggleTableSort("losses")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors">Losses <span className="text-gray-400">{sortIcon("losses")}</span></th>
+                      <th onClick={() => toggleTableSort("titles")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors">Titles <span className="text-gray-400">{sortIcon("titles")}</span></th>
+                      <th onClick={() => toggleTableSort("pct")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors">Win % <span className="text-gray-400">{sortIcon("pct")}</span></th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white">
+                    {sortedAllTimeStandings.map((row) => (
+                      <tr key={row.name} className="group hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-0">
+                        <td className="p-2 text-left font-bold text-gray-900">{row.name}</td>
+                        <td className="p-2 text-center text-gray-900">{renderRankPill(row.rank)}</td>
+                        <td className="p-2 text-center text-gray-900">{row.wins}</td>
+                        <td className="p-2 text-center text-gray-600">{row.losses}</td>
+                        <td className="p-2 text-center text-gray-900">{row.titles > 0 ? "🏆".repeat(row.titles) : "—"}</td>
+                        <td className="p-2 text-center text-gray-900">{row.pctText}</td>
+                      </tr>
+                    ))}
+                    {!allTimeStandings.length && (
+                      <tr>
+                        <td colSpan="6" className="p-4 text-center text-gray-500">Waiting on Hall of Fame records.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
