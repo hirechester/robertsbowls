@@ -12,6 +12,7 @@
   RC.SCHEDULE_URL = RC.BOWL_GAMES_URL; // legacy alias (retire the old Schedule tab)
   RC.PICKS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR6DAHasgDxAIJfV8r9PnD7Y1Z2UqfwhQeFqnk_iMnQISf7dlvjgNiGYq6Bk6R7BPg8Ipm5AnNVjfGM/pub?gid=1948765269&single=true&output=csv";
   RC.HISTORY_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR6DAHasgDxAIJfV8r9PnD7Y1Z2UqfwhQeFqnk_iMnQISf7dlvjgNiGYq6Bk6R7BPg8Ipm5AnNVjfGM/pub?gid=1391791324&single=true&output=csv";
+  RC.HALL_OF_FAME_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR6DAHasgDxAIJfV8r9PnD7Y1Z2UqfwhQeFqnk_iMnQISf7dlvjgNiGYq6Bk6R7BPg8Ipm5AnNVjfGM/pub?gid=232197835&single=true&output=csv";
   RC.TEAMS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR6DAHasgDxAIJfV8r9PnD7Y1Z2UqfwhQeFqnk_iMnQISf7dlvjgNiGYq6Bk6R7BPg8Ipm5AnNVjfGM/pub?gid=1148947895&single=true&output=csv";
 
   // --- HELPER: CSV PARSER ---
