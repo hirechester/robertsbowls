@@ -34,7 +34,7 @@
             };
 
             // Shared league data (fetched once per session by rc-data.js)
-            const { schedule: scheduleData, picks: picksData, loading: dataLoading, error: dataError } = RC.data.useLeagueData();
+            const { schedule: scheduleData, picks: picksData, teams: teamsData, loading: dataLoading, error: dataError } = RC.data.useLeagueData();
 
             useEffect(() => {
                 if (dataLoading) {
@@ -46,17 +46,22 @@
                     setLoading(false);
                     return;
                 }
-                if (!scheduleData || !picksData) return;
+                    if (!scheduleData || !picksData) return;
 
                 try {
-                    const schedule = scheduleData;
-                    const picks = picksData;
+                        const schedule = scheduleData;
+                        const picks = picksData;
+                        const teams = teamsData || [];
 
                         // 1. Process Schedule
                         const sortedSchedule = schedule
                             .filter(g => g.Date && g.Time)
                             .sort((a, b) => new Date(`${a.Date} ${a.Time}`) - new Date(`${b.Date} ${b.Time}`));
                         const unplayedGames = sortedSchedule.filter(g => !g.Winner);
+                        const playedGames = sortedSchedule.filter(g => g.Winner);
+                        const lastQuarterCount = Math.max(1, Math.ceil(playedGames.length * 0.25));
+                        const lastQuarterGames = playedGames.slice(-lastQuarterCount);
+                        const lastQuarterBowls = new Set(lastQuarterGames.map(g => g.Bowl));
 
                         // 2. Identify "On The Slate" Games (Today & Tomorrow)
                         const today = new Date();
@@ -106,8 +111,30 @@
                             });
                         }
 
+                        const normalize = (value) => (value || "").toString().trim().toLowerCase();
+                        const parseSpread = (value) => {
+                            if (value === undefined || value === null) return NaN;
+                            const cleaned = value.toString().replace(/[^\d.-]/g, "");
+                            return parseFloat(cleaned);
+                        };
+                        const teamNameKey = (name) => normalize(name);
+                        const confKey = (name) => normalize(name).replace(/\s+/g, " ");
+                        const teamNameToConf = new Map();
+                        teams.forEach((team) => {
+                            const rawName = team["School"] || team.School || team["Team"] || team.Team || team["Name"] || team.Name;
+                            const rawConf = team["Conference"] || team.Conference || team["Conf"] || team.Conf || team["League"] || team.League;
+                            if (rawName && rawConf) {
+                                teamNameToConf.set(teamNameKey(rawName), confKey(rawConf));
+                            }
+                        });
+
                         let stats = picks.map(player => {
                             let wins = 0; let losses = 0; let currentStreak = 0; let tempWinStreak = 0; let maxWinStreak = 0;
+                            let earlyLosses = 0; let seenWin = false;
+                            let favoritePicks = 0; let favoriteWins = 0; let upsetWins = 0;
+                            let oneScoreTotal = 0; let oneScoreWins = 0;
+                            let conferenceTotal = 0; let conferenceWins = 0;
+                            let lateTotal = 0; let lateWins = 0;
                             sortedSchedule.forEach(game => {
                                 const winner = game.Winner;
                                 const pick = player[game.Bowl];
@@ -122,12 +149,50 @@
                                         currentStreak = currentStreak <= 0 ? currentStreak - 1 : -1;
                                         tempWinStreak = 0;
                                     }
+
+                                    if (!seenWin && pick) {
+                                        if (normalize(pick) === normalize(winner)) {
+                                            seenWin = true;
+                                        } else {
+                                            earlyLosses++;
+                                        }
+                                    }
+
+                                    const favorite = game.Favorite || game["Favorite"];
+                                    if (favorite && pick) {
+                                        if (normalize(pick) === normalize(favorite)) {
+                                            favoritePicks++;
+                                            if (normalize(winner) === normalize(favorite)) favoriteWins++;
+                                        } else if (normalize(winner) === normalize(pick)) {
+                                            upsetWins++;
+                                        }
+                                    }
+
+                                    const spreadVal = parseSpread(game.Spread || game["Spread"]);
+                                    if (Number.isFinite(spreadVal) && Math.abs(spreadVal) <= 3 && pick) {
+                                        oneScoreTotal++;
+                                        if (normalize(pick) === normalize(winner)) oneScoreWins++;
+                                    }
+
+                                    const t1Conf = teamNameToConf.get(teamNameKey(game["Team 1"]));
+                                    const t2Conf = teamNameToConf.get(teamNameKey(game["Team 2"]));
+                                    if (t1Conf && t2Conf && t1Conf === t2Conf && pick) {
+                                        conferenceTotal++;
+                                        if (normalize(pick) === normalize(winner)) conferenceWins++;
+                                    }
+
+                                    if (lastQuarterBowls.has(game.Bowl) && pick) {
+                                        lateTotal++;
+                                        if (normalize(pick) === normalize(winner)) lateWins++;
+                                    }
                                 }
                             });
                             const winProb = (playerSimWins[player.Name] / SIMULATIONS * 100);
                             return {
                                 name: player.Name, wins, losses, currentStreak, maxWinStreak, winProb,
-                                rawPicks: player, champPick: player["National Championship"], tiebreaker: parseInt(player["Tiebreaker Score"] || 0)
+                                rawPicks: player, champPick: player["National Championship"], tiebreaker: parseInt(player["Tiebreaker Score"] || 0),
+                                earlyLosses, favoritePicks, favoriteWins, upsetWins, oneScoreTotal, oneScoreWins,
+                                conferenceTotal, conferenceWins, lateTotal, lateWins
                             };
                         });
 
@@ -174,7 +239,7 @@
                         // Against the Grain HL
                         const rebel = stats.reduce((prev, current) => (prev.swingGames > current.swingGames) ? prev : current);
                         if (rebel && rebel.swingGames > 0) {
-                            addHl("rebel", { Emoji: "🌾", Headline: "Against the Grain", Content: `${rebel.name} has gone rogue with ${rebel.swingGames} picks different from the leader. Playing their own game.` });
+                            addHl("rebel", { Emoji: "🌾", Headline: "Against the Grain", Content: `${rebel.name} has ${rebel.swingGames} picks different from the leader in the remaining games. Playing their own game.` });
                         }
 
                         // Mirror HL
@@ -186,6 +251,153 @@
                         const moon = stats.reduce((prev, current) => (prev.tiebreaker > current.tiebreaker) ? prev : current);
                         if (moon && moon.tiebreaker > 0) {
                             addHl("moon", { Emoji: "🚀", Headline: "To The Moon", Content: `${moon.name} is predicting a massive ${moon.tiebreaker} points in the title game shootout.` });
+                        }
+
+                        // Cold Snap HL
+                        const coldSnap = stats.filter(p => p.currentStreak <= -3).sort((a, b) => a.currentStreak - b.currentStreak);
+                        if (coldSnap.length > 0) {
+                            const streak = Math.abs(coldSnap[0].currentStreak);
+                            addHl("coldSnap", { Emoji: "❄️", Headline: "Cold Snap", Content: `${coldSnap[0].name} has dropped ${streak} straight. The picks are frozen solid.` });
+                        }
+
+                        // Upset Magnet HL
+                        const upsetMagnet = stats.reduce((prev, current) => (prev.upsetWins > current.upsetWins) ? prev : current);
+                        if (upsetMagnet && upsetMagnet.upsetWins >= 2) {
+                            addHl("upsetMagnet", { Emoji: "🧲", Headline: "Upset Magnet", Content: `${upsetMagnet.name} has the most underdog hits with ${upsetMagnet.upsetWins}. Chaos follows them.` });
+                        }
+
+                        // Fortress Favorites HL
+                        const fortressCandidates = stats.filter(p => p.favoritePicks >= 5 && p.favoritePicks === p.favoriteWins)
+                            .sort((a, b) => b.favoritePicks - a.favoritePicks);
+                        if (fortressCandidates.length > 0) {
+                            addHl("fortress", { Emoji: "🛡️", Headline: "Fortress Favorites", Content: `${fortressCandidates[0].name} is perfect when backing the chalk (${fortressCandidates[0].favoritePicks} for ${fortressCandidates[0].favoritePicks}).` });
+                        }
+
+                        // Fire Drill HL
+                        if (leader) {
+                            const closeCount = stats.filter(p => p.wins >= leader.wins - 2).length;
+                            if (closeCount >= 4) {
+                                addHl("fireDrill", { Emoji: "🧯", Headline: "Fire Drill", Content: `${closeCount} players are within two games of the lead. Chaos is one bowl away.` });
+                            }
+                        }
+
+                        // Late-Blooming HL
+                        const lateBloomers = stats.filter(p => p.currentStreak >= 3 && p.earlyLosses >= 3)
+                            .sort((a, b) => b.currentStreak - a.currentStreak || b.earlyLosses - a.earlyLosses);
+                        if (lateBloomers.length > 0) {
+                            addHl("lateBlooming", { Emoji: "🛎️", Headline: "Late-Blooming", Content: `${lateBloomers[0].name} opened with ${lateBloomers[0].earlyLosses} straight misses but is now scorching hot.` });
+                        }
+
+                        // Ice in Veins HL
+                        const clutchCandidates = stats.filter(p => p.oneScoreTotal >= 3)
+                            .map(p => ({ ...p, oneScoreRate: p.oneScoreWins / p.oneScoreTotal }))
+                            .sort((a, b) => b.oneScoreRate - a.oneScoreRate || b.oneScoreTotal - a.oneScoreTotal);
+                        if (clutchCandidates.length > 0 && clutchCandidates[0].oneScoreRate > 0) {
+                            addHl("iceVeins", { Emoji: "🧊", Headline: "Ice in Veins", Content: `${clutchCandidates[0].name} is ${Math.round(clutchCandidates[0].oneScoreRate * 100)}% in one-score games. Cold-blooded.` });
+                        }
+
+                        // Chess Match HL
+                        if (stats.length > 1) {
+                            const leaderPick = stats[0];
+                            const runnerPick = stats[1];
+                            let sameRemaining = 0;
+                            sortedSchedule.forEach(game => {
+                                if (!game.Winner) {
+                                    const lp = leaderPick.rawPicks[game.Bowl];
+                                    const rp = runnerPick.rawPicks[game.Bowl];
+                                    if (lp && rp && normalize(lp) === normalize(rp)) sameRemaining++;
+                                }
+                            });
+                            if (sameRemaining >= 4) {
+                                addHl("chessMatch", { Emoji: "🧠", Headline: "Chess Match", Content: `${leaderPick.name} and ${runnerPick.name} match on ${sameRemaining} remaining picks. One bold move could decide it.` });
+                            }
+                        }
+
+                        // Pick Split HL (future games only)
+                        const upcomingSplits = [];
+                        sortedSchedule.forEach(game => {
+                            if (game.Winner) return;
+                            const counts = new Map();
+                            picks.forEach(player => {
+                                const pick = player[game.Bowl];
+                                if (!pick) return;
+                                const key = normalize(pick);
+                                const existing = counts.get(key);
+                                if (existing) {
+                                    existing.count += 1;
+                                } else {
+                                    counts.set(key, { count: 1, label: pick });
+                                }
+                            });
+                            if (counts.size < 2) return;
+                            const total = Array.from(counts.values()).reduce((sum, val) => sum + val.count, 0);
+                            const sortedCounts = Array.from(counts.values()).sort((a, b) => b.count - a.count);
+                            const top = sortedCounts[0];
+                            const second = sortedCounts[1];
+                            const diff = Math.abs(top.count - second.count);
+                            const topPct = (top.count / total) * 100;
+                            const secondPct = (second.count / total) * 100;
+                            upcomingSplits.push({
+                                bowl: game.Bowl,
+                                topName: top.label,
+                                secondName: second.label,
+                                topPct,
+                                secondPct,
+                                diff
+                            });
+                        });
+                        if (upcomingSplits.length > 0) {
+                            upcomingSplits.sort((a, b) => a.diff - b.diff);
+                            const split = upcomingSplits[0];
+                            addHl("pickSplit", { Emoji: "🧭", Headline: "Pick Split", Content: `The room is split on ${split.bowl}: ${split.topName} ${Math.round(split.topPct)}% vs ${split.secondName} ${Math.round(split.secondPct)}%.` });
+                        }
+
+                        // Homework Pays HL
+                        const conferencePerfect = stats.filter(p => p.conferenceTotal >= 2 && p.conferenceTotal === p.conferenceWins)
+                            .sort((a, b) => b.conferenceTotal - a.conferenceTotal);
+                        if (conferencePerfect.length > 0) {
+                            addHl("homeworkPays", { Emoji: "📚", Headline: "Homework Pays", Content: `${conferencePerfect[0].name} is perfect in conference matchups (${conferencePerfect[0].conferenceWins} for ${conferencePerfect[0].conferenceTotal}).` });
+                        }
+
+                        // Tug of War HL
+                        if (sortedSchedule.length > 0) {
+                            const runningWins = {};
+                            picks.forEach(player => { runningWins[player.Name] = 0; });
+                            let lastLeaders = null;
+                            let leaderFlips = 0;
+                            sortedSchedule.forEach(game => {
+                                if (!game.Winner) return;
+                                picks.forEach(player => {
+                                    const pick = player[game.Bowl];
+                                    if (pick && normalize(pick) === normalize(game.Winner)) {
+                                        runningWins[player.Name]++;
+                                    }
+                                });
+                                const maxWins = Math.max(...Object.values(runningWins));
+                                const leaders = Object.keys(runningWins).filter(name => runningWins[name] === maxWins).sort();
+                                const leaderKey = leaders.join("|");
+                                if (lastLeaders && leaderKey !== lastLeaders) leaderFlips++;
+                                lastLeaders = leaderKey;
+                            });
+                            if (leaderFlips >= 2) {
+                                addHl("tugOfWar", { Emoji: "🧵", Headline: "Tug of War", Content: `The lead has changed hands ${leaderFlips} times so far. Nobody can hold the rope.` });
+                            }
+                        }
+
+                        // Panic Button HL
+                        const gamesLeft = unplayedGames.length;
+                        const aliveCount = stats.filter(p => p.winProb > 0).length;
+                        if (gamesLeft > 0 && aliveCount > 0) {
+                            addHl("panicButton", { Emoji: "😱", Headline: "Panic Button", Content: `Only ${gamesLeft} games left and ${aliveCount} players still alive. Hold onto your sheet.` });
+                        }
+
+                        // Photo Finish HL
+                        if (lastQuarterGames.length > 0) {
+                            const lateLeaders = stats.filter(p => p.lateTotal > 0)
+                                .sort((a, b) => b.lateWins - a.lateWins || b.wins - a.wins);
+                            if (lateLeaders.length > 0 && lateLeaders[0].lateWins > 0) {
+                                addHl("photoFinish", { Emoji: "🏁", Headline: "Photo Finish", Content: `${lateLeaders[0].name} leads the late stretch with ${lateLeaders[0].lateWins} wins in the last ${lastQuarterGames.length} games.` });
+                            }
                         }
 
                         // Final Headlines Selection
@@ -210,7 +422,7 @@
                     console.error("HomePage: error building home data", error);
                     setLoading(false);
                 }
-            }, [dataLoading, dataError, scheduleData, picksData]);
+            }, [dataLoading, dataError, scheduleData, picksData, teamsData]);
 
             // Static Bank
             const STATIC_HEADLINES = [
