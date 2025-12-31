@@ -98,7 +98,7 @@
 
   const cache = {
     status: "idle", // "idle" | "loading" | "ready" | "error"
-    data: null,     // { schedule, bowlGames, picks, picksIds, history, teams, teamById }
+    data: null,     // { schedule, bowlGames, picks, picksIds, history, teams, teamById, hallOfFameByYear, peopleById, peopleByName }
     error: null,
     promise: null,
     ts: null
@@ -126,6 +126,15 @@
     return Number.isFinite(n) ? String(n) : s;
   }
 
+  function normalizeHeaderName(name) {
+    return String(name || "").replace(/^\uFEFF/, "").trim();
+  }
+
+  function getCsvHeaders(csvText) {
+    const rows = parseCSV(csvText || "");
+    return (rows[0] || []).map(h => normalizeHeaderName(h));
+  }
+
   function buildTeamById(teams) {
     const map = {};
     (teams || []).forEach((t) => {
@@ -134,6 +143,21 @@
       map[id] = t;
     });
     return map;
+  }
+
+  function buildPeopleIndex(picksIds) {
+    const byId = {};
+    const byName = {};
+    (picksIds || []).forEach((p) => {
+      const name = String(p?.Name || "").trim();
+      if (!name) return;
+      const id = normalizeId(getFirst(p, ["Player ID", "PlayerID", "Person ID", "PersonID", "ID", "Id"]));
+      if (id && !byId[id]) byId[id] = name;
+      const key = name.toLowerCase();
+      if (!byName[key]) byName[key] = [];
+      if (!byName[key].includes(name)) byName[key].push(name);
+    });
+    return { byId, byName };
   }
 
   function teamDisplayName(team) {
@@ -212,19 +236,24 @@
     if (!RC.TEAMS_URL) {
       throw new Error("RC.TEAMS_URL is required when Bowl Games uses Team IDs.");
     }
+    if (!RC.HALL_OF_FAME_URL) {
+      throw new Error("RC.HALL_OF_FAME_URL is required for Hall of Fame data.");
+    }
 
-    const [bowlGamesRes, picksRes, historyRes, teamsRes] = await Promise.all([
+    const [bowlGamesRes, picksRes, historyRes, teamsRes, hallRes] = await Promise.all([
       fetch(RC.BOWL_GAMES_URL, { cache: "no-store" }),
       fetch(RC.PICKS_URL, { cache: "no-store" }),
       fetch(RC.HISTORY_URL, { cache: "no-store" }),
-      fetch(RC.TEAMS_URL, { cache: "no-store" })
+      fetch(RC.TEAMS_URL, { cache: "no-store" }),
+      fetch(RC.HALL_OF_FAME_URL, { cache: "no-store" })
     ]);
 
-    const [bowlGamesText, picksText, historyText, teamsText] = await Promise.all([
+    const [bowlGamesText, picksText, historyText, teamsText, hallText] = await Promise.all([
       bowlGamesRes.text(),
       picksRes.text(),
       historyRes.text(),
-      teamsRes.text()
+      teamsRes.text(),
+      hallRes.text()
     ]);
 
     const bowlGames = RC.csvToJson(bowlGamesText).filter(r => r && Object.keys(r).length);
@@ -239,6 +268,7 @@
 
     
     const picksIds = RC.csvToJson(picksText).filter(p => p && p.Name);
+    const peopleIndex = buildPeopleIndex(picksIds);
 
     // Picks sheet is now ID-based:
     // - Header columns for games use Bowl ID (stable unique ID)
@@ -277,7 +307,58 @@
     });
     const history = RC.csvToJson(historyText);
 
-    return { schedule, bowlGames, picks, picksIds, history, teams, teamById };
+    const requiredHallHeaders = ["Year", "Player", "Wins", "Losses", "Champ Team", "Champ Rank", "Title"];
+    let hallOfFameByYear = new Map();
+
+    try {
+      const hallHeaders = getCsvHeaders(hallText);
+      const missing = requiredHallHeaders.filter(h => !hallHeaders.includes(h));
+      if (!missing.length) {
+        const hallRows = RC.csvToJson(hallText)
+          .filter(r => r && Object.keys(r).length)
+          .map((row) => {
+            const normalized = {};
+            Object.keys(row).forEach((k) => {
+              normalized[normalizeHeaderName(k)] = row[k];
+            });
+            return normalized;
+          });
+        hallRows.forEach((row) => {
+          const yearNum = parseInt(getFirst(row, ["Year"]), 10);
+          if (!Number.isFinite(yearNum)) return;
+          const winsRaw = parseInt(getFirst(row, ["Wins"]), 10);
+          const lossesRaw = parseInt(getFirst(row, ["Losses"]), 10);
+          const champRankRaw = getFirst(row, ["Champ Rank"]);
+          const champRankVal = parseInt(champRankRaw, 10);
+          const entry = {
+            year: yearNum,
+            playerRaw: getFirst(row, ["Player"]),
+            wins: Number.isFinite(winsRaw) ? winsRaw : 0,
+            losses: Number.isFinite(lossesRaw) ? lossesRaw : 0,
+            champTeamId: normalizeId(getFirst(row, ["Champ Team"])),
+            champRank: Number.isFinite(champRankVal) ? champRankVal : null,
+            title: to01(getFirst(row, ["Title"])) === "1"
+          };
+          if (!hallOfFameByYear.has(yearNum)) hallOfFameByYear.set(yearNum, []);
+          hallOfFameByYear.get(yearNum).push(entry);
+        });
+      }
+    } catch (err) {
+      hallOfFameByYear = new Map();
+    }
+
+    return {
+      schedule,
+      bowlGames,
+      picks,
+      picksIds,
+      history,
+      teams,
+      teamById,
+      hallOfFameByYear,
+      peopleById: peopleIndex.byId,
+      peopleByName: peopleIndex.byName
+    };
   }
 
   function loadOnce() {
@@ -316,6 +397,9 @@
       history: cache.data?.history || null,
       teams: cache.data?.teams || null,
       teamById: cache.data?.teamById || null,
+      hallOfFameByYear: cache.data?.hallOfFameByYear || null,
+      peopleById: cache.data?.peopleById || null,
+      peopleByName: cache.data?.peopleByName || null,
       loading: cache.status === "loading" || cache.status === "idle",
       error: cache.error || null,
       lastUpdated: cache.ts
@@ -340,6 +424,9 @@
           history: data.history,
           teams: data.teams,
           teamById: data.teamById,
+          hallOfFameByYear: data.hallOfFameByYear,
+          peopleById: data.peopleById,
+          peopleByName: data.peopleByName,
           loading: false,
           error: null,
           lastUpdated: cache.ts
@@ -362,6 +449,9 @@
           history: cache.data.history,
           teams: cache.data.teams,
           teamById: cache.data.teamById,
+          hallOfFameByYear: cache.data.hallOfFameByYear,
+          peopleById: cache.data.peopleById,
+          peopleByName: cache.data.peopleByName,
           loading: false,
           error: null,
           lastUpdated: cache.ts
@@ -377,16 +467,19 @@
           setState({
             schedule: data.schedule,
             bowlGames: data.bowlGames,
-            picks: data.picks,
+          picks: data.picks,
           picksIds: data.picksIds,
             history: data.history,
-            teams: data.teams,
-            teamById: data.teamById,
-            loading: false,
-            error: null,
-            lastUpdated: cache.ts
-          });
-        })
+          teams: data.teams,
+          teamById: data.teamById,
+          hallOfFameByYear: data.hallOfFameByYear,
+          peopleById: data.peopleById,
+          peopleByName: data.peopleByName,
+          loading: false,
+          error: null,
+          lastUpdated: cache.ts
+        });
+      })
         .catch((e) => {
           if (!alive) return;
           setState((s) => ({ ...s, loading: false, error: e, lastUpdated: cache.ts }));
@@ -403,6 +496,9 @@
       history: state.history,
       teams: state.teams,
       teamById: state.teamById,
+      hallOfFameByYear: state.hallOfFameByYear,
+      peopleById: state.peopleById,
+      peopleByName: state.peopleByName,
       loading: state.loading,
       error: state.error,
       refresh,
