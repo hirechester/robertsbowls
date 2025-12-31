@@ -1149,12 +1149,14 @@
               const homeId = normalizeId(getFirstValue(g, ["Home ID", "HomeID"]));
               const awayTeam = awayId && teamById ? teamById[awayId] : null;
               const homeTeam = homeId && teamById ? teamById[homeId] : null;
-              const matchup = `${formatTeamLabel(awayTeam, getFirstValue(g, ["Team 1"]))} vs ${formatTeamLabel(homeTeam, getFirstValue(g, ["Team 2"]))}`;
+              const split = summarizePickSplit(g);
+              const awayPctText = split && Number.isFinite(split.awayPct) ? ` (${split.awayPct}% picked)` : "";
+              const homePctText = split && Number.isFinite(split.homePct) ? ` (${split.homePct}% picked)` : "";
+              const matchup = `${formatTeamLabel(awayTeam, getFirstValue(g, ["Team 1"]))}${awayPctText} vs ${formatTeamLabel(homeTeam, getFirstValue(g, ["Team 2"]))}${homePctText}`;
 
               const timeLabel = getFirstValue(g, ["Time"]) || "TBD";
               const network = getFirstValue(g, ["Network", "TV"]) || "";
-              const split = summarizePickSplit(g);
-              const splitText = split ? `Pick Split: ${split.awayPct}% / ${split.homePct}%` : "Pick Split: n/a";
+              // const splitText = split ? `Pick Split: ${split.awayPct}% / ${split.homePct}%` : "Pick Split: n/a";
               const spreadVal = getFirstValue(g, ["Spread", "Line"]);
               const totalVal = getFirstValue(g, ["O/U", "Over/Under", "Total"]);
               const favoriteId = normalizeId(getFirstValue(g, ["Favorite ID", "FavoriteID"]));
@@ -1165,15 +1167,10 @@
               return [
                 `${timeLabel}${network ? ` - ${network}` : ""} - ${getFirstValue(g, ["Bowl", "Bowl Name"]) || "Bowl Game"}`,
                 matchup,
-                splitText,
-                oddsText ? oddsText : null
+                // splitText,
+                // oddsText ? oddsText : null
               ].filter(Boolean);
             }).concat(todayData.moreCount > 0 ? [`+${todayData.moreCount} more games`] : [])
-        });
-        sections.push({
-          title: "What's At Stake ⚡",
-          accent: "#f97316",
-          lines: todayData.stakeLines
         });
         sections.push({
           title: "Where the Top 5 Split 🍌",
@@ -1181,18 +1178,26 @@
           lines: todayTop5Breakdown.games.length
             ? todayTop5Breakdown.games.flatMap((item) => {
               if (item.statusLine) {
-                return [
+                const lines = [
                   item.bowlName,
                   item.statusLine
                 ];
+                if (/cotton bowl/i.test(item.bowlName)) {
+                  lines.push("Geneviève picked #7 Texas A&M ❌");
+                }
+                return lines;
               }
               const homeNames = item.homePickers.length ? item.homePickers.join(", ") : "none";
               const awayNames = item.awayPickers.length ? item.awayPickers.join(", ") : "none";
-              return [
+              const lines = [
                 item.bowlName,
                 `${item.homeLabel}: ${homeNames}`,
                 `${item.awayLabel}: ${awayNames}`
               ];
+              if (/cotton bowl/i.test(item.bowlName)) {
+                lines.push("Geneviève picked #7 Texas A&M ❌");
+              }
+              return lines;
             })
             : [todayTop5Breakdown.topCount ? `No games today.` : "No leaderboard data yet."]
         });
@@ -1911,12 +1916,14 @@
                           const homeId = normalizeId(getFirstValue(g, ["Home ID", "HomeID"]));
                           const awayTeam = awayId && teamById ? teamById[awayId] : null;
                           const homeTeam = homeId && teamById ? teamById[homeId] : null;
-                          const matchup = `${formatTeamLabel(awayTeam, getFirstValue(g, ["Team 1"]))} vs ${formatTeamLabel(homeTeam, getFirstValue(g, ["Team 2"]))}`;
+                          const split = summarizePickSplit(g);
+                          const awayPctText = split && Number.isFinite(split.awayPct) ? ` (${split.awayPct}% picked)` : "";
+                          const homePctText = split && Number.isFinite(split.homePct) ? ` (${split.homePct}% picked)` : "";
+                          const matchup = `${formatTeamLabel(awayTeam, getFirstValue(g, ["Team 1"]))}${awayPctText} vs ${formatTeamLabel(homeTeam, getFirstValue(g, ["Team 2"]))}${homePctText}`;
 
                           const timeLabel = getFirstValue(g, ["Time"]) || "TBD";
                           const network = getFirstValue(g, ["Network", "TV"]) || "";
-                          const split = summarizePickSplit(g);
-                          const splitText = split ? `Pick Split: ${split.awayPct}% / ${split.homePct}%` : "Pick Split: n/a";
+                          // const splitText = split ? `Pick Split: ${split.awayPct}% / ${split.homePct}%` : "Pick Split: n/a";
                           const spreadVal = getFirstValue(g, ["Spread", "Line"]);
                           const totalVal = getFirstValue(g, ["O/U", "Over/Under", "Total"]);
                           const favoriteId = normalizeId(getFirstValue(g, ["Favorite ID", "FavoriteID"]));
@@ -1929,8 +1936,8 @@
                               <div className="text-slate-500 tracking-wide">{timeLabel}{network ? ` - ${network}` : ""}</div>
                               <div className="text-2xl font-semibold text-slate-900">{getFirstValue(g, ["Bowl", "Bowl Name"]) || "Bowl Game"}</div>
                               <div className="text-slate-700">{matchup}</div>
-                              <div className="text-slate-600">{splitText}</div>
-                              {oddsText && <div className="text-slate-500 text-lg">{oddsText}</div>}
+                              {/* <div className="text-slate-600">{splitText}</div> */}
+                              {/* {oddsText && <div className="text-slate-500 text-lg">{oddsText}</div>} */}
                             </div>
                           );
                         })}
@@ -1939,18 +1946,6 @@
                         )}
                       </div>
                     )
-                )}
-
-                {renderCard(
-                  "What's At Stake ⚡",
-                  "#f97316",
-                  (
-                    <div className="flex flex-col gap-2 text-xl text-slate-700">
-                      {todayData.stakeLines.map((line, idx) => (
-                        <div key={`${idx}-${line}`}>{renderStakeLine(line)}</div>
-                      ))}
-                    </div>
-                  )
                 )}
 
                 {renderCard(
@@ -1967,11 +1962,19 @@
                             <div key={`${getBowlKey(item.game) || "split"}-${idx}`} className="flex flex-col gap-1">
                               <div className="font-semibold text-slate-900">{item.bowlName}</div>
                               {item.statusLine ? (
-                                <div className="text-slate-600">{item.statusLine}</div>
+                                <>
+                                  <div className="text-slate-600">{item.statusLine}</div>
+                                  {/cotton bowl/i.test(item.bowlName) && (
+                                    <div className="text-slate-600">Geneviève picked #7 Texas A&amp;M ❌</div>
+                                  )}
+                                </>
                               ) : (
                                 <>
                                   <div className="text-slate-600">{item.homeLabel}: {homeNames}</div>
                                   <div className="text-slate-600">{item.awayLabel}: {awayNames}</div>
+                                  {/cotton bowl/i.test(item.bowlName) && (
+                                    <div className="text-slate-600">Geneviève picked #7 Texas A&amp;M ❌</div>
+                                  )}
                                 </>
                               )}
                             </div>
