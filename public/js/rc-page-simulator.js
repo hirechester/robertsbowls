@@ -120,41 +120,43 @@
 
               {/* Projected Leaderboard (Sticky) */}
               <div className="sticky top-16 z-40 bg-white/95 backdrop-blur-sm border-b border-gray-100 shadow-sm px-4 pb-2 pt-2">
-                  <div className="bg-slate-900 text-white rounded-xl p-4 shadow-lg mb-2">
-                       <div className="flex justify-between items-center mb-2">
-                          <h3 className="text-xs font-bold uppercase tracking-widest text-yellow-400">Projected Leaderboard</h3>
-                          <button onClick={resetSimulation} className="text-[10px] bg-white/10 hover:bg-white/20 px-2 py-1 rounded text-white font-bold transition-colors">Reset All</button>
-                       </div>
-                       <div className="mb-3">
-                           <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1" htmlFor="simulatorPreset">
-                               Load Player Picks
-                           </label>
-                           <select
-                               id="simulatorPreset"
-                               value={presetPlayerName}
-                               onChange={(e) => applyPlayerPreset(e.target.value)}
-                               className="w-full bg-slate-800 text-white text-xs font-semibold rounded-md px-2 py-2 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                           >
-                               <option value="">Select a player...</option>
-                               {(Array.isArray(picksIds) ? picksIds : [])
-                                   .map(p => p && p.Name)
-                                   .filter(Boolean)
-                                   .sort((a, b) => a.localeCompare(b))
-                                   .map(name => (
-                                       <option key={name} value={name}>{name}</option>
-                                   ))}
-                           </select>
-                       </div>
-                       <div className="overflow-x-auto no-scrollbar pb-2">
-                           <div className="flex gap-4 w-fit mx-auto">
-                               {projectedStandings.slice(0, 10).map((p, idx) => (
-                                   <div key={p.name} className="flex flex-col items-center justify-center flex-shrink-0 w-16">
-                                       <span className="text-2xl font-black w-full text-center">{p.wins}</span>
-                                       <span className="text-[10px] font-bold text-slate-400 truncate w-full text-center">{p.name}</span>
-                                   </div>
-                               ))}
+                  <div className="max-w-4xl mx-auto">
+                      <div className="bg-slate-900 text-white rounded-xl p-4 shadow-lg mb-2">
+                           <div className="flex justify-between items-center mb-2">
+                              <h3 className="text-xs font-bold uppercase tracking-widest text-yellow-400">Projected Leaderboard</h3>
+                              <button onClick={resetSimulation} className="text-[10px] bg-white/10 hover:bg-white/20 px-2 py-1 rounded text-white font-bold transition-colors">Reset All</button>
                            </div>
-                       </div>
+                           <div className="mb-3">
+                               <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1" htmlFor="simulatorPreset">
+                                   Simulate Running the Table
+                               </label>
+                               <select
+                                   id="simulatorPreset"
+                                   value={presetPlayerName}
+                                   onChange={(e) => applyPlayerPreset(e.target.value)}
+                                   className="w-full bg-slate-800 text-white text-xs font-semibold rounded-md px-2 py-2 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                               >
+                                   <option value="">Select a player...</option>
+                                   {(Array.isArray(picksIds) ? picksIds : [])
+                                       .map(p => p && p.Name)
+                                       .filter(Boolean)
+                                       .sort((a, b) => a.localeCompare(b))
+                                       .map(name => (
+                                           <option key={name} value={name}>{name}</option>
+                                       ))}
+                               </select>
+                           </div>
+                           <div className="overflow-x-auto no-scrollbar pb-2">
+                               <div className="flex gap-4 w-fit mx-auto">
+                                   {projectedStandings.slice(0, 10).map((p, idx) => (
+                                       <div key={p.name} className="flex flex-col items-center justify-center flex-shrink-0 w-16">
+                                           <span className="text-2xl font-black w-full text-center">{p.wins}</span>
+                                           <span className="text-[10px] font-bold text-slate-400 truncate w-full text-center">{p.name}</span>
+                                       </div>
+                                   ))}
+                               </div>
+                           </div>
+                      </div>
                   </div>
               </div>
 
