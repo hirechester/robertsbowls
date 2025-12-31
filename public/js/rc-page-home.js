@@ -15,6 +15,23 @@
             const [headlines, setHeadlines] = useState([]);
             const [slateGames, setSlateGames] = useState([]);
             const [loading, setLoading] = useState(true);
+            const networkLogoMap = {
+                ESPN: "images/networks/espn.png",
+                ESPN2: "images/networks/espn2.png",
+                FOX: "images/networks/fox.png",
+                CBS: "images/networks/cbs.png",
+                ABC: "images/networks/abc.png",
+                "HBO MAX": "images/networks/max.png",
+                MAX: "images/networks/max.png",
+                "THE CW NETWORK": "images/networks/cw.png",
+                "THE CW": "images/networks/cw.png",
+                CW: "images/networks/cw.png",
+            };
+            const getNetworkLogo = (network) => {
+                if (!network) return null;
+                const key = network.trim().toUpperCase();
+                return networkLogoMap[key] || null;
+            };
 
             // Shared league data (fetched once per session by rc-data.js)
             const { schedule: scheduleData, picks: picksData, loading: dataLoading, error: dataError } = RC.data.useLeagueData();
@@ -280,7 +297,9 @@
                         <h2 className="text-2xl font-bold text-gray-900 font-serif mb-4 ml-1">On The Slate</h2>
                         {slateGames.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {slateGames.map((game, idx) => (
+                                {slateGames.map((game, idx) => {
+                                    const logoSrc = getNetworkLogo(game.Network);
+                                    return (
                                     <div key={idx} className="bg-white p-5 rounded-xl shadow-xl border border-gray-100 flex flex-col justify-between hover:shadow-2xl transition-shadow group">
                                         <div>
                                             <div className="flex justify-between items-start mb-3">
@@ -314,14 +333,18 @@
                                                 <span className="text-xs font-bold">{game.Time}</span>
                                             </div>
                                             <div className="flex items-center gap-1.5 text-gray-500">
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                                </svg>
-                                                <span className="text-xs font-bold uppercase tracking-tighter">{game.Network}</span>
+                                                <img
+                                                    src={logoSrc}
+                                                    alt={`${game.Network} logo`}
+                                                    className="h-4 w-auto object-contain"
+                                                    loading="lazy"
+                                                />
+                                                <span className="sr-only">{game.Network}</span>
                                             </div>
                                         </div>
                                     </div>
-                                ))}
+                                );
+                                })}
                             </div>
                         ) : (
                             <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-10 text-center">
