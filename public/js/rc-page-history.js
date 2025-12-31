@@ -7,9 +7,9 @@
   // 8. HISTORY PAGE
   const HistoryPage = () => {
     // Shared league data (loaded once per session by rc-data.js)
-    const { history, loading, error, hallOfFameByYear, teamById, peopleById, peopleByName } = RC.data.useLeagueData();
+    const { history, loading, error, hallOfFameByYear, teamById, peopleById, peopleByName, picksIds, bowlGames } = RC.data.useLeagueData();
     const [expandedYear, setExpandedYear] = useState(null);
-    const [tableSort, setTableSort] = useState({ key: "pct", direction: "desc" });
+    const [tableSort, setTableSort] = useState({ key: "rank", direction: "asc" });
     const [activeView, setActiveView] = useState("history");
 
     const { LoadingSpinner, ErrorMessage } = (RC.ui || {});
@@ -190,6 +190,34 @@
         });
       }
 
+      const currentStats = {};
+      if (Array.isArray(bowlGames) && Array.isArray(picksIds)) {
+        const completed = bowlGames.filter((g) => normalizeId(g?.["Winner ID"]));
+        if (completed.length) {
+          picksIds.forEach((player) => {
+            const playerName = String(player?.Name || "").trim();
+            if (!playerName) return;
+            if (!currentStats[playerName]) currentStats[playerName] = { wins: 0, losses: 0 };
+            completed.forEach((game) => {
+              const bowlId = String(game?.["Bowl ID"] || "").trim();
+              if (!bowlId) return;
+              const winnerId = normalizeId(game?.["Winner ID"]);
+              if (!winnerId) return;
+              const pickId = normalizeId(player?.[bowlId]);
+              if (!pickId) return;
+              if (pickId === winnerId) currentStats[playerName].wins += 1;
+              else currentStats[playerName].losses += 1;
+            });
+          });
+        }
+      }
+
+      Object.keys(currentStats).forEach((name) => {
+        if (!totals[name]) totals[name] = { name, wins: 0, losses: 0, titles: 0 };
+        totals[name].wins += currentStats[name].wins;
+        totals[name].losses += currentStats[name].losses;
+      });
+
       const list = Object.values(totals).map((row) => {
         const total = row.wins + row.losses;
         const pct = total > 0 ? (row.wins / total) : null;
@@ -224,7 +252,7 @@
       });
 
       return list.map((row) => ({ ...row, rank: rankByName[row.name] }));
-    }, [hallOfFameByYear, peopleById, peopleByName, history]);
+    }, [hallOfFameByYear, peopleById, peopleByName, history, picksIds, bowlGames]);
 
     const sortedAllTimeStandings = useMemo(() => {
       const dir = tableSort.direction === "asc" ? 1 : -1;
@@ -251,8 +279,12 @@
     };
 
     const sortIcon = (key) => {
-      if (tableSort.key !== key) return "↕";
-      return tableSort.direction === "asc" ? "↑" : "↓";
+      if (tableSort.key !== key) {
+        return <span className="ml-1 text-gray-300 opacity-0 group-hover:opacity-50 text-[10px]">▼</span>;
+      }
+      return tableSort.direction === "asc"
+        ? <span className="ml-1 text-blue-600 text-[10px]">▲</span>
+        : <span className="ml-1 text-blue-600 text-[10px]">▼</span>;
     };
 
     const renderRankPill = (rank) => {
@@ -353,18 +385,18 @@
         </div>
         )}
         {activeView === "standings" && (
-          <div className="relative px-4 max-w-2xl mx-auto w-full mt-10">
+          <div className="relative px-4 max-w-2xl mx-auto w-full mt-6">
             <div className="w-full shadow-sm border border-gray-100 rounded-2xl bg-white overflow-hidden">
               <div className="overflow-x-auto w-full">
                 <table className="min-w-full border-collapse w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-gray-800">
-                      <th onClick={() => toggleTableSort("name")} className="p-2 text-left font-bold border-b border-gray-100 min-w-[100px] w-[140px] cursor-pointer select-none hover:bg-gray-100 transition-colors">Player <span className="text-gray-400">{sortIcon("name")}</span></th>
-                      <th onClick={() => toggleTableSort("rank")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors w-[90px]">Rank <span className="text-gray-400">{sortIcon("rank")}</span></th>
-                      <th onClick={() => toggleTableSort("wins")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors w-[90px]">Wins <span className="text-gray-400">{sortIcon("wins")}</span></th>
-                      <th onClick={() => toggleTableSort("losses")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors w-[90px]">Losses <span className="text-gray-400">{sortIcon("losses")}</span></th>
-                      <th onClick={() => toggleTableSort("titles")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors w-[90px]">Titles <span className="text-gray-400">{sortIcon("titles")}</span></th>
-                      <th onClick={() => toggleTableSort("pct")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors w-[90px]">Win % <span className="text-gray-400">{sortIcon("pct")}</span></th>
+                      <th onClick={() => toggleTableSort("name")} className="p-2 text-left font-bold border-b border-gray-100 min-w-[100px] w-[140px] cursor-pointer select-none hover:bg-gray-100 transition-colors group">Player {sortIcon("name")}</th>
+                      <th onClick={() => toggleTableSort("rank")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors w-[90px] group">Rank {sortIcon("rank")}</th>
+                      <th onClick={() => toggleTableSort("wins")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors w-[90px] group">Wins {sortIcon("wins")}</th>
+                      <th onClick={() => toggleTableSort("losses")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors w-[90px] group">Losses {sortIcon("losses")}</th>
+                      <th onClick={() => toggleTableSort("titles")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors w-[90px] group">Titles {sortIcon("titles")}</th>
+                      <th onClick={() => toggleTableSort("pct")} className="p-2 font-bold border-b border-gray-100 text-center cursor-pointer select-none hover:bg-gray-100 transition-colors w-[90px] group">Win % {sortIcon("pct")}</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white">
