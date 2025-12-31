@@ -28,6 +28,13 @@
       return String(team["School Name"] || team["School"] || team["Team"] || team["Name"] || "").trim();
     };
 
+    const resolveTeamNickname = (teamId) => {
+      if (!teamId || !teamById) return "";
+      const team = teamById[normalizeId(teamId)];
+      if (!team) return "";
+      return String(team["Team Nickname"] || team["Nickname"] || team["Nick Name"] || team["Mascot"] || "").trim();
+    };
+
     const resolvePlayerName = (raw) => {
       const rawStr = String(raw || "").trim();
       if (!rawStr) return "—";
@@ -63,18 +70,35 @@
         const titleRows = rows.filter(r => r && r.title);
         const champRow = (titleRows.length ? titleRows.slice().sort(sorter)[0] : rows.slice().sort(sorter)[0]) || null;
         const sortedAll = rows.slice().sort(sorter);
-        const runnerRow = sortedAll.find(r => r !== champRow) || null;
+        const runnerCandidates = sortedAll.filter(r => r !== champRow);
+        const bestRunner = runnerCandidates[0] || null;
+        const runnerRows = bestRunner
+          ? runnerCandidates.filter(r => (r.wins || 0) === (bestRunner.wins || 0) && (r.losses || 0) === (bestRunner.losses || 0))
+          : [];
         const champName = champRow ? resolvePlayerName(champRow.playerRaw) : "—";
-        const runnerName = runnerRow ? resolvePlayerName(runnerRow.playerRaw) : "—";
+        const runnerNames = runnerRows.map(r => resolvePlayerName(r.playerRaw)).filter(Boolean);
+        const uniqueRunners = Array.from(new Set(runnerNames));
+        const runnerUpLabel = uniqueRunners.length ? uniqueRunners.join(", ") : "—";
         const champTeamName = champRow ? resolveTeamName(champRow.champTeamId) : "";
+        const champTeamNickname = champRow ? resolveTeamNickname(champRow.champTeamId) : "";
+        const champRankVal = champRow && champRow.champRank !== null && champRow.champRank !== "" ? champRow.champRank : "";
+        const champTeamFull = champTeamNickname && champTeamName
+          ? `${champTeamName} ${champTeamNickname}`
+          : (champTeamName || "—");
+        const champTeamLabel = champTeamFull !== "—"
+          ? (champRankVal ? `#${champRankVal} ${champTeamFull}` : champTeamFull)
+          : (champRankVal ? `#${champRankVal}` : "—");
 
         outWinners.set(yearNum, champName);
+        const winTotal = champRow ? (champRow.wins || 0) + (champRow.losses || 0) : 0;
+        const winPct = winTotal > 0 ? (champRow.wins || 0) / winTotal : null;
         outDetails.set(yearNum, {
           record: champRow ? `${champRow.wins}-${champRow.losses}` : "—",
-          champTeamName: champTeamName || "—",
-          champRank: (champRow && champRow.champRank !== null && champRow.champRank !== "") ? champRow.champRank : "—",
+          winPct,
+          champTeamLabel,
           champion: champName,
-          runnerUp: runnerName
+          runnerUp: runnerUpLabel,
+          runnerUpCount: uniqueRunners.length
         });
       });
 
@@ -170,12 +194,11 @@
                   </div>
                 </div>
                 {hasDetails && isExpanded && (
-                  <div className="ml-16 md:ml-20 mt-3 bg-gray-50 border border-gray-100 rounded-2xl px-5 py-4 shadow-sm">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-700">
-                      <div className="flex items-center justify-between"><span className="text-gray-500">Record</span><span className="font-semibold text-gray-900">{details.record || "—"}</span></div>
-                      <div className="flex items-center justify-between"><span className="text-gray-500">Champ Team</span><span className="font-semibold text-gray-900">{details.champTeamName || "—"}</span></div>
-                      <div className="flex items-center justify-between"><span className="text-gray-500">Champ Rank</span><span className="font-semibold text-gray-900">{details.champRank || "—"}</span></div>
-                      <div className="flex items-center justify-between"><span className="text-gray-500">Runner-up</span><span className="font-semibold text-gray-900">{details.runnerUp || "—"}</span></div>
+                  <div className="ml-16 md:ml-20 mt-3 bg-gradient-to-br from-yellow-50 via-amber-50 to-yellow-100 border border-yellow-200 rounded-2xl px-5 py-4 shadow-sm">
+                    <div className="flex flex-col items-center text-center gap-2 text-amber-900">
+                      <div className="text-base md:text-lg font-semibold text-amber-900">Record: {details.record || "—"}{details.winPct !== null ? ` (${details.winPct.toFixed(3).replace(/^0\./, ".")}%)` : ""}</div>
+                      <div className="text-sm text-amber-800">Championship Pick: {details.champTeamLabel || "—"}</div>
+                      <div className="text-sm text-amber-800">{(details.runnerUpCount || 0) > 1 ? "Runners-Up" : "Runner-Up"}: {details.runnerUp || "—"}</div>
                     </div>
                   </div>
                 )}
