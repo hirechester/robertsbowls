@@ -66,8 +66,8 @@
             };
 
             // Shared league data (fetched once per session by rc-data.js)
-            const { schedule: scheduleData, picks: picksData, teams: teamsData, loading: dataLoading, error: dataError } = RC.data.useLeagueData();
-            const teamById = useMemo(() => {
+            const { schedule: scheduleData, picks: picksData, picksIds: picksIdsData, teams: teamsData, teamById: teamByIdData, loading: dataLoading, error: dataError } = RC.data.useLeagueData();
+            const teamByIdMap = useMemo(() => {
                 const map = new Map();
                 (teamsData || []).forEach((team) => {
                     const id = normalizeId(team?.["Team ID"] ?? team?.["ID"] ?? team?.["Id"] ?? team?.Id);
@@ -91,6 +91,7 @@
                 try {
                         const schedule = scheduleData;
                         const picks = picksData;
+                        const picksIds = picksIdsData || [];
                         const teams = teamsData || [];
 
                         // 1. Process Schedule
@@ -102,6 +103,29 @@
                         const lastQuarterCount = Math.max(1, Math.ceil(playedGames.length * 0.25));
                         const lastQuarterGames = playedGames.slice(-lastQuarterCount);
                         const lastQuarterBowls = new Set(lastQuarterGames.map(g => g.Bowl));
+                        const getBowlKey = (g) => {
+                            const bid = String(g["Bowl ID"] || "").trim();
+                            return bid || String(g.Bowl || "").trim();
+                        };
+                        const truthy01 = (v) => {
+                            const s = String(v ?? "").trim().toLowerCase();
+                            return s === "1" || s === "true" || s === "yes" || s === "y" || s === "x";
+                        };
+                        const getFirstValue = (obj, keys) => {
+                            if (!obj) return "";
+                            for (const key of keys) {
+                                const raw = obj[key];
+                                const s = (raw === null || raw === undefined) ? "" : String(raw).trim();
+                                if (s) return s;
+                            }
+                            return "";
+                        };
+                        const isCfpGame = (g) => truthy01(g["CFP?"] ?? g["CFP"] ?? g["Playoff"] ?? g["Playoff?"]);
+                        const weightForGame = (g) => {
+                            const raw = (g && g["Weight"] !== undefined) ? String(g["Weight"]).trim() : "";
+                            const val = raw ? Number(raw) : 1;
+                            return Number.isFinite(val) && val > 0 ? val : 1;
+                        };
 
                         // 2. Identify "On The Slate" Games (Today & Tomorrow)
                         const today = new Date();
@@ -349,7 +373,7 @@
                                 }
                             });
                             if (sameRemaining >= 4) {
-                                addHl("chessMatch", { Emoji: "🧠", Headline: "Chess Match", Content: `${leaderPick.name} and ${runnerPick.name} match on ${sameRemaining} remaining picks. One bold move could decide it.` });
+                            addHl("chessMatch", { Emoji: "♟️", Headline: "Chess Match", Content: `${leaderPick.name} and ${runnerPick.name} match on ${sameRemaining} remaining picks. One bold move could decide it.` });
                             }
                         }
 
@@ -425,8 +449,88 @@
                         }
 
                         // Panic Button HL
-                        const gamesLeft = unplayedGames.length;
-                        const aliveCount = stats.filter(p => p.winProb > 0).length;
+                        const unplayedGamesById = sortedSchedule.filter(g => !normalizeId(g["Winner ID"]));
+                        const gamesLeft = unplayedGamesById.length;
+                        let aliveCount = stats.filter(p => p.winProb > 0).length;
+                        if (picksIds.length > 0) {
+                            const alivePlayoffTeams = new Set();
+                            const seedKeys = ["Seed", "Team Seed", "Seed #", "Seed Number", "Playoff Seed", "CFP Seed"];
+                            const teamByIdSource = teamByIdData || {};
+                            Object.keys(teamByIdSource).forEach(id => {
+                                const team = teamByIdSource[id];
+                                const seedVal = getFirstValue(team, seedKeys);
+                                const normId = normalizeId(id);
+                                if (normId && seedVal) alivePlayoffTeams.add(normId);
+                            });
+                            sortedSchedule.forEach(game => {
+                                if (!isCfpGame(game)) return;
+                                const winnerId = normalizeId(game["Winner ID"]);
+                                if (!winnerId) return;
+                                const homeId = normalizeId(game["Home ID"]);
+                                const awayId = normalizeId(game["Away ID"]);
+                                if (homeId && winnerId !== homeId) alivePlayoffTeams.delete(homeId);
+                                if (awayId && winnerId !== awayId) alivePlayoffTeams.delete(awayId);
+                            });
+
+                            const isAlivePickForGame = (game, pickId) => {
+                                if (!pickId) return false;
+                                if (!isCfpGame(game)) return true;
+                                return alivePlayoffTeams.has(pickId);
+                            };
+
+                            const eliminationStats = picksIds.map(playerIds => {
+                                let wins = 0;
+                                sortedSchedule.forEach(game => {
+                                    const winnerId = normalizeId(game["Winner ID"]);
+                                    if (!winnerId) return;
+                                    const bowlKey = getBowlKey(game);
+                                    const pickId = normalizeId(playerIds[bowlKey]);
+                                    if (pickId && pickId === winnerId) wins += weightForGame(game);
+                                });
+
+                                const remainingWins = unplayedGamesById.reduce((acc, game) => {
+                                    const bowlKey = getBowlKey(game);
+                                    const pickId = normalizeId(playerIds[bowlKey]);
+                                    return isAlivePickForGame(game, pickId) ? acc + weightForGame(game) : acc;
+                                }, 0);
+                                return {
+                                    name: playerIds.Name,
+                                    wins,
+                                    maxPossibleWins: wins + remainingWins,
+                                    rawPicksIds: playerIds
+                                };
+                            });
+
+                            eliminationStats.sort((a, b) => b.wins - a.wins);
+                            let currentRank = 1;
+                            let aliveStatuses = 0;
+
+                            for (let i = 0; i < eliminationStats.length; i++) {
+                                if (i > 0 && eliminationStats[i].wins < eliminationStats[i - 1].wins) currentRank = i + 1;
+                                let status = "alive";
+                                if (currentRank === 1) {
+                                    status = "leading";
+                                } else {
+                                    let maxOpponentWins = 0;
+                                    eliminationStats.forEach(other => {
+                                        if (other.name === eliminationStats[i].name) return;
+                                        let scenarioWins = other.wins;
+                                        unplayedGamesById.forEach(game => {
+                                            const bowlKey = getBowlKey(game);
+                                            const candidatePick = normalizeId(eliminationStats[i].rawPicksIds[bowlKey]);
+                                            if (!isAlivePickForGame(game, candidatePick)) return;
+                                            const otherPick = normalizeId(other.rawPicksIds[bowlKey]);
+                                            if (otherPick && otherPick === candidatePick) scenarioWins += weightForGame(game);
+                                        });
+                                        if (scenarioWins > maxOpponentWins) maxOpponentWins = scenarioWins;
+                                    });
+                                    if (eliminationStats[i].maxPossibleWins < maxOpponentWins) status = "eliminated";
+                                }
+                                if (status === "leading" || status === "alive") aliveStatuses++;
+                            }
+
+                            aliveCount = aliveStatuses;
+                        }
                         if (gamesLeft > 0 && aliveCount > 0) {
                             addHl("panicButton", { Emoji: "😱", Headline: "Panic Button", Content: `Only ${gamesLeft} games left and ${aliveCount} players still alive. Hold onto your sheet.` });
                         }
@@ -462,7 +566,7 @@
                     console.error("HomePage: error building home data", error);
                     setLoading(false);
                 }
-            }, [dataLoading, dataError, scheduleData, picksData, teamsData]);
+            }, [dataLoading, dataError, scheduleData, picksData, picksIdsData, teamsData, teamByIdData]);
 
             // Static Bank
             const STATIC_HEADLINES = [
@@ -553,8 +657,8 @@
                                     const logoSrc = getNetworkLogo(game.Network);
                                     const homeId = normalizeId(game["Home ID"]);
                                     const awayId = normalizeId(game["Away ID"]);
-                                    const homeLabel = getTeamLabel(teamById.get(homeId), game["Team 1"]);
-                                    const awayLabel = getTeamLabel(teamById.get(awayId), game["Team 2"]);
+                                    const homeLabel = getTeamLabel(teamByIdMap.get(homeId), game["Team 1"]);
+                                    const awayLabel = getTeamLabel(teamByIdMap.get(awayId), game["Team 2"]);
                                     return (
                                     <div key={idx} className="bg-white p-5 rounded-xl shadow-xl border border-gray-100 flex flex-col justify-between hover:shadow-2xl transition-shadow group">
                                         <div>
