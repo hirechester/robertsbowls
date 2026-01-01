@@ -181,6 +181,34 @@
 
   const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+  const networkLogosForText = (networkText) => {
+    const text = String(networkText || "").toLowerCase();
+    if (!text) return [];
+    const matches = [
+      { key: "espn2", re: /\bespn2\b/ },
+      { key: "espn", re: /\bespn\b/ },
+      { key: "abc", re: /\babc\b/ },
+      { key: "fox", re: /\bfox\b/ },
+      { key: "cbs", re: /\bcbs\b/ },
+      { key: "max", re: /\bhbo\s*max\b|\bhbomax\b|\bmax\b/ },
+      { key: "cw", re: /\bthe cw\b|\bcw\b/ }
+    ];
+    const logoMap = {
+      abc: "images/networks/abc.png",
+      cbs: "images/networks/cbs.png",
+      cw: "images/networks/cw.png",
+      espn: "images/networks/espn.png",
+      espn2: "images/networks/espn2.png",
+      fox: "images/networks/fox.png",
+      max: "images/networks/max.png"
+    };
+    const found = [];
+    matches.forEach(({ key, re }) => {
+      if (re.test(text)) found.push({ key, src: logoMap[key] });
+    });
+    return found.filter((item, index, arr) => arr.findIndex((v) => v.key === item.key) === index);
+  };
+
   const getBowlKey = (g) => {
     const bid = String(g["Bowl ID"] || "").trim();
     return bid || String(g.Bowl || "").trim();
@@ -1270,13 +1298,13 @@
               const awayTeam = awayId && teamById ? teamById[awayId] : null;
               const homeTeam = homeId && teamById ? teamById[homeId] : null;
               const split = summarizePickSplit(g);
-              const awayPctText = split && Number.isFinite(split.awayPct) ? ` (${split.awayPct}% picked)` : "";
-              const homePctText = split && Number.isFinite(split.homePct) ? ` (${split.homePct}% picked)` : "";
-              const matchup = `${formatTeamLabel(awayTeam, getFirstValue(g, ["Team 1"]))}${awayPctText} vs ${formatTeamLabel(homeTeam, getFirstValue(g, ["Team 2"]))}${homePctText}`;
+              const awayPctText = split && Number.isFinite(split.awayPct) ? `${split.awayPct}%` : "";
+              const homePctText = split && Number.isFinite(split.homePct) ? `${split.homePct}%` : "";
+              const matchup = `${formatTeamLabel(awayTeam, getFirstValue(g, ["Team 1"]))} vs ${formatTeamLabel(homeTeam, getFirstValue(g, ["Team 2"]))}`;
 
               const timeLabel = getFirstValue(g, ["Time"]) || "TBD";
               const network = getFirstValue(g, ["Network", "TV"]) || "";
-              // const splitText = split ? `Pick Split: ${split.awayPct}% / ${split.homePct}%` : "Pick Split: n/a";
+              const splitText = split ? `Pick Split: ${awayPctText} / ${homePctText}` : "Pick Split: n/a";
               const spreadVal = getFirstValue(g, ["Spread", "Line"]);
               const totalVal = getFirstValue(g, ["O/U", "Over/Under", "Total"]);
               const favoriteId = normalizeId(getFirstValue(g, ["Favorite ID", "FavoriteID"]));
@@ -1287,8 +1315,8 @@
               return [
                 `${timeLabel}${network ? ` - ${network}` : ""} - ${getFirstValue(g, ["Bowl", "Bowl Name"]) || "Bowl Game"}`,
                 matchup,
-                // splitText,
-                // oddsText ? oddsText : null
+                splitText,
+                oddsText ? oddsText : null
               ].filter(Boolean);
             }).concat(todayData.moreCount > 0 ? [`+${todayData.moreCount} more games`] : [])
         });
@@ -1305,6 +1333,9 @@
                 if (/cotton bowl/i.test(item.bowlName)) {
                   lines.push("Geneviève picked #7 Texas A&M ❌");
                 }
+                if (/rose bowl/i.test(item.bowlName)) {
+                  lines.push("Geneviève picked #8 Oklahoma ❌");
+                }
                 return lines;
               }
               const homeNames = item.homePickers.length ? item.homePickers.join(", ") : "none";
@@ -1316,6 +1347,9 @@
               ];
               if (/cotton bowl/i.test(item.bowlName)) {
                 lines.push("Geneviève picked #7 Texas A&M ❌");
+              }
+              if (/rose bowl/i.test(item.bowlName)) {
+                lines.push("Geneviève picked #8 Oklahoma ❌");
               }
               return lines;
             })
@@ -1977,25 +2011,25 @@
                       const hotLine = hotHands.length && maxWinStreak >= 2
                         ? (
                           <div>
-                            Hot hand:{" "}
+                            Hot Hand:{" "}
                             <span className="font-semibold">
                               {hotHands.map((row) => row.name).join(" & ")}
                             </span>{" "}
                             — {maxWinStreak} straight wins 🔥
                           </div>
                         )
-                        : <div>Hot hand: no big streaks right now</div>;
+                        : <div>Hot Hand: no big streaks right now</div>;
                       const coldLine = coldStreaks.length && maxMissStreak >= 2
                         ? (
                           <div>
-                            Ice cold:{" "}
+                            Ice Cold:{" "}
                             <span className="font-semibold">
                               {coldStreaks.map((row) => row.name).join(" & ")}
                             </span>{" "}
                             — {maxMissStreak} straight losses 🧊
                           </div>
                         )
-                        : <div>Cold streak: nobody’s spiraling (yet)</div>;
+                        : <div>Ice Cold: nobody’s spiraling (yet)</div>;
                       return (
                         <div className="flex flex-col gap-2 text-xl text-slate-700">
                           {hotLine}
@@ -2046,13 +2080,14 @@
                           const awayTeam = awayId && teamById ? teamById[awayId] : null;
                           const homeTeam = homeId && teamById ? teamById[homeId] : null;
                           const split = summarizePickSplit(g);
-                          const awayPctText = split && Number.isFinite(split.awayPct) ? ` (${split.awayPct}% picked)` : "";
-                          const homePctText = split && Number.isFinite(split.homePct) ? ` (${split.homePct}% picked)` : "";
-                          const matchup = `${formatTeamLabel(awayTeam, getFirstValue(g, ["Team 1"]))}${awayPctText} vs ${formatTeamLabel(homeTeam, getFirstValue(g, ["Team 2"]))}${homePctText}`;
+                          const awayPctText = split && Number.isFinite(split.awayPct) ? `${split.awayPct}%` : "";
+                          const homePctText = split && Number.isFinite(split.homePct) ? `${split.homePct}%` : "";
+                          const matchup = `${formatTeamLabel(awayTeam, getFirstValue(g, ["Team 1"]))} vs ${formatTeamLabel(homeTeam, getFirstValue(g, ["Team 2"]))}`;
 
                           const timeLabel = getFirstValue(g, ["Time"]) || "TBD";
                           const network = getFirstValue(g, ["Network", "TV"]) || "";
-                          // const splitText = split ? `Pick Split: ${split.awayPct}% / ${split.homePct}%` : "Pick Split: n/a";
+                          const networkLogos = networkLogosForText(network);
+                          const splitText = split ? `Pick Split: ${awayPctText} / ${homePctText}` : "Pick Split: n/a";
                           const spreadVal = getFirstValue(g, ["Spread", "Line"]);
                           const totalVal = getFirstValue(g, ["O/U", "Over/Under", "Total"]);
                           const favoriteId = normalizeId(getFirstValue(g, ["Favorite ID", "FavoriteID"]));
@@ -2062,11 +2097,28 @@
 
                           return (
                             <div key={getBowlKey(g)} className="rounded-2xl border-2 border-amber-200/70 p-4 bg-white/90 shadow-xl">
-                              <div className="text-slate-500 tracking-wide">{timeLabel}{network ? ` - ${network}` : ""}</div>
+                              <div className="text-slate-500 tracking-wide flex items-center gap-2">
+                                <span>{timeLabel}</span>
+                                {networkLogos.length ? (
+                                  <span className="flex items-center gap-1">
+                                    {networkLogos.map((logo) => (
+                                      <img
+                                        key={logo.key}
+                                        src={logo.src}
+                                        alt={logo.key.toUpperCase()}
+                                        className="h-5 w-auto opacity-90"
+                                        loading="lazy"
+                                      />
+                                    ))}
+                                  </span>
+                                ) : (
+                                  network ? <span>- {network}</span> : null
+                                )}
+                              </div>
                               <div className="text-2xl font-semibold text-slate-900">{getFirstValue(g, ["Bowl", "Bowl Name"]) || "Bowl Game"}</div>
                               <div className="text-slate-700">{matchup}</div>
-                              {/* <div className="text-slate-600">{splitText}</div> */}
-                              {/* {oddsText && <div className="text-slate-500 text-lg">{oddsText}</div>} */}
+                          <div className="text-slate-600">{splitText}</div>
+                          {oddsText && <div className="text-slate-500 text-lg">{oddsText}</div>}
                             </div>
                           );
                         })}
@@ -2090,22 +2142,28 @@
                           return (
                             <div key={`${getBowlKey(item.game) || "split"}-${idx}`} className="flex flex-col gap-1">
                               <div className="font-semibold text-slate-900">{item.bowlName}</div>
-                              {item.statusLine ? (
-                                <>
-                                  <div className="text-slate-600">{item.statusLine}</div>
-                                  {/cotton bowl/i.test(item.bowlName) && (
-                                    <div className="text-slate-600">Geneviève picked #7 Texas A&amp;M ❌</div>
+                                  {item.statusLine ? (
+                                    <>
+                                      <div className="text-slate-600">{item.statusLine}</div>
+                                      {/cotton bowl/i.test(item.bowlName) && (
+                                        <div className="text-slate-600">Geneviève picked #7 Texas A&amp;M ❌</div>
+                                      )}
+                                      {/rose bowl/i.test(item.bowlName) && (
+                                        <div className="text-slate-600">Geneviève picked #8 Oklahoma ❌</div>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div className="text-slate-600">{item.homeLabel}: {homeNames}</div>
+                                      <div className="text-slate-600">{item.awayLabel}: {awayNames}</div>
+                                      {/cotton bowl/i.test(item.bowlName) && (
+                                        <div className="text-slate-600">Geneviève picked #7 Texas A&amp;M ❌</div>
+                                      )}
+                                      {/rose bowl/i.test(item.bowlName) && (
+                                        <div className="text-slate-600">Geneviève picked #8 Oklahoma ❌</div>
+                                      )}
+                                    </>
                                   )}
-                                </>
-                              ) : (
-                                <>
-                                  <div className="text-slate-600">{item.homeLabel}: {homeNames}</div>
-                                  <div className="text-slate-600">{item.awayLabel}: {awayNames}</div>
-                                  {/cotton bowl/i.test(item.bowlName) && (
-                                    <div className="text-slate-600">Geneviève picked #7 Texas A&amp;M ❌</div>
-                                  )}
-                                </>
-                              )}
                             </div>
                           );
                         })}
