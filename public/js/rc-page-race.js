@@ -14,7 +14,7 @@
           const RacePage = () => {
               const { schedule, picks, picksIds, loading, error, refresh } = RC.data.useLeagueData();
               const [chartData, setChartData] = useState({ series: [], maxWins: 0, gameCount: 0 });
-              const [selectedPlayer, setSelectedPlayer] = useState(null);
+              const [selectedPlayers, setSelectedPlayers] = useState([]);
               const [tableData, setTableData] = useState([]);
 
               // Define a vibrant color palette
@@ -104,13 +104,13 @@
                   }
               }, [schedule, picks, picksIds]);
 
-              const activePlayer = selectedPlayer;
+              const hasSelection = selectedPlayers.length > 0;
 
               const getLineStyle = (player) => {
-                  if (activePlayer === player.name) {
+                  if (selectedPlayers.includes(player.name)) {
                       return { stroke: player.color, strokeWidth: 4, opacity: 1, zIndex: 50 };
                   }
-                  if (activePlayer) {
+                  if (hasSelection) {
                       // Dim others if one is active
                       return { stroke: '#cbd5e1', strokeWidth: 1.5, opacity: 0.3, zIndex: 1 };
                   }
@@ -136,7 +136,12 @@
               const yScale = (val) => (VIEWBOX_HEIGHT - PADDING_BOTTOM) - ((val / yDomain) * (VIEWBOX_HEIGHT - PADDING_TOP - PADDING_BOTTOM));
 
               // Create a safe sorted copy of series for rendering
-              const sortedSeries = [...chartData.series].sort((a, b) => (a.name === activePlayer ? 1 : b.name === activePlayer ? -1 : 0));
+              const sortedSeries = [...chartData.series].sort((a, b) => {
+                  const aSelected = selectedPlayers.includes(a.name);
+                  const bSelected = selectedPlayers.includes(b.name);
+                  if (aSelected === bSelected) return 0;
+                  return aSelected ? 1 : -1;
+              });
 
               return (
                   <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
@@ -229,15 +234,15 @@
                                                           strokeLinecap="round"
                                                           strokeLinejoin="round"
                                                           opacity={style.opacity}
-                                                          className={activePlayer === player.name ? "transition-all duration-300 ease-out" : ""}
+                                                          className={selectedPlayers.includes(player.name) ? "transition-all duration-300 ease-out" : ""}
                                                       />
                                                       <circle
                                                           cx={lastX}
                                                           cy={lastY}
-                                                          r={activePlayer === player.name ? 6 : 3}
+                                                          r={selectedPlayers.includes(player.name) ? 6 : 3}
                                                           fill={style.stroke}
                                                           opacity={style.opacity}
-                                                          className={activePlayer === player.name ? "transition-all duration-300 ease-out" : ""}
+                                                          className={selectedPlayers.includes(player.name) ? "transition-all duration-300 ease-out" : ""}
                                                       />
                                                   </g>
                                               );
@@ -252,15 +257,23 @@
 
                           {/* PLAYERS GRID */}
                           <div className="w-full max-w-[98%] md:max-w-[90%] bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden flex flex-col">
-                              <div className="px-4 py-3 border-b border-gray-100">
+                              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
                                   <h3 className="text-lg font-bold text-gray-900 font-serif">Win Count</h3>
+                                  <button
+                                      type="button"
+                                      onClick={() => setSelectedPlayers([])}
+                                      disabled={selectedPlayers.length === 0}
+                                      className="text-xs font-bold uppercase tracking-wide text-blue-700 border border-blue-200 px-3 py-1 rounded-full disabled:opacity-40 disabled:cursor-not-allowed"
+                                  >
+                                      Clear Selection
+                                  </button>
                               </div>
                               <div
                                   className="p-4"
                               >
                                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                                       {tableData.map((player) => {
-                                          const isSelected = selectedPlayer === player.name;
+                                          const isSelected = selectedPlayers.includes(player.name);
 
                                           // Dynamic styles for the card (no hover styles)
                                           let cardStyle = "border-transparent";
@@ -274,7 +287,11 @@
                                           return (
                                               <div
                                                   key={player.name}
-                                                  onClick={() => setSelectedPlayer(selectedPlayer === player.name ? null : player.name)}
+                                                  onClick={() => setSelectedPlayers((prev) => (
+                                                      prev.includes(player.name)
+                                                          ? prev.filter((name) => name !== player.name)
+                                                          : [...prev, player.name]
+                                                  ))}
                                                   className={`flex items-center justify-between p-3 rounded-lg cursor-pointer border ${cardStyle}`}
                                               >
                                                   <div className="flex items-center gap-3">
