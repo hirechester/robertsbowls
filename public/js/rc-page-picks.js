@@ -19,6 +19,9 @@ const { useMemo, useEffect, useRef, useState } = React;
     const tableScrollRef = useRef(null);
     const mostRecentThRef = useRef(null);
     const didAutoScrollRef = useRef(false);
+    const matchupScrollRef = useRef(null);
+    const mostRecentMatchupRef = useRef(null);
+    const didMatchupScrollRef = useRef(false);
     const [activeView, setActiveView] = useState("bigboard");
 
 
@@ -26,30 +29,6 @@ const { useMemo, useEffect, useRef, useState } = React;
       if (!Array.isArray(schedule)) return [];
       return schedule.filter(g => g.Bowl && g.Date);
     }, [schedule]);
-
-    // Auto-scroll to the most recently completed game (keeps bowl order intact)
-    const mostRecentCompletedIdx = useMemo(() => {
-      let bestIdx = -1;
-      let bestTs = -1;
-      scheduleRows.forEach((g, idx) => {
-        const winnerId = String(g && (g['Winner ID'] ?? g.WinnerID ?? g.WinnerId ?? g.winnerId ?? g.winnerID ?? '')).trim();
-        if (!winnerId) return;
-        const dateStr = String(g && (g.Date ?? g['Date'] ?? '')).trim();
-        const timeStr = String(g && (g.Time ?? g['Time'] ?? '')).trim();
-        let ts = -1;
-        if (dateStr) {
-          const d = new Date(dateStr + (timeStr ? ` ${timeStr}` : ''));
-          ts = d.getTime();
-        }
-        if (!Number.isFinite(ts) || ts <= 0) ts = idx;
-        if (ts >= bestTs) {
-          bestTs = ts;
-          bestIdx = idx;
-        }
-      });
-      return bestIdx;
-    }, [scheduleRows]);
-
 
     const pickRows = useMemo(() => {
       if (!Array.isArray(picksIds)) return [];
@@ -226,6 +205,17 @@ const { useMemo, useEffect, useRef, useState } = React;
       return map;
     }, [bowlGames]);
 
+    // Auto-scroll to the most recently completed game in schedule order (keeps bowl order intact)
+    const mostRecentCompletedIdx = useMemo(() => {
+      let bestIdx = -1;
+      scheduleRows.forEach((g, idx) => {
+        const winnerId = String(getFirstValue(g, ["Winner ID", "WinnerID", "Winner Id", "WinnerId"])).trim();
+        if (!winnerId) return;
+        bestIdx = idx;
+      });
+      return bestIdx;
+    }, [scheduleRows]);
+
     const matchupCards = useMemo(() => {
       const rows = Array.isArray(scheduleRows) ? scheduleRows : [];
       const players = Array.isArray(picksIds)
@@ -311,6 +301,10 @@ const { useMemo, useEffect, useRef, useState } = React;
 
 
     useEffect(() => {
+      if (activeView !== "bigboard") {
+        didAutoScrollRef.current = false;
+        return;
+      }
       if (didAutoScrollRef.current) return;
       if (mostRecentCompletedIdx < 0) return;
       const container = tableScrollRef.current;
@@ -335,7 +329,28 @@ const { useMemo, useEffect, useRef, useState } = React;
 
         didAutoScrollRef.current = true;
       });
-    }, [mostRecentCompletedIdx]);
+    }, [activeView, mostRecentCompletedIdx]);
+
+    useEffect(() => {
+      if (activeView !== "matchups") {
+        didMatchupScrollRef.current = false;
+        return;
+      }
+      if (didMatchupScrollRef.current) return;
+      if (mostRecentCompletedIdx < 0) return;
+      const container = matchupScrollRef.current;
+      const target = mostRecentMatchupRef.current;
+      if (!container || !target) return;
+
+      requestAnimationFrame(() => {
+        const cRect = container.getBoundingClientRect();
+        const tRect = target.getBoundingClientRect();
+        const desiredLeft = cRect.left + 16;
+        const delta = tRect.left - desiredLeft;
+        container.scrollLeft += delta;
+        didMatchupScrollRef.current = true;
+      });
+    }, [activeView, mostRecentCompletedIdx]);
 
     return (
       <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
@@ -433,12 +448,21 @@ const { useMemo, useEffect, useRef, useState } = React;
         {activeView === "matchups" && (
           <div className="px-4 pb-6">
             <div className="max-w-6xl mx-auto">
+              <style>{`
+                .matchups-scroll {
+                  scrollbar-width: none;
+                }
+                .matchups-scroll::-webkit-scrollbar {
+                  height: 0;
+                }
+              `}</style>
               <div
-                className="flex gap-4 overflow-x-auto pb-4 px-1"
+                ref={matchupScrollRef}
+                className="matchups-scroll flex gap-4 overflow-x-auto pb-3 px-1"
                 style={{ scrollSnapType: "x mandatory" }}
                 aria-label="Bowl matchups carousel"
               >
-                {matchupCards.map((card) => {
+                {matchupCards.map((card, idx) => {
                   const awayName = card.awayMeta.name || "Away Team";
                   const homeName = card.homeMeta.name || "Home Team";
                   const statusLine = card.isFinal
@@ -448,11 +472,12 @@ const { useMemo, useEffect, useRef, useState } = React;
                   const favoriteLine = card.favoriteLabel && card.spreadRaw
                     ? `${card.favoriteLabel} ${card.spreadRaw}`
                     : "—";
-                  const totalLine = card.totalRaw ? `O/U ${card.totalRaw}` : "—";
+                  const totalLine = card.totalRaw ? card.totalRaw : "—";
                   return (
                     <div
                       key={card.bowlId || card.bowlName || `${awayName}-${homeName}`}
-                      className="relative min-w-[280px] md:min-w-[360px] max-w-[400px] min-h-[560px] md:min-h-[620px] rounded-2xl overflow-hidden shadow-2xl border border-white/20 text-white"
+                      ref={idx === mostRecentCompletedIdx ? mostRecentMatchupRef : null}
+                      className="relative min-w-[320px] md:min-w-[360px] max-w-[420px] min-h-[560px] md:min-h-[620px] rounded-2xl overflow-hidden shadow-sm text-white"
                       style={{ background: card.gradient, scrollSnapAlign: "start" }}
                       aria-label={`${card.bowlName || "Bowl Matchup"} card`}
                     >
