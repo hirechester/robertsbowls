@@ -219,6 +219,7 @@
                     "0";
                 const tiebreakerText = String(tiebreaker || "").trim();
                 const champPickDisplay = champPick === "-" ? "-" : `${champPick} (${tiebreakerText || "0"})`;
+                const champPickLost = !!(champPickId && playoffTeamIds.has(champPickId) && !alivePlayoffTeams.has(champPickId));
 
                 return {
                     name: playerIds.Name,
@@ -228,6 +229,7 @@
                     currentStreak,
                     maxWinStreak,
                     champPick: champPickDisplay,
+                    champPickLost,
                     tiebreaker,
                     rawPicksIds: playerIds,
                     rawPicks: legacy,
@@ -414,7 +416,15 @@
                                         <td className="p-2 text-center text-gray-900 border-r border-gray-100">{player.percentage}</td>
                                         <td className="p-2 text-center border-r border-gray-100">{renderStreak(player.currentStreak)}</td>
                                         <td className="p-2 text-center border-r border-gray-100"><span className="inline-block px-2 py-0.5 rounded-lg border border-transparent text-xs font-medium bg-gray-50 text-gray-900">W{player.maxWinStreak}</span></td>
-                                        <td className="p-2 text-center border-r border-gray-100 text-gray-900 truncate">{player.champPick}</td>
+                                        <td className="p-2 text-center border-r border-gray-100 text-gray-900 truncate">
+                                            {player.champPickLost ? (
+                                                <span className="inline-block px-2 py-0.5 rounded-lg border border-transparent text-xs font-medium bg-red-50 text-red-400 line-through decoration-red-400 opacity-75 whitespace-nowrap">
+                                                    {player.champPick}
+                                                </span>
+                                            ) : (
+                                                player.champPick
+                                            )}
+                                        </td>
                                         <td className="p-2 text-center text-gray-900 border-r border-gray-100">{player.winProb}</td>
                                         <td className="p-2 text-center border-r border-gray-100">{renderStatus(player.status)}</td>
                                         <td className="p-2 text-center text-gray-900">{player.swingGames}</td>
