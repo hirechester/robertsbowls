@@ -523,6 +523,9 @@
 
       let biggestRise = null;
       let biggestFall = null;
+      let mostWinsYesterday = null;
+      let mostWinsDiff = null;
+      let mostWinsNames = [];
 
       standingsAfterYesterday.rows.forEach((row) => {
         const before = standingsBeforeYesterday.byName[row.name];
@@ -534,7 +537,26 @@
         if (diff < 0 && (!biggestFall || diff < biggestFall.diff)) {
           biggestFall = { name: row.name, diff };
         }
+
+        const beforeWins = Number.isFinite(before.wins) ? before.wins : 0;
+        const afterWins = Number.isFinite(row.wins) ? row.wins : 0;
+        const winDiff = afterWins - beforeWins;
+        if (!Number.isFinite(winDiff)) return;
+        if (mostWinsDiff === null || winDiff > mostWinsDiff) {
+          mostWinsDiff = winDiff;
+          mostWinsNames = winDiff > 0 ? [row.name] : [];
+        } else if (winDiff === mostWinsDiff && winDiff > 0) {
+          mostWinsNames.push(row.name);
+        }
       });
+
+      if (mostWinsDiff !== null && mostWinsDiff > 0 && mostWinsNames.length) {
+        mostWinsYesterday = {
+          names: mostWinsNames,
+          diff: mostWinsDiff,
+          count: mostWinsNames.length
+        };
+      }
 
       const getLeaderNames = (standings) => {
         const rows = Array.isArray(standings.rows) ? standings.rows : [];
@@ -802,12 +824,100 @@
         };
       }
 
+      const truthy01 = (value) => {
+        const s = String(value ?? "").trim().toLowerCase();
+        return s === "1" || s === "true" || s === "yes" || s === "y" || s === "x";
+      };
+      const isCfpGame = (g) => truthy01(g["CFP?"] ?? g["CFP"] ?? g["Playoff"] ?? g["Playoff?"]);
+      const weightForGame = (g) => {
+        const raw = (g && g["Weight"] !== undefined) ? String(g["Weight"]).trim() : "";
+        const val = raw ? Number(raw) : 1;
+        return Number.isFinite(val) && val > 0 ? val : 1;
+      };
+
+      const seedKeys = ["Seed", "Team Seed", "Seed #", "Seed Number", "Playoff Seed", "CFP Seed"];
+      const playoffTeamIds = new Set();
+      if (teamById) {
+        Object.keys(teamById).forEach((id) => {
+          const seedVal = getFirstValue(teamById[id], seedKeys);
+          if (seedVal) playoffTeamIds.add(normalizeId(id));
+        });
+      }
+      const alivePlayoffTeams = new Set(playoffTeamIds);
+      const sortedSchedule = [...scheduleWithDates].sort((a, b) => {
+        if (a.__dateKey !== b.__dateKey) return a.__dateKey.localeCompare(b.__dateKey);
+        const aTime = Number.isFinite(a.__timeMinutes) ? a.__timeMinutes : 9999;
+        const bTime = Number.isFinite(b.__timeMinutes) ? b.__timeMinutes : 9999;
+        if (aTime !== bTime) return aTime - bTime;
+        return String(getFirstValue(a, ["Bowl", "Bowl Name"]) || "").localeCompare(String(getFirstValue(b, ["Bowl", "Bowl Name"]) || ""));
+      });
+      sortedSchedule.forEach((game) => {
+        if (!isCfpGame(game)) return;
+        const winnerId = normalizeId(getFirstValue(game, ["Winner ID", "WinnerID"]));
+        if (!winnerId) return;
+        const homeId = normalizeId(getFirstValue(game, ["Home ID", "HomeID"]));
+        const awayId = normalizeId(getFirstValue(game, ["Away ID", "AwayID"]));
+        if (homeId && winnerId !== homeId) alivePlayoffTeams.delete(homeId);
+        if (awayId && winnerId !== awayId) alivePlayoffTeams.delete(awayId);
+      });
+      const isAlivePickForGame = (game, pickId) => {
+        if (!pickId) return false;
+        if (!isCfpGame(game)) return true;
+        return alivePlayoffTeams.has(pickId);
+      };
+
+      const unplayedGames = sortedSchedule.filter((g) => {
+        const winnerId = normalizeId(getFirstValue(g, ["Winner ID", "WinnerID"]));
+        return !winnerId;
+      });
+      const standingsForStatus = (picksIds || []).map((row) => {
+        let wins = 0;
+        sortedSchedule.forEach((game) => {
+          const winnerId = normalizeId(getFirstValue(game, ["Winner ID", "WinnerID"]));
+          if (!winnerId) return;
+          const bowlKey = getBowlKey(game);
+          const pickId = normalizeId(row[bowlKey]);
+          if (pickId && pickId === winnerId) wins += weightForGame(game);
+        });
+        return { name: row.Name, wins, rawPicksIds: row };
+      }).sort((a, b) => b.wins - a.wins);
+
+      const leaderWins = standingsForStatus[0] ? standingsForStatus[0].wins : 0;
+      const leaders = standingsForStatus.filter((row) => row.wins === leaderWins);
+      const stillAliveCount = standingsForStatus.reduce((count, row) => {
+        if (row.wins === leaderWins) return count + 1;
+        const remainingWins = unplayedGames.reduce((acc, game) => {
+          const bowlKey = getBowlKey(game);
+          if (!bowlKey) return acc;
+          const pickId = normalizeId(row.rawPicksIds[bowlKey]);
+          return isAlivePickForGame(game, pickId) ? acc + weightForGame(game) : acc;
+        }, 0);
+        const maxPossibleWins = row.wins + remainingWins;
+        let maxOpponentWins = 0;
+        standingsForStatus.forEach((other) => {
+          if (other.name === row.name) return;
+          let scenarioWins = other.wins;
+          unplayedGames.forEach((game) => {
+            const bowlKey = getBowlKey(game);
+            if (!bowlKey) return;
+            const candidatePick = normalizeId(row.rawPicksIds[bowlKey]);
+            if (!isAlivePickForGame(game, candidatePick)) return;
+            const otherPick = normalizeId(other.rawPicksIds[bowlKey]);
+            if (otherPick && otherPick === candidatePick) scenarioWins += weightForGame(game);
+          });
+          if (scenarioWins > maxOpponentWins) maxOpponentWins = scenarioWins;
+        });
+        return maxPossibleWins < maxOpponentWins ? count : count + 1;
+      }, 0);
+
       return {
         completedCount,
         leadChange,
         leadChangeInfo,
         biggestRise,
         biggestFall,
+        mostWinsYesterday,
+        stillAliveCount,
         standingsSnapshot: {
           items: snapshotItems,
           spreadLine
@@ -1063,6 +1173,16 @@
         const leadChangeLine = buildYesterdayRecap.leadChange === "No"
           ? "No movement at the top yesterday"
           : `Lead change: ${buildYesterdayRecap.leadChange}`;
+        const mostWinsYesterday = buildYesterdayRecap.mostWinsYesterday;
+        const mostWinsText = mostWinsYesterday
+          ? `${mostWinsYesterday.names.join(" & ")} (${mostWinsYesterday.diff})`
+          : "-";
+        const stillAliveCount = Number.isFinite(buildYesterdayRecap.stillAliveCount)
+          ? buildYesterdayRecap.stillAliveCount
+          : 0;
+        const stillAliveText = stillAliveCount === 1
+          ? "1 person still has a chance at glory"
+          : `${stillAliveCount} people still have a chance at glory`;
 
         sections.push({
           title: "Standings Movers 📈",
@@ -1070,8 +1190,8 @@
           lines: buildYesterdayRecap.completedCount === 0
             ? ["No games yesterday."]
             : [
-              `Biggest Rise: ${buildYesterdayRecap.biggestRise ? `${buildYesterdayRecap.biggestRise.name} (+${buildYesterdayRecap.biggestRise.diff})` : "-"}`,
-              `Biggest Drop: ${buildYesterdayRecap.biggestFall ? `${buildYesterdayRecap.biggestFall.name} (${buildYesterdayRecap.biggestFall.diff})` : "-"}`,
+              `Most Wins Yesterday: ${mostWinsText}`,
+              `Still Alive: ${stillAliveText}`,
               leadChangeLine
             ]
         });
@@ -1706,21 +1826,30 @@
                     : (
                       <div className="flex flex-col gap-2 text-xl text-slate-700">
                         <div>
-                          Biggest Rise:{" "}
-                          {buildYesterdayRecap.biggestRise ? (
+                          Most Wins Yesterday:{" "}
+                          {buildYesterdayRecap.mostWinsYesterday ? (
                             <>
-                              <span className="font-semibold">{buildYesterdayRecap.biggestRise.name}</span>
-                              {` (+${buildYesterdayRecap.biggestRise.diff})`}
+                              {(buildYesterdayRecap.mostWinsYesterday.names || []).map((name, index) => (
+                                <span key={name} className="font-semibold">
+                                  {name}{index < (buildYesterdayRecap.mostWinsYesterday.names || []).length - 1 ? " & " : ""}
+                                </span>
+                              ))}
+                              {` (${buildYesterdayRecap.mostWinsYesterday.diff})`}
                             </>
                           ) : "-"}
                         </div>
                         <div>
-                          Biggest Drop:{" "}
-                          {buildYesterdayRecap.biggestFall ? (
-                            <>
-                              <span className="font-semibold">{buildYesterdayRecap.biggestFall.name}</span>
-                              {` (${buildYesterdayRecap.biggestFall.diff})`}
-                            </>
+                          Still Alive:{" "}
+                          {Number.isFinite(buildYesterdayRecap.stillAliveCount) ? (
+                            buildYesterdayRecap.stillAliveCount === 1 ? (
+                              <>
+                                <span className="font-semibold">1</span> person still has a chance at glory
+                              </>
+                            ) : (
+                              <>
+                                <span className="font-semibold">{buildYesterdayRecap.stillAliveCount}</span> people still have a chance at glory
+                              </>
+                            )
                           ) : "-"}
                         </div>
                         <div>
