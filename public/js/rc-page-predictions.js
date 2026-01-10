@@ -30,12 +30,15 @@
   const TEMPLATE_ANIMAL = "animal";
   const TEMPLATE_HUMAN = "human";
   const TEMPLATE_VOWELS = "vowels";
+  const TEMPLATE_SCRABBLE = "scrabble";
   const TEMPLATE_RANDOM = "random";
   const TEMPLATE_ZEBRA = "zebra";
   const TEMPLATE_BIGGEST = "biggest";
   const TEMPLATE_SMALLEST = "smallest";
   const TEMPLATE_LIGHTER = "lighter";
   const TEMPLATE_DARKER = "darker";
+  const TEMPLATE_GRAD = "grad";
+  const TEMPLATE_OLDEST = "oldest";
   const TEMPLATE_BUCEES = "bucees";
 
   const BRACKET_SLOTS = {
@@ -174,6 +177,22 @@
     return Number.isFinite(num) ? num : null;
   };
 
+  const getTeamGradRate = (team) => {
+    if (!team) return null;
+    const raw = pickFirst(team, ["Graduation Rate", "Grad Rate", "GraduationRate", "GradRate"]);
+    if (!raw) return null;
+    const num = parseFloat(String(raw).replace(/[^0-9.+-]/g, ""));
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const getTeamFounded = (team) => {
+    if (!team) return null;
+    const raw = pickFirst(team, ["Year Founded", "Founded", "Year Founded (YYYY)", "Founded Year"]);
+    if (!raw) return null;
+    const num = parseFloat(String(raw).replace(/[^0-9.+-]/g, ""));
+    return Number.isFinite(num) ? num : null;
+  };
+
   const getTeamConference = (team) => {
     if (!team) return "";
     return pickFirst(team, ["Conference", "Conf", "Conference Name", "Team Conf", "Team Conference"]);
@@ -214,6 +233,7 @@
     const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
     return { h, s, l };
   };
+
 
   const isPatriotRed = (team) => {
     const rgb = hexToRgb(pickFirst(team, ["Primary Hex", "Hex", "Color", "Primary Color"]));
@@ -374,6 +394,25 @@
     return matches ? matches.length : 0;
   };
 
+  const SCRABBLE_POINTS = {
+    A: 1, E: 1, I: 1, L: 1, N: 1, O: 1, R: 1, S: 1, T: 1, U: 1,
+    D: 2, G: 2,
+    B: 3, C: 3, M: 3, P: 3,
+    F: 4, H: 4, V: 4, W: 4, Y: 4,
+    K: 5,
+    J: 8, X: 8,
+    Q: 10, Z: 10
+  };
+
+  const scrabbleScore = (value) => {
+    const text = String(value || "").toUpperCase().replace(/[^A-Z]/g, "");
+    let total = 0;
+    for (let i = 0; i < text.length; i++) {
+      total += SCRABBLE_POINTS[text[i]] || 0;
+    }
+    return total;
+  };
+
   const toRgba = (hex, alpha) => {
     const raw = String(hex || "").trim().replace(/^#/, "");
     if (!/^[0-9a-fA-F]{6}$/.test(raw)) return "";
@@ -442,6 +481,14 @@
       if (awayCount === homeCount) return "home";
       return awayCount > homeCount ? "away" : "home";
     }
+    if (templateKey === TEMPLATE_SCRABBLE) {
+      const awayText = `${awayMeta.name || ""} ${awayMeta.nickname || ""}`.trim();
+      const homeText = `${homeMeta.name || ""} ${homeMeta.nickname || ""}`.trim();
+      const awayScore = scrabbleScore(awayText);
+      const homeScore = scrabbleScore(homeText);
+      if (awayScore === homeScore) return "";
+      return awayScore > homeScore ? "away" : "home";
+    }
     if (templateKey === TEMPLATE_BIGGEST || templateKey === TEMPLATE_SMALLEST) {
       const awayEnroll = getTeamEnrollment(awayMeta.team);
       const homeEnroll = getTeamEnrollment(homeMeta.team);
@@ -457,6 +504,20 @@
       if (awayLum === homeLum) return "";
       const pickLighter = awayLum > homeLum ? "away" : "home";
       return templateKey === TEMPLATE_LIGHTER ? pickLighter : (pickLighter === "away" ? "home" : "away");
+    }
+    if (templateKey === TEMPLATE_GRAD) {
+      const awayRate = getTeamGradRate(awayMeta.team);
+      const homeRate = getTeamGradRate(homeMeta.team);
+      if (!Number.isFinite(awayRate) || !Number.isFinite(homeRate)) return "";
+      if (awayRate === homeRate) return "";
+      return awayRate > homeRate ? "away" : "home";
+    }
+    if (templateKey === TEMPLATE_OLDEST) {
+      const awayYear = getTeamFounded(awayMeta.team);
+      const homeYear = getTeamFounded(homeMeta.team);
+      if (!Number.isFinite(awayYear) || !Number.isFinite(homeYear)) return "";
+      if (awayYear === homeYear) return "";
+      return awayYear < homeYear ? "away" : "home";
     }
     if (templateKey === TEMPLATE_BUCEES) {
       const allowed = new Set(["AL", "CO", "FL", "GA", "KY", "MS", "MO", "SC", "TN", "VA", "TX"]);
@@ -1000,34 +1061,43 @@
                   className="w-full md:w-64 rounded-xl border border-slate-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
                   <option value={TEMPLATE_CUSTOM}>Templates</option>
-                  <option value={TEMPLATE_ALPHA}>Alphabetical Order (by school)</option>
-                  <option value={TEMPLATE_ALPHA_NICK}>Alphabetical Order (by nickname)</option>
-                  <option value={TEMPLATE_SOUTH}>Southern Most Team</option>
+                  <option disabled>🧭 Geography & Location</option>
                   <option value={TEMPLATE_NORTH}>Northern Most Team</option>
+                  <option value={TEMPLATE_SOUTH}>Southern Most Team</option>
                   <option value={TEMPLATE_EAST}>Eastern Most Team</option>
                   <option value={TEMPLATE_WEST}>Western Most Team</option>
-                  <option value={TEMPLATE_LONGEST}>Longest School</option>
-                  <option value={TEMPLATE_SHORTEST}>Shortest School</option>
-                  <option value={TEMPLATE_SEC}>SEC Teams</option>
-                  <option value={TEMPLATE_B1G}>Big Ten Teams</option>
-                  <option value={TEMPLATE_RED}>Red Teams</option>
-                  <option value={TEMPLATE_BLUE}>Blue Teams</option>
-                  <option value={TEMPLATE_HOME}>Home Teams</option>
-                  <option value={TEMPLATE_AWAY}>Away Teams</option>
                   <option value={TEMPLATE_CLOSEST}>Closest School to Bowl</option>
                   <option value={TEMPLATE_FURTHEST}>Furthest School from Bowl</option>
-                  <option value={TEMPLATE_ANIMAL}>Animal Mascots</option>
-                  <option value={TEMPLATE_HUMAN}>Human Mascots</option>
+                  <option value={TEMPLATE_BUCEES}>Schools in States with a Buc-ee's</option>
+                  <option disabled>🔤 Names & Words</option>
+                  <option value={TEMPLATE_ALPHA}>Alphabetical Order (by school)</option>
+                  <option value={TEMPLATE_ALPHA_NICK}>Alphabetical Order (by nickname)</option>
+                  <option value={TEMPLATE_LONGEST}>Longest School Name</option>
+                  <option value={TEMPLATE_SHORTEST}>Shortest School Name</option>
                   <option value={TEMPLATE_VOWELS}>Most Vowels</option>
-                  <option value={TEMPLATE_BIGGEST}>Bigger School (Enrollment)</option>
-                  <option value={TEMPLATE_SMALLEST}>Smaller School (Enrollment)</option>
+                  <option value={TEMPLATE_SCRABBLE}>Higher Scrabble Score</option>
+                  <option disabled>🎨 Colors & Aesthetics</option>
+                  <option value={TEMPLATE_RED}>Red Teams</option>
+                  <option value={TEMPLATE_BLUE}>Blue Teams</option>
                   <option value={TEMPLATE_LIGHTER}>Lighter Colors</option>
                   <option value={TEMPLATE_DARKER}>Darker Colors</option>
-                  <option value={TEMPLATE_BUCEES}>Schools in States with a Buc-ee's</option>
-                  <option value={TEMPLATE_UNDERDOGS}>Vegas Underdogs</option>
+                  <option disabled>🏫 Team Traits</option>
+                  <option value={TEMPLATE_HOME}>Home Teams</option>
+                  <option value={TEMPLATE_AWAY}>Away Teams</option>
+                  <option value={TEMPLATE_BIGGEST}>Bigger School</option>
+                  <option value={TEMPLATE_SMALLEST}>Smaller School</option>
+                  <option value={TEMPLATE_OLDEST}>Oldest Institution</option>
+                  <option value={TEMPLATE_GRAD}>Higher Graduation Rate</option>
+                  <option value={TEMPLATE_ANIMAL}>Animal Mascots</option>
+                  <option value={TEMPLATE_HUMAN}>Human Mascots</option>
+                  <option value={TEMPLATE_SEC}>SEC Teams</option>
+                  <option value={TEMPLATE_B1G}>Big Ten Teams</option>
+                  <option disabled>💰 Sportsbook</option>
                   <option value={TEMPLATE_VEGAS}>Vegas Favorites</option>
-                  <option value={TEMPLATE_RANDOM}>I'm Feeling Lucky!</option>
+                  <option value={TEMPLATE_UNDERDOGS}>Vegas Underdogs</option>
+                  <option disabled>🎲 Pure Chaos</option>
                   <option value={TEMPLATE_ZEBRA}>Zebra Stripes</option>
+                  <option value={TEMPLATE_RANDOM}>I'm Feeling Lucky!</option>
                 </select>
                 <button
                   type="button"
