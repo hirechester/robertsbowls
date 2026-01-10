@@ -41,6 +41,75 @@
   const TEMPLATE_OLDEST = "oldest";
   const TEMPLATE_BUCEES = "bucees";
 
+  const TEMPLATE_LABELS = {
+    [TEMPLATE_CUSTOM]: "Templates",
+    [TEMPLATE_NORTH]: "Northern Most Team",
+    [TEMPLATE_SOUTH]: "Southern Most Team",
+    [TEMPLATE_EAST]: "Eastern Most Team",
+    [TEMPLATE_WEST]: "Western Most Team",
+    [TEMPLATE_CLOSEST]: "Closest School to Bowl",
+    [TEMPLATE_FURTHEST]: "Furthest School from Bowl",
+    [TEMPLATE_BUCEES]: "Schools in States with a Buc-ee's",
+    [TEMPLATE_ALPHA]: "Alphabetical Order (by school)",
+    [TEMPLATE_ALPHA_NICK]: "Alphabetical Order (by nickname)",
+    [TEMPLATE_LONGEST]: "Longest School Name",
+    [TEMPLATE_SHORTEST]: "Shortest School Name",
+    [TEMPLATE_VOWELS]: "Most Vowels",
+    [TEMPLATE_SCRABBLE]: "Higher Scrabble Score",
+    [TEMPLATE_RED]: "Red Teams",
+    [TEMPLATE_BLUE]: "Blue Teams",
+    [TEMPLATE_LIGHTER]: "Lighter Colors",
+    [TEMPLATE_DARKER]: "Darker Colors",
+    [TEMPLATE_HOME]: "Home Teams",
+    [TEMPLATE_AWAY]: "Away Teams",
+    [TEMPLATE_BIGGEST]: "Bigger School",
+    [TEMPLATE_SMALLEST]: "Smaller School",
+    [TEMPLATE_OLDEST]: "Oldest Institution",
+    [TEMPLATE_GRAD]: "Higher Graduation Rate",
+    [TEMPLATE_ANIMAL]: "Animal Mascots",
+    [TEMPLATE_HUMAN]: "Human Mascots",
+    [TEMPLATE_SEC]: "SEC Teams",
+    [TEMPLATE_B1G]: "Big Ten Teams",
+    [TEMPLATE_VEGAS]: "Vegas Favorites",
+    [TEMPLATE_UNDERDOGS]: "Vegas Underdogs",
+    [TEMPLATE_ZEBRA]: "Zebra Stripes",
+    [TEMPLATE_RANDOM]: "I'm Feeling Lucky!"
+  };
+
+  const TEMPLATE_TOOLTIPS = {
+    [TEMPLATE_NORTH]: "Cold weather builds character, toughness, and excuses for bad offense - picks the team from further north.",
+    [TEMPLATE_SOUTH]: "It just means more sunshine, more swagger, and probably faster players - picks the team from further south.",
+    [TEMPLATE_EAST]: "East Coast bias is real and undefeated - picks the team located further east.",
+    [TEMPLATE_WEST]: "Late kickoffs, chill vibes, dangerous energy - picks the team located further west.",
+    [TEMPLATE_CLOSEST]: "Less travel, fewer distractions, more fans - picks the team with the shortest trip to the bowl.",
+    [TEMPLATE_FURTHEST]: "They came all this way for a reason... right? - picks the team traveling the farthest.",
+    [TEMPLATE_BUCEES]: "You don't lose when Buc-ee's is on your side - picks the only team from a Buc-ee's state, if there is one.",
+    [TEMPLATE_ALPHA]: "Order brings stability and stability brings wins - picks the school name that comes first alphabetically.",
+    [TEMPLATE_ALPHA_NICK]: "Mascot hierarchy is destiny - picks the nickname that comes first alphabetically.",
+    [TEMPLATE_LONGEST]: "More letters means more tradition, obviously - picks the school with the longer name.",
+    [TEMPLATE_SHORTEST]: "No wasted letters, no wasted plays - picks the school with the shorter name.",
+    [TEMPLATE_VOWELS]: "A loud name is a confident name - picks the team with more vowels in its name.",
+    [TEMPLATE_SCRABBLE]: "If it dominates the board, it dominates the game - picks the team whose name scores higher in Scrabble.",
+    [TEMPLATE_RED]: "Red is aggressive, intimidating, and never subtle - picks the only team whose primary color is red.",
+    [TEMPLATE_BLUE]: "Classic, calm, and quietly dangerous - picks the only team whose primary color is blue.",
+    [TEMPLATE_LIGHTER]: "Bright uniforms, bright future - picks the team with the lighter primary color.",
+    [TEMPLATE_DARKER]: "Harder to see, harder to stop - picks the team with the darker primary color.",
+    [TEMPLATE_HOME]: "Sleeping in your own bed still matters - always picks the home team.",
+    [TEMPLATE_AWAY]: "Walk in your trap and take over your trap - always picks the away team.",
+    [TEMPLATE_BIGGEST]: "More students means more chaos and more talent somewhere - picks the school with higher enrollment.",
+    [TEMPLATE_SMALLEST]: "Chip on the shoulder season - picks the school with lower enrollment.",
+    [TEMPLATE_OLDEST]: "They've been doing this longer than your grandparents - picks the school founded earlier.",
+    [TEMPLATE_GRAD]: "Smarter teams make fewer mistakes - picks the school with the higher graduation rate.",
+    [TEMPLATE_ANIMAL]: "Never bet against nature - picks the team with an animal mascot, if there's only one.",
+    [TEMPLATE_HUMAN]: "Opposable thumbs are an advantage - picks the team with a human mascot, if there's only one.",
+    [TEMPLATE_SEC]: "The conference your uncle won't shut up about - picks the SEC team if exactly one is in the matchup.",
+    [TEMPLATE_B1G]: "Midwest toughness never goes out of style - picks the Big Ten team if exactly one is in the matchup.",
+    [TEMPLATE_VEGAS]: "The house didn't build itself - picks the team Vegas expects to win.",
+    [TEMPLATE_UNDERDOGS]: "Scared money don't make money - picks the team Vegas expects to lose.",
+    [TEMPLATE_ZEBRA]: "No logic, just vibes and alternating chaos - alternates picks between teams.",
+    [TEMPLATE_RANDOM]: "Fate has never been wrong before, right? - makes a completely random pick for each game."
+  };
+
   const BRACKET_SLOTS = {
     OPEN_5_12: "cfp-open-5-12",
     OPEN_6_11: "cfp-open-6-11",
@@ -1045,21 +1114,45 @@
               <p className="text-gray-600 text-sm">Pick the Winners</p>
             </div>
           </div>
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
-                <input
-                  type="text"
-                  value={pickerName}
-                  onChange={(e) => setPickerName(e.target.value)}
-                  placeholder="Your name"
-                  className="w-full md:w-60 rounded-xl border border-slate-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <select
-                  value={template}
-                  onChange={(e) => handleTemplateChange(e.target.value)}
-                  className="w-full md:w-64 rounded-xl border border-slate-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-50 via-white to-slate-50" />
+            <div className="relative p-6 md:p-8">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.35em] text-blue-600 font-bold">Pick Studio</div>
+                  <div className="text-2xl font-black text-slate-900">Choose a Template</div>
+                  <div className="text-sm text-slate-600 mt-1">Build a full board in one tap, then tweak picks as needed.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPicksByBowlId({});
+                    setTiebreakerScore("");
+                    setTemplate(TEMPLATE_CUSTOM);
+                  }}
+                  className="w-full md:w-auto rounded-2xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-widest text-slate-600 shadow-sm hover:border-slate-400 hover:bg-slate-100 transition"
                 >
+                  Clear Selections
+                </button>
+              </div>
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Player Name</label>
+                  <input
+                    type="text"
+                    value={pickerName}
+                    onChange={(e) => setPickerName(e.target.value)}
+                    placeholder="Your name"
+                    className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Template Picker</label>
+                  <select
+                    value={template}
+                    onChange={(e) => handleTemplateChange(e.target.value)}
+                    className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
                   <option value={TEMPLATE_CUSTOM}>Templates</option>
                   <option disabled>🧭 Geography & Location</option>
                   <option value={TEMPLATE_NORTH}>Northern Most Team</option>
@@ -1099,18 +1192,14 @@
                   <option value={TEMPLATE_ZEBRA}>Zebra Stripes</option>
                   <option value={TEMPLATE_RANDOM}>I'm Feeling Lucky!</option>
                 </select>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPicksByBowlId({});
-                    setTiebreakerScore("");
-                    setTemplate(TEMPLATE_CUSTOM);
-                  }}
-                  className="w-full md:w-auto rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition"
-                >
-                  Clear Selections
-                </button>
+                </div>
               </div>
+              {template !== TEMPLATE_CUSTOM && (
+                <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 shadow-sm">
+                  <span className="font-bold uppercase tracking-widest text-[10px] text-blue-700">Template Logic</span>
+                  <div className="mt-1">{TEMPLATE_TOOLTIPS[template] || "Dummy: Template description goes here."}</div>
+                </div>
+              )}
             </div>
           </div>
 
