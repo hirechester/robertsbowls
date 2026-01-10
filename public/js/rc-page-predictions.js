@@ -110,18 +110,26 @@
     [TEMPLATE_RANDOM]: "Fate has never been wrong before, right? - makes a completely random pick for each game."
   };
 
-  const BRACKET_SLOTS = {
-    OPEN_5_12: "cfp-open-5-12",
-    OPEN_6_11: "cfp-open-6-11",
-    OPEN_7_10: "cfp-open-7-10",
-    OPEN_8_9: "cfp-open-8-9",
-    QF_4: "cfp-qf-4",
-    QF_3: "cfp-qf-3",
-    QF_2: "cfp-qf-2",
-    QF_1: "cfp-qf-1",
-    SF_1_4: "cfp-sf-1-4",
-    SF_2_3: "cfp-sf-2-3",
-    CHAMP: "cfp-champ"
+
+  const CFP_BRACKET = [
+    { bowlId: "401779840", homeId: "201", awayId: "333", advancesTo: "401769072", label: "Opening Round" },
+    { bowlId: "401779841", homeId: "245", awayId: "2390", advancesTo: "401769070", label: "Opening Round" },
+    { bowlId: "401779842", homeId: "145", awayId: "2655", advancesTo: "401769073", label: "Opening Round" },
+    { bowlId: "401779843", homeId: "2483", awayId: "256", advancesTo: "401769071", label: "Opening Round" },
+    { bowlId: "401769070", homeId: "194", awayId: "", advancesTo: "401769075", label: "Quarterfinal" },
+    { bowlId: "401769071", homeId: "2641", awayId: "", advancesTo: "401769074", label: "Quarterfinal" },
+    { bowlId: "401769072", homeId: "84", awayId: "", advancesTo: "401769074", label: "Quarterfinal" },
+    { bowlId: "401769073", homeId: "61", awayId: "", advancesTo: "401769075", label: "Quarterfinal" },
+    { bowlId: "401769075", homeId: "", awayId: "", advancesTo: "MANUAL_CHAMP", label: "Semifinal" },
+    { bowlId: "401769074", homeId: "", awayId: "", advancesTo: "MANUAL_CHAMP", label: "Semifinal" },
+    { bowlId: "MANUAL_CHAMP", homeId: "", awayId: "", advancesTo: "", label: "National Championship" }
+  ];
+
+  const CFP_SECTIONS = {
+    opening: ["401779840", "401779841", "401779842", "401779843"],
+    quarterfinals: ["401769070", "401769071", "401769072", "401769073"],
+    semifinals: ["401769075", "401769074"],
+    championship: "MANUAL_CHAMP"
   };
 
   const pickFirst = (row, keys) => {
@@ -689,111 +697,6 @@
       return { cfp, nonCfp };
     }, [bowlGames]);
 
-    const bracketBase = useMemo(() => {
-      if (!Array.isArray(teams)) return null;
-      const seeded = teams
-        .map((team) => {
-          const teamId = normalizeId(pickFirst(team, ["Team ID", "TeamID", "ID", "Id"]));
-          const seedRaw = pickFirst(team, ["Seed", "Team Seed", "Seed #", "Seed Number", "Playoff Seed", "CFP Seed"]);
-          const seedNum = parseInt(cleanNumber(seedRaw), 10);
-          if (!teamId || !Number.isFinite(seedNum)) return null;
-          return { teamId, seedNum };
-        })
-        .filter(Boolean)
-        .sort((a, b) => a.seedNum - b.seedNum);
-
-      if (!seeded.length) return null;
-      const seedToId = {};
-      seeded.forEach(({ teamId, seedNum }) => {
-        if (!seedToId[seedNum]) seedToId[seedNum] = teamId;
-      });
-
-      return {
-        seedToId,
-        opening: [
-          { slotId: BRACKET_SLOTS.OPEN_5_12, seedA: 5, seedB: 12, label: "5 vs 12" },
-          { slotId: BRACKET_SLOTS.OPEN_6_11, seedA: 6, seedB: 11, label: "6 vs 11" },
-          { slotId: BRACKET_SLOTS.OPEN_7_10, seedA: 7, seedB: 10, label: "7 vs 10" },
-          { slotId: BRACKET_SLOTS.OPEN_8_9, seedA: 8, seedB: 9, label: "8 vs 9" }
-        ],
-        quarterfinals: [
-          { slotId: BRACKET_SLOTS.QF_4, seed: 4, from: BRACKET_SLOTS.OPEN_5_12, label: "4 vs Winner 5/12" },
-          { slotId: BRACKET_SLOTS.QF_3, seed: 3, from: BRACKET_SLOTS.OPEN_6_11, label: "3 vs Winner 6/11" },
-          { slotId: BRACKET_SLOTS.QF_2, seed: 2, from: BRACKET_SLOTS.OPEN_7_10, label: "2 vs Winner 7/10" },
-          { slotId: BRACKET_SLOTS.QF_1, seed: 1, from: BRACKET_SLOTS.OPEN_8_9, label: "1 vs Winner 8/9" }
-        ],
-        semifinals: [
-          { slotId: BRACKET_SLOTS.SF_1_4, fromA: BRACKET_SLOTS.QF_4, fromB: BRACKET_SLOTS.QF_1, label: "Semifinal (1/4)" },
-          { slotId: BRACKET_SLOTS.SF_2_3, fromA: BRACKET_SLOTS.QF_3, fromB: BRACKET_SLOTS.QF_2, label: "Semifinal (2/3)" }
-        ],
-        championship: { slotId: BRACKET_SLOTS.CHAMP, fromA: BRACKET_SLOTS.SF_1_4, fromB: BRACKET_SLOTS.SF_2_3, label: "National Championship" }
-      };
-    }, [teams]);
-
-    const bracketGames = useMemo(() => {
-      if (!bracketBase) return null;
-      const resolveSeed = (seed) => bracketBase.seedToId[seed] || "";
-      const resolveWinner = (slotId) => picksByBowlId[slotId] || "";
-
-      const opening = bracketBase.opening.map((game) => ({
-        slotId: game.slotId,
-        label: game.label,
-        awayId: resolveSeed(game.seedA),
-        homeId: resolveSeed(game.seedB),
-        awayFallback: `Seed ${game.seedA}`,
-        homeFallback: `Seed ${game.seedB}`,
-        allow: null
-      }));
-
-      const quarterfinals = bracketBase.quarterfinals.map((game) => {
-        const awayId = resolveSeed(game.seed);
-        const homeId = resolveWinner(game.from);
-        const allow = awayId && homeId ? new Set([awayId, homeId]) : new Set();
-        return {
-          slotId: game.slotId,
-          label: game.label,
-          awayId,
-          homeId,
-          awayFallback: `Seed ${game.seed}`,
-          homeFallback: "Winner of Opening Round",
-          allow,
-          locked: allow.size < 2
-        };
-      });
-
-      const semifinals = bracketBase.semifinals.map((game) => {
-        const awayId = resolveWinner(game.fromA);
-        const homeId = resolveWinner(game.fromB);
-        const allow = awayId && homeId ? new Set([awayId, homeId]) : new Set();
-        return {
-          slotId: game.slotId,
-          label: game.label,
-          awayId,
-          homeId,
-          awayFallback: "Winner of Quarterfinal",
-          homeFallback: "Winner of Quarterfinal",
-          allow,
-          locked: allow.size < 2
-        };
-      });
-
-      const champAway = resolveWinner(bracketBase.championship.fromA);
-      const champHome = resolveWinner(bracketBase.championship.fromB);
-      const champAllow = champAway && champHome ? new Set([champAway, champHome]) : new Set();
-      const championship = {
-        slotId: bracketBase.championship.slotId,
-        label: bracketBase.championship.label,
-        awayId: champAway,
-        homeId: champHome,
-        awayFallback: "Winner of Semifinal",
-        homeFallback: "Winner of Semifinal",
-        allow: champAllow,
-        locked: champAllow.size < 2
-      };
-
-      return { opening, quarterfinals, semifinals, championship };
-    }, [bracketBase, picksByBowlId]);
-
     const favoritesByMatchup = useMemo(() => {
       const map = {};
       if (!Array.isArray(bowlGames)) return map;
@@ -821,46 +724,115 @@
       return map;
     }, [bowlGames]);
 
-    const cfpBowlsBySlot = useMemo(() => {
+    const bowlById = useMemo(() => {
       const map = {};
       if (!Array.isArray(bowlGames)) return map;
-      const cfpRows = bowlGames
-        .map((row, idx) => ({
-          row,
-          idx,
-          isCfp: to01(pickFirst(row, ["CFP?", "CFP", "CFP ?", "Playoff", "Playoff?"])) === "1"
-        }))
-        .filter((entry) => entry.isCfp);
-      if (!cfpRows.length) return map;
-      const sorted = cfpRows.slice().sort((a, b) => {
-        const aTime = parseGameDate(a.row);
-        const bTime = parseGameDate(b.row);
-        if (Number.isFinite(aTime) && Number.isFinite(bTime)) return aTime - bTime;
-        return a.idx - b.idx;
+      bowlGames.forEach((row) => {
+        const bowlId = normalizeId(pickFirst(row, ["Bowl ID", "BowlID", "Game ID", "GameID", "ID"]));
+        if (!bowlId) return;
+        map[bowlId] = row;
       });
-
-      const slotOrder = [
-        BRACKET_SLOTS.OPEN_5_12,
-        BRACKET_SLOTS.OPEN_6_11,
-        BRACKET_SLOTS.OPEN_7_10,
-        BRACKET_SLOTS.OPEN_8_9,
-        BRACKET_SLOTS.QF_4,
-        BRACKET_SLOTS.QF_3,
-        BRACKET_SLOTS.QF_2,
-        BRACKET_SLOTS.QF_1,
-        BRACKET_SLOTS.SF_1_4,
-        BRACKET_SLOTS.SF_2_3,
-        BRACKET_SLOTS.CHAMP
-      ];
-
-      sorted.forEach((entry, idx) => {
-        const slotId = slotOrder[idx];
-        if (!slotId) return;
-        map[slotId] = entry.row;
-      });
-
       return map;
     }, [bowlGames]);
+
+    const cfpBracketGames = useMemo(() => {
+      const gameById = {};
+      CFP_BRACKET.forEach((g) => { gameById[g.bowlId] = g; });
+
+      const feedersFor = (bowlId) =>
+        CFP_BRACKET.filter((g) => g.advancesTo === bowlId).map((g) => g.bowlId);
+
+      const resolveParticipants = (game) => {
+        let homeId = normalizeId(game.homeId);
+        let awayId = normalizeId(game.awayId);
+        const row = bowlById[game.bowlId];
+        const rowHomeId = row ? normalizeId(pickFirst(row, ["Home ID", "HomeID"])) : "";
+        const rowAwayId = row ? normalizeId(pickFirst(row, ["Away ID", "AwayID"])) : "";
+        if (rowHomeId) homeId = rowHomeId;
+        if (rowAwayId) awayId = rowAwayId;
+
+        if (!homeId || !awayId) {
+          const feeders = feedersFor(game.bowlId);
+          const winnerIds = feeders
+            .map((fid) => picksByBowlId[fid])
+            .filter(Boolean)
+            .map((id) => normalizeId(id));
+
+          if (!awayId && homeId && winnerIds.length) awayId = winnerIds[0];
+          if (!homeId && awayId && winnerIds.length) homeId = winnerIds[0];
+          if (!homeId && !awayId) {
+            if (winnerIds.length) awayId = winnerIds[0];
+            if (winnerIds.length > 1) homeId = winnerIds[1];
+          }
+        }
+
+        const allow = homeId && awayId ? new Set([awayId, homeId]) : new Set();
+        return { homeId, awayId, allow, locked: allow.size < 2 };
+      };
+
+      const buildGame = (bowlId) => {
+        const base = gameById[bowlId];
+        if (!base) return null;
+        const row = bowlById[bowlId];
+        const meta = row ? {
+          name: pickFirst(row, ["Bowl Name", "Bowl", "BowlName"]),
+          date: pickFirst(row, ["Date"]),
+          time: pickFirst(row, ["Time"]),
+          network: pickFirst(row, ["TV", "Network"]),
+          raw: row
+        } : {};
+        const participants = resolveParticipants(base);
+        return {
+          slotId: base.bowlId,
+          bowlId: base.bowlId,
+          label: base.label,
+          awayId: participants.awayId,
+          homeId: participants.homeId,
+          awayFallback: "TBD",
+          homeFallback: "TBD",
+          allow: participants.allow,
+          locked: participants.locked,
+          ...meta
+        };
+      };
+
+      const opening = CFP_SECTIONS.opening.map((bowlId) => {
+        const game = buildGame(bowlId);
+        if (!game) return null;
+        return game;
+      }).filter(Boolean);
+      const quarterfinals = CFP_SECTIONS.quarterfinals.map((bowlId) => {
+        const game = buildGame(bowlId);
+        if (!game) return null;
+        game.awayFallback = "Winner of Opening Round";
+        game.homeFallback = "Seeded Team";
+        return game;
+      }).filter(Boolean);
+      const semifinals = CFP_SECTIONS.semifinals.map((bowlId) => {
+        const game = buildGame(bowlId);
+        if (!game) return null;
+        game.awayFallback = "Winner of Quarterfinal";
+        game.homeFallback = "Winner of Quarterfinal";
+        return game;
+      }).filter(Boolean);
+      const championship = buildGame(CFP_SECTIONS.championship) || {
+        slotId: CFP_SECTIONS.championship,
+        bowlId: CFP_SECTIONS.championship,
+        label: "National Championship",
+        awayId: "",
+        homeId: "",
+        awayFallback: "Winner of Semifinal",
+        homeFallback: "Winner of Semifinal",
+        allow: new Set(),
+        locked: true
+      };
+      if (championship) {
+        championship.awayFallback = "Winner of Semifinal";
+        championship.homeFallback = "Winner of Semifinal";
+      }
+
+      return { opening, quarterfinals, semifinals, championship };
+    }, [bowlById, picksByBowlId]);
 
     const applyTemplate = (templateKey) => {
       if (!templateKey || templateKey === TEMPLATE_CUSTOM) return;
@@ -915,13 +887,13 @@
         if (pickId) nextPicks[game.bowlId] = pickId;
       });
 
-      if (bracketBase) {
-        const pickFavorite = (awayId, homeId, fallbackSeedId) => {
+      if (CFP_BRACKET.length) {
+        const pickFavorite = (awayId, homeId, fallbackId) => {
           if (templateKey !== TEMPLATE_VEGAS) return "";
           const key = `${awayId}|${homeId}`;
           const favoriteId = favoritesByMatchup[key];
           if (favoriteId && (favoriteId === awayId || favoriteId === homeId)) return favoriteId;
-          return fallbackSeedId || awayId || homeId || "";
+          return fallbackId || awayId || homeId || "";
         };
         const pickUnderdog = (awayId, homeId) => {
           if (templateKey !== TEMPLATE_UNDERDOGS) return "";
@@ -939,32 +911,53 @@
           return choices[Math.floor(Math.random() * choices.length)];
         };
 
-        bracketBase.opening.forEach((game) => {
-          const awayId = bracketBase.seedToId[game.seedA];
-          const homeId = bracketBase.seedToId[game.seedB];
-          let pickId = "";
-          if (templateKey === TEMPLATE_VEGAS) {
-            pickId = pickFavorite(awayId, homeId, awayId || homeId);
-          } else if (templateKey === TEMPLATE_UNDERDOGS) {
-            pickId = pickUnderdog(awayId, homeId);
-          } else if (templateKey === TEMPLATE_RANDOM) {
-            pickId = pickRandom(awayId, homeId);
-          } else if (templateKey === TEMPLATE_ZEBRA) {
-            pickId = pickZebra(awayId, homeId);
-          } else {
-            const matchupRaw = matchupRawByKey[`${awayId}|${homeId}`] || cfpBowlsBySlot[game.slotId];
-            const awayMeta = getTeamMeta(teamById, awayId, `Seed ${game.seedA}`);
-            const homeMeta = getTeamMeta(teamById, homeId, `Seed ${game.seedB}`);
-            const choice = pickTemplateTeam(templateKey, awayMeta, homeMeta, matchupRaw);
-            pickId = choice === "away" ? awayId : (choice === "home" ? homeId : "");
-          }
-          if (pickId) nextPicks[game.slotId] = pickId;
-        });
+        const gameById = {};
+        CFP_BRACKET.forEach((g) => { gameById[g.bowlId] = g; });
+        const feedersFor = (bowlId) =>
+          CFP_BRACKET.filter((g) => g.advancesTo === bowlId).map((g) => g.bowlId);
 
-        bracketBase.quarterfinals.forEach((game) => {
-          const awayId = bracketBase.seedToId[game.seed];
-          const homeId = nextPicks[game.from];
+        const resolveParticipants = (game, picks) => {
+          let homeId = normalizeId(game.homeId);
+          let awayId = normalizeId(game.awayId);
+          const row = bowlById[game.bowlId];
+          const rowHomeId = row ? normalizeId(pickFirst(row, ["Home ID", "HomeID"])) : "";
+          const rowAwayId = row ? normalizeId(pickFirst(row, ["Away ID", "AwayID"])) : "";
+          if (rowHomeId) homeId = rowHomeId;
+          if (rowAwayId) awayId = rowAwayId;
+
+          if (!homeId || !awayId) {
+            const feeders = feedersFor(game.bowlId);
+            const winnerIds = feeders
+              .map((fid) => picks[fid])
+              .filter(Boolean)
+              .map((id) => normalizeId(id));
+
+            if (!awayId && homeId && winnerIds.length) awayId = winnerIds[0];
+            if (!homeId && awayId && winnerIds.length) homeId = winnerIds[0];
+            if (!homeId && !awayId) {
+              if (winnerIds.length) awayId = winnerIds[0];
+              if (winnerIds.length > 1) homeId = winnerIds[1];
+            }
+          }
+
+          return { homeId, awayId };
+        };
+
+        const playOrder = [
+          ...CFP_SECTIONS.opening,
+          ...CFP_SECTIONS.quarterfinals,
+          ...CFP_SECTIONS.semifinals,
+          CFP_SECTIONS.championship
+        ];
+
+        playOrder.forEach((bowlId) => {
+          const game = gameById[bowlId];
+          if (!game) return;
+          const participants = resolveParticipants(game, nextPicks);
+          const awayId = participants.awayId;
+          const homeId = participants.homeId;
           if (!awayId || !homeId) return;
+
           let pickId = "";
           if (templateKey === TEMPLATE_VEGAS) {
             pickId = pickFavorite(awayId, homeId, awayId);
@@ -975,59 +968,15 @@
           } else if (templateKey === TEMPLATE_ZEBRA) {
             pickId = pickZebra(awayId, homeId);
           } else {
-            const matchupRaw = matchupRawByKey[`${awayId}|${homeId}`] || cfpBowlsBySlot[game.slotId];
-            const awayMeta = getTeamMeta(teamById, awayId, `Seed ${game.seed}`);
-            const homeMeta = getTeamMeta(teamById, homeId, "Winner");
-            const choice = pickTemplateTeam(templateKey, awayMeta, homeMeta, matchupRaw);
-            pickId = choice === "away" ? awayId : (choice === "home" ? homeId : "");
-          }
-          if (pickId) nextPicks[game.slotId] = pickId;
-        });
-
-        bracketBase.semifinals.forEach((game) => {
-          const awayId = nextPicks[game.fromA];
-          const homeId = nextPicks[game.fromB];
-          if (!awayId || !homeId) return;
-          let pickId = "";
-          if (templateKey === TEMPLATE_VEGAS) {
-            pickId = pickFavorite(awayId, homeId, awayId);
-          } else if (templateKey === TEMPLATE_UNDERDOGS) {
-            pickId = pickUnderdog(awayId, homeId);
-          } else if (templateKey === TEMPLATE_RANDOM) {
-            pickId = pickRandom(awayId, homeId);
-          } else if (templateKey === TEMPLATE_ZEBRA) {
-            pickId = pickZebra(awayId, homeId);
-          } else {
-            const matchupRaw = matchupRawByKey[`${awayId}|${homeId}`] || cfpBowlsBySlot[game.slotId];
+            const matchupRaw = bowlById[bowlId] || matchupRawByKey[`${awayId}|${homeId}`];
             const awayMeta = getTeamMeta(teamById, awayId, "Winner");
             const homeMeta = getTeamMeta(teamById, homeId, "Winner");
             const choice = pickTemplateTeam(templateKey, awayMeta, homeMeta, matchupRaw);
             pickId = choice === "away" ? awayId : (choice === "home" ? homeId : "");
           }
-          if (pickId) nextPicks[game.slotId] = pickId;
-        });
 
-        const champAway = nextPicks[bracketBase.semifinals[0].slotId];
-        const champHome = nextPicks[bracketBase.semifinals[1].slotId];
-        if (champAway && champHome) {
-          let pickId = "";
-          if (templateKey === TEMPLATE_VEGAS) {
-            pickId = pickFavorite(champAway, champHome, champAway);
-          } else if (templateKey === TEMPLATE_UNDERDOGS) {
-            pickId = pickUnderdog(champAway, champHome);
-          } else if (templateKey === TEMPLATE_RANDOM) {
-            pickId = pickRandom(champAway, champHome);
-          } else if (templateKey === TEMPLATE_ZEBRA) {
-            pickId = pickZebra(champAway, champHome);
-          } else {
-            const matchupRaw = matchupRawByKey[`${champAway}|${champHome}`] || cfpBowlsBySlot[BRACKET_SLOTS.CHAMP];
-            const awayMeta = getTeamMeta(teamById, champAway, "Winner");
-            const homeMeta = getTeamMeta(teamById, champHome, "Winner");
-            const choice = pickTemplateTeam(templateKey, awayMeta, homeMeta, matchupRaw);
-            pickId = choice === "away" ? champAway : (choice === "home" ? champHome : "");
-          }
-          if (pickId) nextPicks[BRACKET_SLOTS.CHAMP] = pickId;
-        }
+          if (pickId) nextPicks[bowlId] = pickId;
+        });
       }
 
       setPicksByBowlId(nextPicks);
@@ -1049,6 +998,7 @@
       const awayMeta = getTeamMeta(teamById, game.awayId, game.awayFallback || pickFirst(game.raw, ["Team 1", "Away Team", "Away"]));
       const homeMeta = getTeamMeta(teamById, game.homeId, game.homeFallback || pickFirst(game.raw, ["Team 2", "Home Team", "Home"]));
       const allowed = options.allowedIds || null;
+      const footer = options.footer || null;
 
       const renderTeamButton = (meta, teamId, alignRight) => {
         const isSelected = selectedId && selectedId === teamId;
@@ -1092,9 +1042,12 @@
               </div>
             )}
           </div>
-          <div className="p-4 flex items-center justify-center gap-3">
+          <div className="p-4 flex flex-col gap-4">
+            <div className="flex items-center justify-center gap-3">
             <div className="flex-1">{renderTeamButton(awayMeta, game.awayId, true)}</div>
             <div className="flex-1">{renderTeamButton(homeMeta, game.homeId, false)}</div>
+            </div>
+            {footer}
           </div>
         </div>
       );
@@ -1103,7 +1056,7 @@
     if (loading) return <RC.ui.LoadingSpinner text="Loading predictions data..." />;
     if (error) return <RC.ui.ErrorMessage message={error.message || "Failed to load data."} />;
 
-    const champName = bracketGames?.championship?.label || "National Championship";
+    const champName = cfpBracketGames?.championship?.label || "National Championship";
 
     return (
       <div className="min-h-screen bg-white">
@@ -1203,7 +1156,7 @@
             </div>
           </div>
 
-          {bracketGames && (
+          {cfpBracketGames && (
             <section className="mt-8">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-xl font-bold text-slate-900">CFP Playoff Bracket</h2>
@@ -1211,11 +1164,11 @@
               </div>
               <div className="grid gap-4">
                 <div className="text-sm font-bold text-slate-700">Opening Round</div>
-                {bracketGames.opening.map((game) => renderGamePick(game))}
+                {cfpBracketGames.opening.map((game) => renderGamePick(game))}
               </div>
               <div className="mt-6 grid gap-4">
                 <div className="text-sm font-bold text-slate-700">Quarterfinals</div>
-                {bracketGames.quarterfinals.map((game) => (
+                {cfpBracketGames.quarterfinals.map((game) => (
                   <div key={game.slotId}>
                     {game.locked && (
                       <div className="text-xs text-slate-500 mb-2">Pick the opening round winner to unlock this matchup.</div>
@@ -1226,7 +1179,7 @@
               </div>
               <div className="mt-6 grid gap-4">
                 <div className="text-sm font-bold text-slate-700">Semifinals</div>
-                {bracketGames.semifinals.map((game) => (
+                {cfpBracketGames.semifinals.map((game) => (
                   <div key={game.slotId}>
                     {game.locked && (
                       <div className="text-xs text-slate-500 mb-2">Pick both quarterfinal winners to unlock this matchup.</div>
@@ -1236,22 +1189,36 @@
                 ))}
               </div>
               <div className="mt-6">
-                {bracketGames.championship.locked && (
+                {cfpBracketGames.championship.locked && (
                   <div className="text-xs text-slate-500 mb-2">Pick both semifinal winners to unlock the title matchup.</div>
                 )}
-                {renderGamePick(bracketGames.championship, { allowedIds: bracketGames.championship.allow })}
-                <div className="mt-4 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                  <div className="text-sm font-bold text-slate-800">Tiebreaker Score</div>
-                  <div className="text-xs text-slate-500 mb-3">{champName}</div>
-                  <input
-                    type="number"
-                    min="0"
-                    value={tiebreakerScore}
-                    onChange={(e) => setTiebreakerScore(e.target.value)}
-                    placeholder="Enter total points"
-                    className="w-full md:w-64 rounded-xl border border-slate-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                {renderGamePick(cfpBracketGames.championship, {
+                  allowedIds: cfpBracketGames.championship.allow,
+                  footer: (
+                    <div className="mt-2 pt-2">
+                      <div className="rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-blue-50 px-4 py-4 shadow-sm">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <div className="text-[10px] uppercase tracking-[0.3em] text-blue-600 font-bold">Tiebreaker</div>
+                            <div className="text-lg font-black text-slate-900">National Championship Score</div>
+                            <div className="text-xs text-slate-500 mt-1">How many points will be scored in the National Championship Game?</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold uppercase tracking-widest text-blue-600">Total</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={tiebreakerScore}
+                              onChange={(e) => setTiebreakerScore(e.target.value)}
+                              placeholder="0"
+                              className="w-24 rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </section>
           )}
