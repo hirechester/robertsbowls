@@ -94,6 +94,16 @@
     return a.localeCompare(b);
   };
 
+  const toRgba = (hex, alpha) => {
+    const raw = String(hex || "").trim().replace(/^#/, "");
+    if (!/^[0-9a-fA-F]{6}$/.test(raw)) return "";
+    const r = parseInt(raw.slice(0, 2), 16);
+    const g = parseInt(raw.slice(2, 4), 16);
+    const b = parseInt(raw.slice(4, 6), 16);
+    const a = Number.isFinite(alpha) ? alpha : 0.12;
+    return `rgba(${r}, ${g}, ${b}, ${a})`;
+  };
+
   const pickTemplateTeam = (templateKey, awayMeta, homeMeta) => {
     if (!awayMeta?.team || !homeMeta?.team) return awayMeta?.team ? "away" : (homeMeta?.team ? "home" : "");
     if (templateKey === TEMPLATE_ALPHA) {
@@ -128,12 +138,14 @@
           const awayId = normalizeId(pickFirst(row, ["Away ID", "AwayID"]));
           const name = pickFirst(row, ["Bowl Name", "Bowl", "BowlName"]);
           const isCfp = to01(pickFirst(row, ["CFP?", "CFP", "CFP ?", "Playoff", "Playoff?"])) === "1";
+          const network = pickFirst(row, ["TV", "Network"]);
           return {
             idx,
             bowlId,
             name,
             date: pickFirst(row, ["Date"]),
             time: pickFirst(row, ["Time"]),
+            network,
             homeId,
             awayId,
             isCfp,
@@ -332,6 +344,7 @@
         const isSelected = selectedId && selectedId === teamId;
         const isAllowed = !allowed || allowed.has(teamId);
         const borderColor = isSelected && meta.hex ? meta.hex : "";
+        const highlight = isSelected ? toRgba(borderColor, 0.12) : "";
         return (
           <button
             type="button"
@@ -342,7 +355,7 @@
                 ? "bg-slate-50 shadow-md"
                 : "bg-white hover:bg-slate-50"
             } ${!teamId || !isAllowed ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-            style={borderColor ? { borderColor } : undefined}
+            style={borderColor ? { borderColor, backgroundColor: highlight || undefined } : undefined}
           >
             {meta.logo ? (
               <img src={meta.logo} alt={meta.name} className="w-16 h-16 object-contain drop-shadow" loading="lazy" />
@@ -360,21 +373,18 @@
       };
 
       return (
-        <div key={slotId} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-5">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-            <div>
-              <div className="text-sm font-bold text-slate-800">{game.name || game.label}</div>
-              {game.date && (
-                <div className="text-xs text-slate-500">{[game.date, game.time].filter(Boolean).join(" • ")}</div>
-              )}
-            </div>
-            {selectedId && (
-              <div className="text-xs uppercase tracking-wide text-emerald-600 font-bold">Selected</div>
+        <div key={slotId} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="bg-gray-50 px-4 py-2 border-b border-gray-100 text-center">
+            <div className="text-sm font-bold text-slate-800">{game.name || game.label}</div>
+            {game.date && (
+              <div className="text-[11px] font-semibold text-gray-500">
+                {[game.date, game.time, game.network].filter(Boolean).join(" • ")}
+              </div>
             )}
           </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2">
-            {renderTeamButton(awayMeta, game.awayId, true)}
-            {renderTeamButton(homeMeta, game.homeId, false)}
+          <div className="p-4 flex items-center justify-center gap-3">
+            <div className="flex-1">{renderTeamButton(awayMeta, game.awayId, true)}</div>
+            <div className="flex-1">{renderTeamButton(homeMeta, game.homeId, false)}</div>
           </div>
         </div>
       );
