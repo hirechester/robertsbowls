@@ -10,7 +10,33 @@
 
   const TEMPLATE_CUSTOM = "custom";
   const TEMPLATE_ALPHA = "alpha";
+  const TEMPLATE_ALPHA_NICK = "alpha_nick";
+  const TEMPLATE_LONGEST = "longest";
+  const TEMPLATE_SHORTEST = "shortest";
   const TEMPLATE_SOUTH = "south";
+  const TEMPLATE_VEGAS = "vegas";
+  const TEMPLATE_UNDERDOGS = "underdogs";
+  const TEMPLATE_NORTH = "north";
+  const TEMPLATE_EAST = "east";
+  const TEMPLATE_WEST = "west";
+  const TEMPLATE_SEC = "sec";
+  const TEMPLATE_B1G = "b1g";
+  const TEMPLATE_RED = "red";
+  const TEMPLATE_BLUE = "blue";
+  const TEMPLATE_HOME = "home";
+  const TEMPLATE_AWAY = "away";
+  const TEMPLATE_CLOSEST = "closest";
+  const TEMPLATE_FURTHEST = "furthest";
+  const TEMPLATE_ANIMAL = "animal";
+  const TEMPLATE_HUMAN = "human";
+  const TEMPLATE_VOWELS = "vowels";
+  const TEMPLATE_RANDOM = "random";
+  const TEMPLATE_ZEBRA = "zebra";
+  const TEMPLATE_BIGGEST = "biggest";
+  const TEMPLATE_SMALLEST = "smallest";
+  const TEMPLATE_LIGHTER = "lighter";
+  const TEMPLATE_DARKER = "darker";
+  const TEMPLATE_BUCEES = "bucees";
 
   const BRACKET_SLOTS = {
     OPEN_5_12: "cfp-open-5-12",
@@ -73,6 +99,51 @@
     return Number.isFinite(num) ? num : null;
   };
 
+  const getTeamLongitude = (team) => {
+    if (!team) return null;
+    const raw = pickFirst(team, ["Longitude", "Long", "Long.", "Team Long", "Team Longitude"]);
+    if (!raw) return null;
+    const num = parseFloat(String(raw).replace(/[^0-9.+-]/g, ""));
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const getBowlLatitude = (row) => {
+    const raw = pickFirst(row, ["Bowl Latitude", "Bowl Lat", "BowlLat", "Latitude", "Lat"]);
+    if (!raw) return null;
+    const num = parseFloat(String(raw).replace(/[^0-9.+-]/g, ""));
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const getBowlLongitude = (row) => {
+    const raw = pickFirst(row, ["Bowl Longitude", "Bowl Long", "BowlLong", "Longitude", "Long"]);
+    if (!raw) return null;
+    const num = parseFloat(String(raw).replace(/[^0-9.+-]/g, ""));
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const toRadians = (deg) => (deg * Math.PI) / 180;
+
+  const haversineMiles = (lat1, lon1, lat2, lon2) => {
+    if (![lat1, lon1, lat2, lon2].every(Number.isFinite)) return null;
+    const R = 3958.8;
+    const dLat = toRadians(lat2 - lat1);
+    const dLon = toRadians(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const parseGameDate = (game) => {
+    const dateRaw = pickFirst(game, ["Date"]);
+    const timeRaw = pickFirst(game, ["Time"]);
+    const stamp = `${dateRaw} ${timeRaw}`.trim();
+    const parsed = new Date(stamp);
+    return Number.isFinite(parsed.getTime()) ? parsed.getTime() : Number.NaN;
+  };
+
   const getTeamMeta = (teamById, teamId, fallback) => {
     const key = teamId ? String(teamId).trim() : "";
     const team = key && teamById ? teamById[key] : null;
@@ -85,6 +156,197 @@
     return { name, nickname, logo, hex, seedRank, team };
   };
 
+  const getTeamNickname = (team) => {
+    if (!team) return "";
+    return String(team["Team Nickname"] || team.Nickname || team["Nick Name"] || team.Mascot || "").trim();
+  };
+
+  const getTeamState = (team) => {
+    if (!team) return "";
+    return String(pickFirst(team, ["State", "School State", "Team State", "State Code", "State Abbr"]) || "").trim();
+  };
+
+  const getTeamEnrollment = (team) => {
+    if (!team) return null;
+    const raw = pickFirst(team, ["Enrollment", "Enroll", "Enrollment Total", "Student Enrollment"]);
+    if (!raw) return null;
+    const num = parseFloat(String(raw).replace(/[^0-9.+-]/g, ""));
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const getTeamConference = (team) => {
+    if (!team) return "";
+    return pickFirst(team, ["Conference", "Conf", "Conference Name", "Team Conf", "Team Conference"]);
+  };
+
+  const hexToRgb = (hex) => {
+    const raw = String(hex || "").trim().replace(/^#/, "");
+    if (!/^[0-9a-fA-F]{6}$/.test(raw)) return null;
+    return {
+      r: parseInt(raw.slice(0, 2), 16),
+      g: parseInt(raw.slice(2, 4), 16),
+      b: parseInt(raw.slice(4, 6), 16)
+    };
+  };
+
+  const luminance = (hex) => {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return null;
+    return 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
+  };
+
+  const rgbToHsl = ({ r, g, b }) => {
+    const rn = r / 255;
+    const gn = g / 255;
+    const bn = b / 255;
+    const max = Math.max(rn, gn, bn);
+    const min = Math.min(rn, gn, bn);
+    const d = max - min;
+    let h = 0;
+    if (d !== 0) {
+      if (max === rn) h = ((gn - bn) / d) % 6;
+      else if (max === gn) h = (bn - rn) / d + 2;
+      else h = (rn - gn) / d + 4;
+      h *= 60;
+      if (h < 0) h += 360;
+    }
+    const l = (max + min) / 2;
+    const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+    return { h, s, l };
+  };
+
+  const isPatriotRed = (team) => {
+    const rgb = hexToRgb(pickFirst(team, ["Primary Hex", "Hex", "Color", "Primary Color"]));
+    if (!rgb) return false;
+    const { h, s, l } = rgbToHsl(rgb);
+    if (l >= 0.88 && s <= 0.18) return false;
+    if (s < 0.22) return false;
+    return (h <= 20) || (h >= 340);
+  };
+
+  const isPatriotBlue = (team) => {
+    const rgb = hexToRgb(pickFirst(team, ["Primary Hex", "Hex", "Color", "Primary Color"]));
+    if (!rgb) return false;
+    const { h, s, l } = rgbToHsl(rgb);
+    if (l >= 0.88 && s <= 0.18) return false;
+    if (s < 0.22) return false;
+    return (h >= 200 && h <= 260);
+  };
+
+  const pickByPredicate = (awayMeta, homeMeta, predicate) => {
+    const awayMatch = awayMeta?.team ? predicate(awayMeta.team) : false;
+    const homeMatch = homeMeta?.team ? predicate(homeMeta.team) : false;
+    if (awayMatch === homeMatch) return "";
+    return awayMatch ? "away" : "home";
+  };
+
+  const normalizeMascotText = (raw) => {
+    const text = String(raw ?? "").trim();
+    if (!text) return "";
+    const upper = text.toUpperCase().replace(/[^A-Z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+    return upper ? ` ${upper} ` : "";
+  };
+
+  const ANIMAL_WORDS = [
+    "BULLDOGS",
+    "DUCKS",
+    "COUGARS",
+    "LONGHORNS",
+    "WILDCATS",
+    "WOLVERINES",
+    "YELLOW JACKETS",
+    "HAWKEYES",
+    "FALCONS",
+    "ZIPS",
+    "RAZORBACKS",
+    "RED WOLVES",
+    "TIGERS",
+    "CARDINALS",
+    "BEARS",
+    "BRONCOS",
+    "EAGLES",
+    "BULLS",
+    "GOLDEN BEARS",
+    "BEARCATS",
+    "CHANTICLEERS",
+    "BUFFALOES",
+    "RAMS",
+    "BLUE HENS",
+    "GATORS",
+    "OWLS",
+    "PANTHERS",
+    "GAMECOCKS",
+    "JAYHAWKS",
+    "THUNDERING HERD",
+    "TERRAPINS",
+    "REDHAWKS",
+    "GOLDEN GOPHERS",
+    "WOLFPACK",
+    "WOLF PACK",
+    "LOBOS",
+    "HUSKIES",
+    "BOBCATS",
+    "BEAVERS",
+    "NITTANY LIONS",
+    "BEARKATS",
+    "MUSTANGS",
+    "JAGUARS",
+    "GOLDEN EAGLES",
+    "CARDINAL",
+    "HORNED FROGS",
+    "BRUINS",
+    "WARHAWKS",
+    "ROADRUNNERS",
+    "HOKIES",
+    "BADGERS"
+  ];
+
+  const HUMAN_WORDS = [
+    "HOOSIERS",
+    "RED RAIDERS",
+    "REBELS",
+    "AGGIES",
+    "SOONERS",
+    "DUKES",
+    "FIGHTING IRISH",
+    "COMMODORES",
+    "UTES",
+    "TROJANS",
+    "CAVALIERS",
+    "MOUNTAINEERS",
+    "SUN DEVILS",
+    "BLACK KNIGHTS",
+    "49ERS",
+    "PIRATES",
+    "RAINBOW WARRIORS",
+    "FIGHTING ILLINI",
+    "RAGIN CAJUNS",
+    "MINUTEMEN",
+    "SPARTANS",
+    "BLUE RAIDERS",
+    "CORNHUSKERS",
+    "TAR HEELS",
+    "COWBOYS",
+    "MONARCHS",
+    "SEMINOLES",
+    "CHIPPEWAS",
+    "VOLUNTEERS",
+    "KNIGHTS",
+    "MINERS",
+    "DEMON DEACONS",
+    "HILLTOPPERS"
+  ];
+
+  const isAnimalNickname = (nickname) => {
+    const text = normalizeMascotText(nickname);
+    return ANIMAL_WORDS.some(word => text.includes(` ${word} `));
+  };
+
+  const isHumanNickname = (nickname) => {
+    const text = normalizeMascotText(nickname);
+    return HUMAN_WORDS.some(word => text.includes(` ${word} `));
+  };
+
   const compareAlpha = (aName, bName) => {
     const a = String(aName || "").toLowerCase();
     const b = String(bName || "").toLowerCase();
@@ -92,6 +354,24 @@
     if (!a) return 1;
     if (!b) return -1;
     return a.localeCompare(b);
+  };
+
+  const compareLength = (aName, bName) => {
+    const a = String(aName || "").trim();
+    const b = String(bName || "").trim();
+    const aLen = a.length;
+    const bLen = b.length;
+    if (!aLen && !bLen) return 0;
+    if (!aLen) return 1;
+    if (!bLen) return -1;
+    if (aLen !== bLen) return aLen - bLen;
+    return compareAlpha(a, b);
+  };
+
+  const countVowels = (value) => {
+    const text = String(value || "").toLowerCase();
+    const matches = text.match(/[aeiou]/g);
+    return matches ? matches.length : 0;
   };
 
   const toRgba = (hex, alpha) => {
@@ -104,10 +384,100 @@
     return `rgba(${r}, ${g}, ${b}, ${a})`;
   };
 
-  const pickTemplateTeam = (templateKey, awayMeta, homeMeta) => {
+  const pickTemplateTeam = (templateKey, awayMeta, homeMeta, gameRaw) => {
     if (!awayMeta?.team || !homeMeta?.team) return awayMeta?.team ? "away" : (homeMeta?.team ? "home" : "");
     if (templateKey === TEMPLATE_ALPHA) {
       return compareAlpha(awayMeta.name, homeMeta.name) <= 0 ? "away" : "home";
+    }
+    if (templateKey === TEMPLATE_ALPHA_NICK) {
+      const awayNick = awayMeta.nickname || awayMeta.name;
+      const homeNick = homeMeta.nickname || homeMeta.name;
+      return compareAlpha(awayNick, homeNick) <= 0 ? "away" : "home";
+    }
+    if (templateKey === TEMPLATE_LONGEST) {
+      const result = compareLength(awayMeta.name, homeMeta.name);
+      return result >= 0 ? "away" : "home";
+    }
+    if (templateKey === TEMPLATE_SHORTEST) {
+      const result = compareLength(awayMeta.name, homeMeta.name);
+      return result <= 0 ? "away" : "home";
+    }
+    if (templateKey === TEMPLATE_SEC) {
+      return pickByPredicate(awayMeta, homeMeta, (team) => {
+        const conf = String(getTeamConference(team) || "").toLowerCase();
+        return conf.includes("sec");
+      });
+    }
+    if (templateKey === TEMPLATE_B1G) {
+      return pickByPredicate(awayMeta, homeMeta, (team) => {
+        const conf = String(getTeamConference(team) || "").toLowerCase();
+        return conf.includes("big ten") || conf.includes("big 10") || conf.includes("b1g");
+      });
+    }
+    if (templateKey === TEMPLATE_RED) {
+      return pickByPredicate(awayMeta, homeMeta, isPatriotRed);
+    }
+    if (templateKey === TEMPLATE_BLUE) {
+      return pickByPredicate(awayMeta, homeMeta, isPatriotBlue);
+    }
+    if (templateKey === TEMPLATE_HOME) {
+      if (!homeMeta?.team && !homeMeta?.name) return "";
+      return "home";
+    }
+    if (templateKey === TEMPLATE_AWAY) {
+      if (!awayMeta?.team && !awayMeta?.name) return "";
+      return "away";
+    }
+    if (templateKey === TEMPLATE_ANIMAL) {
+      return pickByPredicate(awayMeta, homeMeta, (team) => isAnimalNickname(getTeamNickname(team)));
+    }
+    if (templateKey === TEMPLATE_HUMAN) {
+      return pickByPredicate(awayMeta, homeMeta, (team) => isHumanNickname(getTeamNickname(team)));
+    }
+    if (templateKey === TEMPLATE_VOWELS) {
+      const awayText = `${awayMeta.name || ""} ${awayMeta.nickname || ""}`.trim();
+      const homeText = `${homeMeta.name || ""} ${homeMeta.nickname || ""}`.trim();
+      const awayCount = countVowels(awayText);
+      const homeCount = countVowels(homeText);
+      if (awayCount === homeCount) return "home";
+      return awayCount > homeCount ? "away" : "home";
+    }
+    if (templateKey === TEMPLATE_BIGGEST || templateKey === TEMPLATE_SMALLEST) {
+      const awayEnroll = getTeamEnrollment(awayMeta.team);
+      const homeEnroll = getTeamEnrollment(homeMeta.team);
+      if (!Number.isFinite(awayEnroll) || !Number.isFinite(homeEnroll)) return "";
+      if (awayEnroll === homeEnroll) return "home";
+      const pickBig = awayEnroll > homeEnroll ? "away" : "home";
+      return templateKey === TEMPLATE_BIGGEST ? pickBig : (pickBig === "away" ? "home" : "away");
+    }
+    if (templateKey === TEMPLATE_LIGHTER || templateKey === TEMPLATE_DARKER) {
+      const awayLum = luminance(awayMeta.hex);
+      const homeLum = luminance(homeMeta.hex);
+      if (!Number.isFinite(awayLum) || !Number.isFinite(homeLum)) return "";
+      if (awayLum === homeLum) return "";
+      const pickLighter = awayLum > homeLum ? "away" : "home";
+      return templateKey === TEMPLATE_LIGHTER ? pickLighter : (pickLighter === "away" ? "home" : "away");
+    }
+    if (templateKey === TEMPLATE_BUCEES) {
+      const allowed = new Set(["AL", "CO", "FL", "GA", "KY", "MS", "MO", "SC", "TN", "VA", "TX"]);
+      return pickByPredicate(awayMeta, homeMeta, (team) => {
+        const state = String(getTeamState(team) || "").trim().toUpperCase();
+        return allowed.has(state);
+      });
+    }
+    if (templateKey === TEMPLATE_CLOSEST || templateKey === TEMPLATE_FURTHEST) {
+      const bowlLat = getBowlLatitude(gameRaw || {});
+      const bowlLong = getBowlLongitude(gameRaw || {});
+      const awayLat = getTeamLatitude(awayMeta.team);
+      const awayLong = getTeamLongitude(awayMeta.team);
+      const homeLat = getTeamLatitude(homeMeta.team);
+      const homeLong = getTeamLongitude(homeMeta.team);
+      const awayDist = haversineMiles(bowlLat, bowlLong, awayLat, awayLong);
+      const homeDist = haversineMiles(bowlLat, bowlLong, homeLat, homeLong);
+      if (!Number.isFinite(awayDist) || !Number.isFinite(homeDist)) return "";
+      if (awayDist === homeDist) return "";
+      const pickClosest = awayDist < homeDist ? "away" : "home";
+      return templateKey === TEMPLATE_CLOSEST ? pickClosest : (pickClosest === "away" ? "home" : "away");
     }
     if (templateKey === TEMPLATE_SOUTH) {
       const awayLat = getTeamLatitude(awayMeta.team);
@@ -117,6 +487,36 @@
       }
       if (Number.isFinite(awayLat)) return "away";
       if (Number.isFinite(homeLat)) return "home";
+      return compareAlpha(awayMeta.name, homeMeta.name) <= 0 ? "away" : "home";
+    }
+    if (templateKey === TEMPLATE_NORTH) {
+      const awayLat = getTeamLatitude(awayMeta.team);
+      const homeLat = getTeamLatitude(homeMeta.team);
+      if (Number.isFinite(awayLat) && Number.isFinite(homeLat)) {
+        return awayLat >= homeLat ? "away" : "home";
+      }
+      if (Number.isFinite(awayLat)) return "away";
+      if (Number.isFinite(homeLat)) return "home";
+      return compareAlpha(awayMeta.name, homeMeta.name) <= 0 ? "away" : "home";
+    }
+    if (templateKey === TEMPLATE_EAST) {
+      const awayLong = getTeamLongitude(awayMeta.team);
+      const homeLong = getTeamLongitude(homeMeta.team);
+      if (Number.isFinite(awayLong) && Number.isFinite(homeLong)) {
+        return awayLong >= homeLong ? "away" : "home";
+      }
+      if (Number.isFinite(awayLong)) return "away";
+      if (Number.isFinite(homeLong)) return "home";
+      return compareAlpha(awayMeta.name, homeMeta.name) <= 0 ? "away" : "home";
+    }
+    if (templateKey === TEMPLATE_WEST) {
+      const awayLong = getTeamLongitude(awayMeta.team);
+      const homeLong = getTeamLongitude(homeMeta.team);
+      if (Number.isFinite(awayLong) && Number.isFinite(homeLong)) {
+        return awayLong <= homeLong ? "away" : "home";
+      }
+      if (Number.isFinite(awayLong)) return "away";
+      if (Number.isFinite(homeLong)) return "home";
       return compareAlpha(awayMeta.name, homeMeta.name) <= 0 ? "away" : "home";
     }
     return "";
@@ -264,26 +664,170 @@
       return { opening, quarterfinals, semifinals, championship };
     }, [bracketBase, picksByBowlId]);
 
+    const favoritesByMatchup = useMemo(() => {
+      const map = {};
+      if (!Array.isArray(bowlGames)) return map;
+      bowlGames.forEach((row) => {
+        const awayId = normalizeId(pickFirst(row, ["Away ID", "AwayID"]));
+        const homeId = normalizeId(pickFirst(row, ["Home ID", "HomeID"]));
+        const favoriteId = normalizeId(pickFirst(row, ["Favorite ID", "FavoriteID", "Fav ID", "FavID"]));
+        if (!awayId || !homeId || !favoriteId) return;
+        map[`${awayId}|${homeId}`] = favoriteId;
+        map[`${homeId}|${awayId}`] = favoriteId;
+      });
+      return map;
+    }, [bowlGames]);
+
+    const matchupRawByKey = useMemo(() => {
+      const map = {};
+      if (!Array.isArray(bowlGames)) return map;
+      bowlGames.forEach((row) => {
+        const awayId = normalizeId(pickFirst(row, ["Away ID", "AwayID"]));
+        const homeId = normalizeId(pickFirst(row, ["Home ID", "HomeID"]));
+        if (!awayId || !homeId) return;
+        map[`${awayId}|${homeId}`] = row;
+        map[`${homeId}|${awayId}`] = row;
+      });
+      return map;
+    }, [bowlGames]);
+
+    const cfpBowlsBySlot = useMemo(() => {
+      const map = {};
+      if (!Array.isArray(bowlGames)) return map;
+      const cfpRows = bowlGames
+        .map((row, idx) => ({
+          row,
+          idx,
+          isCfp: to01(pickFirst(row, ["CFP?", "CFP", "CFP ?", "Playoff", "Playoff?"])) === "1"
+        }))
+        .filter((entry) => entry.isCfp);
+      if (!cfpRows.length) return map;
+      const sorted = cfpRows.slice().sort((a, b) => {
+        const aTime = parseGameDate(a.row);
+        const bTime = parseGameDate(b.row);
+        if (Number.isFinite(aTime) && Number.isFinite(bTime)) return aTime - bTime;
+        return a.idx - b.idx;
+      });
+
+      const slotOrder = [
+        BRACKET_SLOTS.OPEN_5_12,
+        BRACKET_SLOTS.OPEN_6_11,
+        BRACKET_SLOTS.OPEN_7_10,
+        BRACKET_SLOTS.OPEN_8_9,
+        BRACKET_SLOTS.QF_4,
+        BRACKET_SLOTS.QF_3,
+        BRACKET_SLOTS.QF_2,
+        BRACKET_SLOTS.QF_1,
+        BRACKET_SLOTS.SF_1_4,
+        BRACKET_SLOTS.SF_2_3,
+        BRACKET_SLOTS.CHAMP
+      ];
+
+      sorted.forEach((entry, idx) => {
+        const slotId = slotOrder[idx];
+        if (!slotId) return;
+        map[slotId] = entry.row;
+      });
+
+      return map;
+    }, [bowlGames]);
+
     const applyTemplate = (templateKey) => {
       if (!templateKey || templateKey === TEMPLATE_CUSTOM) return;
       const nextPicks = {};
+      const zebraStartAway = templateKey === TEMPLATE_ZEBRA ? (Math.random() < 0.5) : false;
+      let zebraIndex = 0;
+      const pickZebra = (awayId, homeId) => {
+        if (templateKey !== TEMPLATE_ZEBRA) return "";
+        const choices = [awayId, homeId].filter(Boolean);
+        if (!choices.length) return "";
+        const pickAway = zebraStartAway ? (zebraIndex % 2 === 0) : (zebraIndex % 2 === 1);
+        zebraIndex += 1;
+        return pickAway ? awayId : homeId;
+      };
       const allGames = gamesData.nonCfp;
       allGames.forEach((game) => {
+        if (templateKey === TEMPLATE_RANDOM) {
+          const choices = [game.awayId, game.homeId].filter(Boolean);
+          if (choices.length) {
+            const pickId = choices[Math.floor(Math.random() * choices.length)];
+            nextPicks[game.bowlId] = pickId;
+          }
+          return;
+        }
+        if (templateKey === TEMPLATE_ZEBRA) {
+          const pickId = pickZebra(game.awayId, game.homeId);
+          if (pickId) nextPicks[game.bowlId] = pickId;
+          return;
+        }
+        if (templateKey === TEMPLATE_VEGAS) {
+          const favoriteId = normalizeId(pickFirst(game.raw, ["Favorite ID", "FavoriteID", "Fav ID", "FavID"]));
+          if (favoriteId && (favoriteId === game.awayId || favoriteId === game.homeId)) {
+            nextPicks[game.bowlId] = favoriteId;
+          } else if (game.awayId || game.homeId) {
+            nextPicks[game.bowlId] = game.awayId || game.homeId;
+          }
+          return;
+        }
+        if (templateKey === TEMPLATE_UNDERDOGS) {
+          const favoriteId = normalizeId(pickFirst(game.raw, ["Favorite ID", "FavoriteID", "Fav ID", "FavID"]));
+          if (favoriteId && (favoriteId === game.awayId || favoriteId === game.homeId)) {
+            const dogId = favoriteId === game.awayId ? game.homeId : game.awayId;
+            if (dogId) nextPicks[game.bowlId] = dogId;
+          }
+          return;
+        }
+
         const awayMeta = getTeamMeta(teamById, game.awayId, pickFirst(game.raw, ["Team 1", "Away Team", "Away"]));
         const homeMeta = getTeamMeta(teamById, game.homeId, pickFirst(game.raw, ["Team 2", "Home Team", "Home"]));
-        const choice = pickTemplateTeam(templateKey, awayMeta, homeMeta);
+        const choice = pickTemplateTeam(templateKey, awayMeta, homeMeta, game.raw);
         const pickId = choice === "away" ? game.awayId : (choice === "home" ? game.homeId : "");
         if (pickId) nextPicks[game.bowlId] = pickId;
       });
 
       if (bracketBase) {
+        const pickFavorite = (awayId, homeId, fallbackSeedId) => {
+          if (templateKey !== TEMPLATE_VEGAS) return "";
+          const key = `${awayId}|${homeId}`;
+          const favoriteId = favoritesByMatchup[key];
+          if (favoriteId && (favoriteId === awayId || favoriteId === homeId)) return favoriteId;
+          return fallbackSeedId || awayId || homeId || "";
+        };
+        const pickUnderdog = (awayId, homeId) => {
+          if (templateKey !== TEMPLATE_UNDERDOGS) return "";
+          const key = `${awayId}|${homeId}`;
+          const favoriteId = favoritesByMatchup[key];
+          if (favoriteId && (favoriteId === awayId || favoriteId === homeId)) {
+            return favoriteId === awayId ? homeId : awayId;
+          }
+          return "";
+        };
+        const pickRandom = (awayId, homeId) => {
+          if (templateKey !== TEMPLATE_RANDOM) return "";
+          const choices = [awayId, homeId].filter(Boolean);
+          if (!choices.length) return "";
+          return choices[Math.floor(Math.random() * choices.length)];
+        };
+
         bracketBase.opening.forEach((game) => {
           const awayId = bracketBase.seedToId[game.seedA];
           const homeId = bracketBase.seedToId[game.seedB];
-          const awayMeta = getTeamMeta(teamById, awayId, `Seed ${game.seedA}`);
-          const homeMeta = getTeamMeta(teamById, homeId, `Seed ${game.seedB}`);
-          const choice = pickTemplateTeam(templateKey, awayMeta, homeMeta);
-          const pickId = choice === "away" ? awayId : (choice === "home" ? homeId : "");
+          let pickId = "";
+          if (templateKey === TEMPLATE_VEGAS) {
+            pickId = pickFavorite(awayId, homeId, awayId || homeId);
+          } else if (templateKey === TEMPLATE_UNDERDOGS) {
+            pickId = pickUnderdog(awayId, homeId);
+          } else if (templateKey === TEMPLATE_RANDOM) {
+            pickId = pickRandom(awayId, homeId);
+          } else if (templateKey === TEMPLATE_ZEBRA) {
+            pickId = pickZebra(awayId, homeId);
+          } else {
+            const matchupRaw = matchupRawByKey[`${awayId}|${homeId}`] || cfpBowlsBySlot[game.slotId];
+            const awayMeta = getTeamMeta(teamById, awayId, `Seed ${game.seedA}`);
+            const homeMeta = getTeamMeta(teamById, homeId, `Seed ${game.seedB}`);
+            const choice = pickTemplateTeam(templateKey, awayMeta, homeMeta, matchupRaw);
+            pickId = choice === "away" ? awayId : (choice === "home" ? homeId : "");
+          }
           if (pickId) nextPicks[game.slotId] = pickId;
         });
 
@@ -291,10 +835,22 @@
           const awayId = bracketBase.seedToId[game.seed];
           const homeId = nextPicks[game.from];
           if (!awayId || !homeId) return;
-          const awayMeta = getTeamMeta(teamById, awayId, `Seed ${game.seed}`);
-          const homeMeta = getTeamMeta(teamById, homeId, "Winner");
-          const choice = pickTemplateTeam(templateKey, awayMeta, homeMeta);
-          const pickId = choice === "away" ? awayId : (choice === "home" ? homeId : "");
+          let pickId = "";
+          if (templateKey === TEMPLATE_VEGAS) {
+            pickId = pickFavorite(awayId, homeId, awayId);
+          } else if (templateKey === TEMPLATE_UNDERDOGS) {
+            pickId = pickUnderdog(awayId, homeId);
+          } else if (templateKey === TEMPLATE_RANDOM) {
+            pickId = pickRandom(awayId, homeId);
+          } else if (templateKey === TEMPLATE_ZEBRA) {
+            pickId = pickZebra(awayId, homeId);
+          } else {
+            const matchupRaw = matchupRawByKey[`${awayId}|${homeId}`] || cfpBowlsBySlot[game.slotId];
+            const awayMeta = getTeamMeta(teamById, awayId, `Seed ${game.seed}`);
+            const homeMeta = getTeamMeta(teamById, homeId, "Winner");
+            const choice = pickTemplateTeam(templateKey, awayMeta, homeMeta, matchupRaw);
+            pickId = choice === "away" ? awayId : (choice === "home" ? homeId : "");
+          }
           if (pickId) nextPicks[game.slotId] = pickId;
         });
 
@@ -302,20 +858,44 @@
           const awayId = nextPicks[game.fromA];
           const homeId = nextPicks[game.fromB];
           if (!awayId || !homeId) return;
-          const awayMeta = getTeamMeta(teamById, awayId, "Winner");
-          const homeMeta = getTeamMeta(teamById, homeId, "Winner");
-          const choice = pickTemplateTeam(templateKey, awayMeta, homeMeta);
-          const pickId = choice === "away" ? awayId : (choice === "home" ? homeId : "");
+          let pickId = "";
+          if (templateKey === TEMPLATE_VEGAS) {
+            pickId = pickFavorite(awayId, homeId, awayId);
+          } else if (templateKey === TEMPLATE_UNDERDOGS) {
+            pickId = pickUnderdog(awayId, homeId);
+          } else if (templateKey === TEMPLATE_RANDOM) {
+            pickId = pickRandom(awayId, homeId);
+          } else if (templateKey === TEMPLATE_ZEBRA) {
+            pickId = pickZebra(awayId, homeId);
+          } else {
+            const matchupRaw = matchupRawByKey[`${awayId}|${homeId}`] || cfpBowlsBySlot[game.slotId];
+            const awayMeta = getTeamMeta(teamById, awayId, "Winner");
+            const homeMeta = getTeamMeta(teamById, homeId, "Winner");
+            const choice = pickTemplateTeam(templateKey, awayMeta, homeMeta, matchupRaw);
+            pickId = choice === "away" ? awayId : (choice === "home" ? homeId : "");
+          }
           if (pickId) nextPicks[game.slotId] = pickId;
         });
 
         const champAway = nextPicks[bracketBase.semifinals[0].slotId];
         const champHome = nextPicks[bracketBase.semifinals[1].slotId];
         if (champAway && champHome) {
-          const awayMeta = getTeamMeta(teamById, champAway, "Winner");
-          const homeMeta = getTeamMeta(teamById, champHome, "Winner");
-          const choice = pickTemplateTeam(templateKey, awayMeta, homeMeta);
-          const pickId = choice === "away" ? champAway : (choice === "home" ? champHome : "");
+          let pickId = "";
+          if (templateKey === TEMPLATE_VEGAS) {
+            pickId = pickFavorite(champAway, champHome, champAway);
+          } else if (templateKey === TEMPLATE_UNDERDOGS) {
+            pickId = pickUnderdog(champAway, champHome);
+          } else if (templateKey === TEMPLATE_RANDOM) {
+            pickId = pickRandom(champAway, champHome);
+          } else if (templateKey === TEMPLATE_ZEBRA) {
+            pickId = pickZebra(champAway, champHome);
+          } else {
+            const matchupRaw = matchupRawByKey[`${champAway}|${champHome}`] || cfpBowlsBySlot[BRACKET_SLOTS.CHAMP];
+            const awayMeta = getTeamMeta(teamById, champAway, "Winner");
+            const homeMeta = getTeamMeta(teamById, champHome, "Winner");
+            const choice = pickTemplateTeam(templateKey, awayMeta, homeMeta, matchupRaw);
+            pickId = choice === "away" ? champAway : (choice === "home" ? champHome : "");
+          }
           if (pickId) nextPicks[BRACKET_SLOTS.CHAMP] = pickId;
         }
       }
@@ -420,8 +1000,34 @@
                   className="w-full md:w-64 rounded-xl border border-slate-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
                   <option value={TEMPLATE_CUSTOM}>Templates</option>
-                  <option value={TEMPLATE_ALPHA}>Alphabetical Order</option>
+                  <option value={TEMPLATE_ALPHA}>Alphabetical Order (by school)</option>
+                  <option value={TEMPLATE_ALPHA_NICK}>Alphabetical Order (by nickname)</option>
                   <option value={TEMPLATE_SOUTH}>Southern Most Team</option>
+                  <option value={TEMPLATE_NORTH}>Northern Most Team</option>
+                  <option value={TEMPLATE_EAST}>Eastern Most Team</option>
+                  <option value={TEMPLATE_WEST}>Western Most Team</option>
+                  <option value={TEMPLATE_LONGEST}>Longest School</option>
+                  <option value={TEMPLATE_SHORTEST}>Shortest School</option>
+                  <option value={TEMPLATE_SEC}>SEC Teams</option>
+                  <option value={TEMPLATE_B1G}>Big Ten Teams</option>
+                  <option value={TEMPLATE_RED}>Red Teams</option>
+                  <option value={TEMPLATE_BLUE}>Blue Teams</option>
+                  <option value={TEMPLATE_HOME}>Home Teams</option>
+                  <option value={TEMPLATE_AWAY}>Away Teams</option>
+                  <option value={TEMPLATE_CLOSEST}>Closest School to Bowl</option>
+                  <option value={TEMPLATE_FURTHEST}>Furthest School from Bowl</option>
+                  <option value={TEMPLATE_ANIMAL}>Animal Mascots</option>
+                  <option value={TEMPLATE_HUMAN}>Human Mascots</option>
+                  <option value={TEMPLATE_VOWELS}>Most Vowels</option>
+                  <option value={TEMPLATE_BIGGEST}>Bigger School (Enrollment)</option>
+                  <option value={TEMPLATE_SMALLEST}>Smaller School (Enrollment)</option>
+                  <option value={TEMPLATE_LIGHTER}>Lighter Colors</option>
+                  <option value={TEMPLATE_DARKER}>Darker Colors</option>
+                  <option value={TEMPLATE_BUCEES}>Schools in States with a Buc-ee's</option>
+                  <option value={TEMPLATE_UNDERDOGS}>Vegas Underdogs</option>
+                  <option value={TEMPLATE_VEGAS}>Vegas Favorites</option>
+                  <option value={TEMPLATE_RANDOM}>I'm Feeling Lucky!</option>
+                  <option value={TEMPLATE_ZEBRA}>Zebra Stripes</option>
                 </select>
                 <button
                   type="button"
