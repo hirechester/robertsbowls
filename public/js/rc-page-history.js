@@ -7,7 +7,7 @@
   // 8. HISTORY PAGE
   const HistoryPage = () => {
     // Shared league data (loaded once per session by rc-data.js)
-    const { history, loading, error, hallOfFameByYear, teamById, peopleById, peopleByName, picksIds, bowlGames } = RC.data.useLeagueData();
+    const { loading, error, hallOfFameByYear, teamById, peopleById, peopleByName, picksIds, bowlGames } = RC.data.useLeagueData();
     const [expandedYear, setExpandedYear] = useState(null);
     const [tableSort, setTableSort] = useState({ key: "rank", direction: "asc" });
     const [activeView, setActiveView] = useState("history");
@@ -94,13 +94,15 @@
         outWinners.set(yearNum, champName);
         const winTotal = champRow ? (champRow.wins || 0) + (champRow.losses || 0) : 0;
         const winPct = winTotal > 0 ? (champRow.wins || 0) / winTotal : null;
+        const hasDetails = winTotal > 0 || champRow?.champTeamId || champRankVal || uniqueRunners.length > 0;
         outDetails.set(yearNum, {
           record: champRow ? `${champRow.wins}-${champRow.losses}` : "—",
           winPct,
           champTeamLabel,
           champion: champName,
           runnerUp: runnerUpLabel,
-          runnerUpCount: uniqueRunners.length
+          runnerUpCount: uniqueRunners.length,
+          hasDetails
         });
       });
 
@@ -109,41 +111,25 @@
 
     const historyData = useMemo(() => {
       const items = [];
-      if (Array.isArray(history)) {
-        history.forEach((entry) => {
-          const yearNum = parseInt(entry?.Year, 10);
-          const winner = String(entry?.Winner || "").trim();
-          if (!Number.isFinite(yearNum) || !winner) return;
-          items.push({ year: yearNum, winner, source: "history" });
-        });
-      }
-
       hallComputed.winners.forEach((winner, year) => {
         if (!winner) return;
-        items.push({ year, winner, source: "hall" });
+        items.push({ year, winner });
       });
 
       if (!items.length) return [];
 
-      const byYear = new Map();
-      items.forEach((item) => {
-        const existing = byYear.get(item.year);
-        if (!existing || item.source === "hall") {
-          byYear.set(item.year, item);
-        }
-      });
-
-      const yearsAsc = Array.from(byYear.keys()).sort((a, b) => a - b);
+      const yearsAsc = items.map(item => item.year).sort((a, b) => a - b);
+      const winnersByYear = new Map(items.map(item => [item.year, item.winner]));
       const winCounts = {};
       const listAsc = yearsAsc.map((year) => {
-        const entry = byYear.get(year);
-        const winnerName = String(entry?.winner || "").trim();
+        const winnerName = String(winnersByYear.get(year) || "").trim();
+        if (!winnerName) return null;
         winCounts[winnerName] = (winCounts[winnerName] || 0) + 1;
         return { Year: String(year), Winner: winnerName, winNumber: winCounts[winnerName] };
-      });
+      }).filter(Boolean);
 
       return listAsc.reverse();
-    }, [history, hallComputed]);
+    }, [hallComputed]);
 
     const hallDetailsByYear = hallComputed.details;
     const earliestHallYear = useMemo(() => {
@@ -176,19 +162,6 @@
           }
         });
       });
-
-      if (Array.isArray(history)) {
-        history.forEach((entry) => {
-          const yearNum = parseInt(entry?.Year, 10);
-          const winner = String(entry?.Winner || "").trim();
-          if (!Number.isFinite(yearNum) || !winner) return;
-          if (hallTitleYears.has(yearNum)) return;
-          const name = resolvePlayerName(winner);
-          if (!name || name === "—") return;
-          if (!totals[name]) totals[name] = { name, wins: 0, losses: 0, titles: 0 };
-          totals[name].titles += 1;
-        });
-      }
 
       const currentStats = {};
       if (Array.isArray(bowlGames) && Array.isArray(picksIds)) {
@@ -334,7 +307,7 @@
           {historyData.map((item, index) => {
             const yearNum = parseInt(item.Year, 10);
             const details = Number.isFinite(yearNum) ? hallDetailsByYear.get(yearNum) : null;
-            const hasDetails = !!details;
+            const hasDetails = !!details?.hasDetails;
             const isExpanded = hasDetails && expandedYear === yearNum;
             const cardClasses = [
               "ml-16 md:ml-20 bg-white p-5 rounded-2xl shadow-sm border border-gray-100 w-full flex justify-between items-center relative overflow-hidden group-hover:shadow-md transition-shadow",

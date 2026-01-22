@@ -551,9 +551,6 @@
   }
 
   async function fetchAndParseAll() {
-    if (!RC.HISTORY_URL) {
-      throw new Error("One or more required data URLs are missing on RC.*");
-    }
     if (!(RC.SUPABASE_URL && RC.SUPABASE_PUBLISHABLE_KEY)) {
       throw new Error("RC.SUPABASE_* is required when Bowl Games uses Team IDs.");
     }
@@ -564,13 +561,7 @@
     const settings = await settingsPromise;
     const bowlGamesPromise = fetchBowlGamesData(settings);
     const picksPromise = fetchPicksData(settings);
-    const [historyRes] = await Promise.all([
-      fetch(RC.HISTORY_URL, { cache: "no-store" })
-    ]);
-
-    const [historyText] = await Promise.all([
-      historyRes.text()
-    ]);
+    await Promise.resolve();
 
     const bowlGames = (await bowlGamesPromise).filter(r => r && Object.keys(r).length);
     const teamsRaw = await teamsPromise;
@@ -622,7 +613,7 @@
 
       return out;
     });
-    const history = RC.csvToJson(historyText);
+    const history = [];
 
     const requiredHallHeaders = ["Year", "Player", "Wins", "Losses", "Champ Team", "Champ Rank", "Title"];
     let hallOfFameByYear = new Map();
