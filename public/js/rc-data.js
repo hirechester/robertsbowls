@@ -189,22 +189,15 @@
 
   async function fetchTeamsData() {
     const hasSupabase = Boolean(RC.SUPABASE_URL && RC.SUPABASE_PUBLISHABLE_KEY);
-    if (hasSupabase) {
-      try {
-        const supaTeams = await fetchTeamsFromSupabase();
-        if (Array.isArray(supaTeams) && supaTeams.length) return supaTeams;
-        console.warn("Supabase teams returned 0 rows; falling back to CSV.");
-      } catch (err) {
-        console.warn("Supabase teams fetch failed; falling back to CSV.", err);
-      }
+    if (!hasSupabase) {
+      throw new Error("RC.SUPABASE_URL and RC.SUPABASE_PUBLISHABLE_KEY are required for Teams data.");
     }
 
-    if (!RC.TEAMS_URL) {
-      throw new Error("RC.TEAMS_URL or RC.SUPABASE_* config is required for Teams data.");
+    const supaTeams = await fetchTeamsFromSupabase();
+    if (!Array.isArray(supaTeams) || !supaTeams.length) {
+      throw new Error("Supabase teams returned 0 rows.");
     }
-    const teamsRes = await fetch(RC.TEAMS_URL, { cache: "no-store" });
-    const teamsText = await teamsRes.text();
-    return RC.csvToJson(teamsText);
+    return supaTeams;
   }
 
   function buildPeopleIndex(picksIds) {
@@ -295,8 +288,8 @@
     if (!RC.BOWL_GAMES_URL || !RC.PICKS_URL || !RC.HISTORY_URL) {
       throw new Error("One or more required data URLs are missing on RC.*");
     }
-    if (!RC.TEAMS_URL && !(RC.SUPABASE_URL && RC.SUPABASE_ANON_KEY)) {
-      throw new Error("RC.TEAMS_URL or RC.SUPABASE_* is required when Bowl Games uses Team IDs.");
+    if (!(RC.SUPABASE_URL && RC.SUPABASE_PUBLISHABLE_KEY)) {
+      throw new Error("RC.SUPABASE_* is required when Bowl Games uses Team IDs.");
     }
     if (!RC.HALL_OF_FAME_URL) {
       throw new Error("RC.HALL_OF_FAME_URL is required for Hall of Fame data.");
