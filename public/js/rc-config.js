@@ -20,6 +20,9 @@
   RC.SUPABASE_PUBLISHABLE_KEY = "sb_publishable_1m3Ww4QsfZFQB_SYdJPu_Q_UUnXK7vX"; // public publishable key
   RC.SUPABASE_TEAMS_TABLE = "teams";
   RC.SUPABASE_HALL_OF_FAME_TABLE = "hall_of_fame";
+  RC.SUPABASE_PICKS_TABLE = "picks";
+  RC.SUPABASE_PICKS_META_TABLE = "picks_meta";
+  RC.SUPABASE_PICKS_SEASON = 2026;
 
   // --- HELPER: CSV PARSER ---
   RC.parseCSV = function (text) {
