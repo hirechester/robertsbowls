@@ -62,6 +62,11 @@ IMPORTANT CONTEXT / CURRENT STATE (main is stable; include ALL pages):
   - Data should be joined by IDs only; avoid any team-name string parsing.
   - Ensure any cell highlights/marks are derived from picks results without reordering the grid.
 
+- Predictions page:
+  - Hidden menu page for pre-season picks and template-driven auto-selection (no backend).
+  - Uses Bowl Games + Teams IDs for matchup rendering, and supports a CFP bracket defined by explicit bowl IDs with winner-advance logic.
+  - Template picker includes categorized strategies with tooltip logic; keep UI styling consistent with current Pick Studio layout.
+
 - Rules page:
   - New page styled like parchment/scroll (intentionally different vibe than the modern pages).
   - Uses Google Font “IM Fell English”.
