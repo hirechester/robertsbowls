@@ -15,6 +15,11 @@
   RC.HALL_OF_FAME_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR6DAHasgDxAIJfV8r9PnD7Y1Z2UqfwhQeFqnk_iMnQISf7dlvjgNiGYq6Bk6R7BPg8Ipm5AnNVjfGM/pub?gid=232197835&single=true&output=csv";
   RC.TEAMS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR6DAHasgDxAIJfV8r9PnD7Y1Z2UqfwhQeFqnk_iMnQISf7dlvjgNiGYq6Bk6R7BPg8Ipm5AnNVjfGM/pub?gid=1148947895&single=true&output=csv";
 
+  // Optional Supabase config for Teams (public read)
+  RC.SUPABASE_URL = "https://hylpkyymmtckliwlngdu.supabase.co"; // https://<project>.supabase.co
+  RC.SUPABASE_PUBLISHABLE_KEY = "sb_publishable_1m3Ww4QsfZFQB_SYdJPu_Q_UUnXK7vX"; // public publishable key
+  RC.SUPABASE_TEAMS_TABLE = "teams";
+
   // --- HELPER: CSV PARSER ---
   RC.parseCSV = function (text) {
     const rows = [];

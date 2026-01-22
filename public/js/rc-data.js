@@ -145,6 +145,68 @@
     return map;
   }
 
+  function mapTeamsFromSupabase(rows) {
+    return (rows || []).map((row) => ({
+      "Team ID": row.team_id ?? "",
+      "Ranking": row.ranking ?? "",
+      "Seed": row.seed ?? "",
+      "School Name": row.school_name ?? "",
+      "Team Nickname": row.team_nickname ?? "",
+      "Primary Hex": row.primary_hex ?? "",
+      "Conference": row.conference ?? "",
+      "Logo": row.logo ?? "",
+      "Latitude": row.latitude ?? "",
+      "Longitude": row.longitude ?? "",
+      "City": row.city ?? "",
+      "State": row.state ?? "",
+      "Enrollment": row.enrollment ?? "",
+      "Graduation Rate": row.graduation_rate ?? "",
+      "Year Founded": row.year_founded ?? "",
+      "_source": "SUPABASE"
+    }));
+  }
+
+  async function fetchTeamsFromSupabase() {
+    const baseUrl = String(RC.SUPABASE_URL || "").replace(/\/+$/, "");
+    const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
+    if (!baseUrl || !publishableKey) return null;
+
+    const table = RC.SUPABASE_TEAMS_TABLE || "teams";
+    const url = `${baseUrl}/rest/v1/${table}?select=*`;
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: {
+        apikey: publishableKey,
+        Authorization: `Bearer ${publishableKey}`
+      }
+    });
+    if (!res.ok) {
+      throw new Error(`Supabase teams fetch failed (${res.status})`);
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? mapTeamsFromSupabase(rows) : [];
+  }
+
+  async function fetchTeamsData() {
+    const hasSupabase = Boolean(RC.SUPABASE_URL && RC.SUPABASE_PUBLISHABLE_KEY);
+    if (hasSupabase) {
+      try {
+        const supaTeams = await fetchTeamsFromSupabase();
+        if (Array.isArray(supaTeams) && supaTeams.length) return supaTeams;
+        console.warn("Supabase teams returned 0 rows; falling back to CSV.");
+      } catch (err) {
+        console.warn("Supabase teams fetch failed; falling back to CSV.", err);
+      }
+    }
+
+    if (!RC.TEAMS_URL) {
+      throw new Error("RC.TEAMS_URL or RC.SUPABASE_* config is required for Teams data.");
+    }
+    const teamsRes = await fetch(RC.TEAMS_URL, { cache: "no-store" });
+    const teamsText = await teamsRes.text();
+    return RC.csvToJson(teamsText);
+  }
+
   function buildPeopleIndex(picksIds) {
     const byId = {};
     const byName = {};
@@ -233,31 +295,31 @@
     if (!RC.BOWL_GAMES_URL || !RC.PICKS_URL || !RC.HISTORY_URL) {
       throw new Error("One or more required data URLs are missing on RC.*");
     }
-    if (!RC.TEAMS_URL) {
-      throw new Error("RC.TEAMS_URL is required when Bowl Games uses Team IDs.");
+    if (!RC.TEAMS_URL && !(RC.SUPABASE_URL && RC.SUPABASE_ANON_KEY)) {
+      throw new Error("RC.TEAMS_URL or RC.SUPABASE_* is required when Bowl Games uses Team IDs.");
     }
     if (!RC.HALL_OF_FAME_URL) {
       throw new Error("RC.HALL_OF_FAME_URL is required for Hall of Fame data.");
     }
 
-    const [bowlGamesRes, picksRes, historyRes, teamsRes, hallRes] = await Promise.all([
+    const teamsPromise = fetchTeamsData();
+    const [bowlGamesRes, picksRes, historyRes, hallRes] = await Promise.all([
       fetch(RC.BOWL_GAMES_URL, { cache: "no-store" }),
       fetch(RC.PICKS_URL, { cache: "no-store" }),
       fetch(RC.HISTORY_URL, { cache: "no-store" }),
-      fetch(RC.TEAMS_URL, { cache: "no-store" }),
       fetch(RC.HALL_OF_FAME_URL, { cache: "no-store" })
     ]);
 
-    const [bowlGamesText, picksText, historyText, teamsText, hallText] = await Promise.all([
+    const [bowlGamesText, picksText, historyText, hallText] = await Promise.all([
       bowlGamesRes.text(),
       picksRes.text(),
       historyRes.text(),
-      teamsRes.text(),
       hallRes.text()
     ]);
 
     const bowlGames = RC.csvToJson(bowlGamesText).filter(r => r && Object.keys(r).length);
-    const teams = RC.csvToJson(teamsText).filter(t =>
+    const teamsRaw = await teamsPromise;
+    const teams = (teamsRaw || []).filter(t =>
       t && (getFirst(t, ["Team ID", "TeamID", "ID", "Id"]) || getFirst(t, ["School Name", "School", "Team", "Name"]))
     );
     const teamById = buildTeamById(teams);
