@@ -19,6 +19,7 @@
   RC.SUPABASE_URL = "https://hylpkyymmtckliwlngdu.supabase.co"; // https://<project>.supabase.co
   RC.SUPABASE_PUBLISHABLE_KEY = "sb_publishable_1m3Ww4QsfZFQB_SYdJPu_Q_UUnXK7vX"; // public publishable key
   RC.SUPABASE_TEAMS_TABLE = "teams";
+  RC.SUPABASE_HALL_OF_FAME_TABLE = "hall_of_fame";
 
   // --- HELPER: CSV PARSER ---
   RC.parseCSV = function (text) {

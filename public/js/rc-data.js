@@ -200,6 +200,53 @@
     return supaTeams;
   }
 
+  function mapHallOfFameFromSupabase(rows) {
+    return (rows || []).map((row) => ({
+      "Year": row.year ?? "",
+      "Player": row.player ?? "",
+      "Wins": row.wins ?? "",
+      "Losses": row.losses ?? "",
+      "Champ Team": row.champ_team_id ?? "",
+      "Champ Rank": row.champ_rank ?? "",
+      "Title": row.title ? "1" : "",
+      "_source": "SUPABASE"
+    }));
+  }
+
+  async function fetchHallOfFameFromSupabase() {
+    const baseUrl = String(RC.SUPABASE_URL || "").replace(/\/+$/, "");
+    const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
+    if (!baseUrl || !publishableKey) return null;
+
+    const table = RC.SUPABASE_HALL_OF_FAME_TABLE || "hall_of_fame";
+    const url = `${baseUrl}/rest/v1/${table}?select=*`;
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: {
+        apikey: publishableKey,
+        Authorization: `Bearer ${publishableKey}`
+      }
+    });
+    if (!res.ok) {
+      throw new Error(`Supabase hall_of_fame fetch failed (${res.status})`);
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? mapHallOfFameFromSupabase(rows) : [];
+  }
+
+  async function fetchHallOfFameData() {
+    const hasSupabase = Boolean(RC.SUPABASE_URL && RC.SUPABASE_PUBLISHABLE_KEY);
+    if (!hasSupabase) {
+      throw new Error("RC.SUPABASE_URL and RC.SUPABASE_PUBLISHABLE_KEY are required for Hall of Fame data.");
+    }
+
+    const supaRows = await fetchHallOfFameFromSupabase();
+    if (!Array.isArray(supaRows) || !supaRows.length) {
+      throw new Error("Supabase hall_of_fame returned 0 rows.");
+    }
+    return supaRows;
+  }
+
   function buildPeopleIndex(picksIds) {
     const byId = {};
     const byName = {};
@@ -291,23 +338,19 @@
     if (!(RC.SUPABASE_URL && RC.SUPABASE_PUBLISHABLE_KEY)) {
       throw new Error("RC.SUPABASE_* is required when Bowl Games uses Team IDs.");
     }
-    if (!RC.HALL_OF_FAME_URL) {
-      throw new Error("RC.HALL_OF_FAME_URL is required for Hall of Fame data.");
-    }
 
     const teamsPromise = fetchTeamsData();
-    const [bowlGamesRes, picksRes, historyRes, hallRes] = await Promise.all([
+    const hallPromise = fetchHallOfFameData();
+    const [bowlGamesRes, picksRes, historyRes] = await Promise.all([
       fetch(RC.BOWL_GAMES_URL, { cache: "no-store" }),
       fetch(RC.PICKS_URL, { cache: "no-store" }),
-      fetch(RC.HISTORY_URL, { cache: "no-store" }),
-      fetch(RC.HALL_OF_FAME_URL, { cache: "no-store" })
+      fetch(RC.HISTORY_URL, { cache: "no-store" })
     ]);
 
-    const [bowlGamesText, picksText, historyText, hallText] = await Promise.all([
+    const [bowlGamesText, picksText, historyText] = await Promise.all([
       bowlGamesRes.text(),
       picksRes.text(),
-      historyRes.text(),
-      hallRes.text()
+      historyRes.text()
     ]);
 
     const bowlGames = RC.csvToJson(bowlGamesText).filter(r => r && Object.keys(r).length);
@@ -366,10 +409,11 @@
     let hallOfFameByYear = new Map();
 
     try {
-      const hallHeaders = getCsvHeaders(hallText);
+      const hallRowsRaw = await hallPromise;
+      const hallHeaders = (hallRowsRaw[0] ? Object.keys(hallRowsRaw[0]).map(normalizeHeaderName) : []);
       const missing = requiredHallHeaders.filter(h => !hallHeaders.includes(h));
       if (!missing.length) {
-        const hallRows = RC.csvToJson(hallText)
+        const hallRows = hallRowsRaw
           .filter(r => r && Object.keys(r).length)
           .map((row) => {
             const normalized = {};
