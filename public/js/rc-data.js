@@ -358,6 +358,73 @@
     return picksIds;
   }
 
+  function mapBowlGamesFromSupabase(rows) {
+    return (rows || []).map((row) => ({
+      "Bowl ID": row.bowl_id ?? "",
+      "Sponsored Bowl Name": row.sponsored_bowl_name ?? "",
+      "Bowl Name": row.bowl_name ?? "",
+      "Date": row.date ?? "",
+      "Time": row.time ?? "",
+      "City": row.city ?? "",
+      "State": row.state ?? "",
+      "Stadium": row.stadium ?? "",
+      "Bowl Latitude": row.bowl_latitude ?? "",
+      "Bowl Longitude": row.bowl_longitude ?? "",
+      "TV": row.tv ?? "",
+      "Winner ID": row.winner_id ?? "",
+      "Home ID": row.home_id ?? "",
+      "Away ID": row.away_id ?? "",
+      "Home Pts": row.home_pts ?? "",
+      "Away Pts": row.away_pts ?? "",
+      "Favorite ID": row.favorite_id ?? "",
+      "Spread": row.spread ?? "",
+      "O/U": row.over_under ?? "",
+      "Temp": row.temp_text ?? "",
+      "Weather": row.weather ?? "",
+      "CFP": row.cfp ?? "",
+      "Indoor": row.indoor ?? "",
+      "Neutral": row.neutral ?? "",
+      "Excitement": row.excitement ?? "",
+      "Weight": row.weight ?? "",
+      "_source": "SUPABASE"
+    }));
+  }
+
+  async function fetchBowlGamesFromSupabase(season) {
+    const baseUrl = String(RC.SUPABASE_URL || "").replace(/\/+$/, "");
+    const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
+    if (!baseUrl || !publishableKey || !season) return null;
+
+    const table = RC.SUPABASE_BOWL_GAMES_TABLE || "bowl_games";
+    const url = `${baseUrl}/rest/v1/${table}?select=*&season=eq.${season}&order=date.asc,time.asc`;
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: {
+        apikey: publishableKey,
+        Authorization: `Bearer ${publishableKey}`
+      }
+    });
+    if (!res.ok) {
+      throw new Error(`Supabase bowl_games fetch failed (${res.status})`);
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? mapBowlGamesFromSupabase(rows) : [];
+  }
+
+  async function fetchBowlGamesData(settings) {
+    const hasSupabase = Boolean(RC.SUPABASE_URL && RC.SUPABASE_PUBLISHABLE_KEY);
+    const season = getSupabasePicksSeason(settings);
+    if (!hasSupabase || !season) {
+      throw new Error("RC.SUPABASE_* and app_settings.season_year are required for Bowl Games data.");
+    }
+
+    const supaRows = await fetchBowlGamesFromSupabase(season);
+    if (!Array.isArray(supaRows) || !supaRows.length) {
+      throw new Error("Supabase bowl_games returned 0 rows.");
+    }
+    return supaRows;
+  }
+
   async function fetchAppSettingsFromSupabase() {
     const baseUrl = String(RC.SUPABASE_URL || "").replace(/\/+$/, "");
     const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
@@ -484,7 +551,7 @@
   }
 
   async function fetchAndParseAll() {
-    if (!RC.BOWL_GAMES_URL || !RC.HISTORY_URL) {
+    if (!RC.HISTORY_URL) {
       throw new Error("One or more required data URLs are missing on RC.*");
     }
     if (!(RC.SUPABASE_URL && RC.SUPABASE_PUBLISHABLE_KEY)) {
@@ -495,18 +562,17 @@
     const teamsPromise = fetchTeamsData();
     const hallPromise = fetchHallOfFameData();
     const settings = await settingsPromise;
+    const bowlGamesPromise = fetchBowlGamesData(settings);
     const picksPromise = fetchPicksData(settings);
-    const [bowlGamesRes, historyRes] = await Promise.all([
-      fetch(RC.BOWL_GAMES_URL, { cache: "no-store" }),
+    const [historyRes] = await Promise.all([
       fetch(RC.HISTORY_URL, { cache: "no-store" })
     ]);
 
-    const [bowlGamesText, historyText] = await Promise.all([
-      bowlGamesRes.text(),
+    const [historyText] = await Promise.all([
       historyRes.text()
     ]);
 
-    const bowlGames = RC.csvToJson(bowlGamesText).filter(r => r && Object.keys(r).length);
+    const bowlGames = (await bowlGamesPromise).filter(r => r && Object.keys(r).length);
     const teamsRaw = await teamsPromise;
     const teams = (teamsRaw || []).filter(t =>
       t && (getFirst(t, ["Team ID", "TeamID", "ID", "Id"]) || getFirst(t, ["School Name", "School", "Team", "Name"]))

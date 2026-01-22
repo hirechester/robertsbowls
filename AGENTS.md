@@ -76,7 +76,7 @@ IMPORTANT CONTEXT / CURRENT STATE (main is stable; include ALL pages):
   - Keep typography and parchment styling distinct from the rest of the app; don’t “modernize” it.
 
 DATA MODEL NOTES:
-- Bowl Games tab is the schedule source of truth: Date, Time, TV/Network, Winner, and IDs (Home ID, Away ID, Winner ID, Favorite ID) + odds fields (Spread, O/U) + flags (CFP, Indoor, etc.). Bowl ID is the stable game identifier (string/int mix but unique).
+- Bowl Games now live in Supabase (public.bowl_games) as the schedule source of truth: Date, Time, TV/Network, Winner, and IDs (Home ID, Away ID, Winner ID, Favorite ID) + odds fields (Spread, O/U) + flags (CFP, Indoor, etc.). Bowl ID is the stable game identifier (string/int mix but unique).
 - Teams now live in Supabase (public.teams) and map Team ID -> school name, nickname, primary color hex, rank/seed, conference, etc.
 - Picks now live in Supabase (public.picks + public.picks_meta) and use Bowl IDs + Team IDs for selections.
 - App-wide settings now live in Supabase (public.app_settings) for values like season_year and season_mode.
