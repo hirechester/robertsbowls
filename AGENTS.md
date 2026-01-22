@@ -1,7 +1,7 @@
 HANDOFF MESSAGE (LONG):
 
 You’re helping me maintain a small client-side React app for a family bowl pick’em league (“Roberts Cup”). It’s a static site in /public (no backend). Pages are implemented as standalone JS files like /public/js/rc-page-*.js and are routed from /public/js/rc-main.js with navigation in /public/js/rc-nav.js. Data is pulled from published Google Sheets -> CSV (Bowl Games, Teams, Picks, etc.) and joined client-side.
-High-level: The app is a static, client-only bowl pick’em experience that loads shared league data from Google Sheets CSVs, joins it in the browser, and renders multiple pages (standings, picks, scouting, history, badges, etc.) for a family league. It is intentionally lightweight and UI-stable, with ID-based data joins (Bowl IDs, Team IDs) used for all calculations, and it relies on consistent sheet columns. When updating, prioritize data correctness, avoid UI redesigns, keep hooks at top level, and never introduce duplicate helper declarations.
+High-level: The app is a static, client-only bowl pick’em experience that loads shared league data from Supabase, joins it in the browser, and renders multiple pages (standings, picks, scouting, history, badges, etc.) for a family league. It is intentionally lightweight and UI-stable, with ID-based data joins (Bowl IDs, Team IDs) used for all calculations. When updating, prioritize data correctness, avoid UI redesigns, keep hooks at top level, and never introduce duplicate helper declarations.
 
 IMPORTANT CONTEXT / CURRENT STATE (main is stable; include ALL pages):
 - Home page:
@@ -106,7 +106,7 @@ Project: Roberts Cup static React app in /public. Pages are /public/js/rc-page-*
 Context: Main is stable. All pages are ID-based. Avoid UI refactors. Hooks must stay top-level. Do not duplicate helpers like winnerIdFor.
 Note: Update AGENTS.md only when explicitly requested (not a living doc).
 
-Data: Bowl Games tab is schedule source of truth; Teams tab maps Team ID to metadata; Picks tab uses Bowl IDs in headers and Team IDs for selections.
+Data: Supabase is the source of truth for Bowl Games, Teams, Picks, Hall of Fame, and app settings (season_year, season_mode).
 
 NEXT TASK:
 - Goal:
