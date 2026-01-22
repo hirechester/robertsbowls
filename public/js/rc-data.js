@@ -247,16 +247,22 @@
     return supaRows;
   }
 
-  function getSupabasePicksSeason() {
-    const seasonRaw = RC.SUPABASE_PICKS_SEASON;
-    const season = parseInt(seasonRaw, 10);
-    return Number.isFinite(season) ? season : null;
+  function getSettingInt(settings, key) {
+    const entry = settings && settings[key];
+    const raw = entry && (entry.value_int ?? entry.value_text);
+    const parsed = parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : null;
   }
 
-  async function fetchPicksFromSupabase() {
+  function getSupabasePicksSeason(settings) {
+    const fromSettings = getSettingInt(settings, "season_year");
+    if (Number.isFinite(fromSettings)) return fromSettings;
+    return null;
+  }
+
+  async function fetchPicksFromSupabase(season) {
     const baseUrl = String(RC.SUPABASE_URL || "").replace(/\/+$/, "");
     const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
-    const season = getSupabasePicksSeason();
     if (!baseUrl || !publishableKey || !season) return null;
 
     const table = RC.SUPABASE_PICKS_TABLE || "picks";
@@ -286,10 +292,9 @@
     return rows;
   }
 
-  async function fetchPicksMetaFromSupabase() {
+  async function fetchPicksMetaFromSupabase(season) {
     const baseUrl = String(RC.SUPABASE_URL || "").replace(/\/+$/, "");
     const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
-    const season = getSupabasePicksSeason();
     if (!baseUrl || !publishableKey || !season) return null;
 
     const table = RC.SUPABASE_PICKS_META_TABLE || "picks_meta";
@@ -308,16 +313,16 @@
     return Array.isArray(rows) ? rows : [];
   }
 
-  async function fetchPicksData() {
+  async function fetchPicksData(settings) {
     const hasSupabase = Boolean(RC.SUPABASE_URL && RC.SUPABASE_PUBLISHABLE_KEY);
-    const season = getSupabasePicksSeason();
+    const season = getSupabasePicksSeason(settings);
     if (!hasSupabase || !season) {
-      throw new Error("RC.SUPABASE_* and RC.SUPABASE_PICKS_SEASON are required for Picks data.");
+      throw new Error("RC.SUPABASE_* and app_settings.season_year are required for Picks data.");
     }
 
     const [picksRows, metaRows] = await Promise.all([
-      fetchPicksFromSupabase(),
-      fetchPicksMetaFromSupabase()
+      fetchPicksFromSupabase(season),
+      fetchPicksMetaFromSupabase(season)
     ]);
 
     const byName = new Map();
@@ -351,6 +356,47 @@
       throw new Error("Supabase picks returned 0 rows.");
     }
     return picksIds;
+  }
+
+  async function fetchAppSettingsFromSupabase() {
+    const baseUrl = String(RC.SUPABASE_URL || "").replace(/\/+$/, "");
+    const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
+    if (!baseUrl || !publishableKey) return null;
+
+    const table = RC.SUPABASE_APP_SETTINGS_TABLE || "app_settings";
+    const url = `${baseUrl}/rest/v1/${table}?select=key,value_text,value_int,value_bool`;
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: {
+        apikey: publishableKey,
+        Authorization: `Bearer ${publishableKey}`
+      }
+    });
+    if (!res.ok) {
+      throw new Error(`Supabase app_settings fetch failed (${res.status})`);
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  async function fetchAppSettingsData() {
+    const hasSupabase = Boolean(RC.SUPABASE_URL && RC.SUPABASE_PUBLISHABLE_KEY);
+    if (!hasSupabase) {
+      throw new Error("RC.SUPABASE_URL and RC.SUPABASE_PUBLISHABLE_KEY are required for app settings.");
+    }
+
+    const rows = await fetchAppSettingsFromSupabase();
+    const settings = {};
+    (rows || []).forEach((row) => {
+      const key = String(row?.key || "").trim();
+      if (!key) return;
+      settings[key] = {
+        value_text: row?.value_text ?? null,
+        value_int: row?.value_int ?? null,
+        value_bool: row?.value_bool ?? null
+      };
+    });
+    return settings;
   }
 
   function buildPeopleIndex(picksIds) {
@@ -445,9 +491,11 @@
       throw new Error("RC.SUPABASE_* is required when Bowl Games uses Team IDs.");
     }
 
+    const settingsPromise = fetchAppSettingsData();
     const teamsPromise = fetchTeamsData();
     const hallPromise = fetchHallOfFameData();
-    const picksPromise = fetchPicksData();
+    const settings = await settingsPromise;
+    const picksPromise = fetchPicksData(settings);
     const [bowlGamesRes, historyRes] = await Promise.all([
       fetch(RC.BOWL_GAMES_URL, { cache: "no-store" }),
       fetch(RC.HISTORY_URL, { cache: "no-store" })
@@ -552,6 +600,7 @@
     }
 
     return {
+      appSettings: settings,
       schedule,
       bowlGames,
       picks,

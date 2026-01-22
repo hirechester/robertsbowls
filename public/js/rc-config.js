@@ -22,7 +22,7 @@
   RC.SUPABASE_HALL_OF_FAME_TABLE = "hall_of_fame";
   RC.SUPABASE_PICKS_TABLE = "picks";
   RC.SUPABASE_PICKS_META_TABLE = "picks_meta";
-  RC.SUPABASE_PICKS_SEASON = 2026;
+  RC.SUPABASE_APP_SETTINGS_TABLE = "app_settings";
 
   // --- HELPER: CSV PARSER ---
   RC.parseCSV = function (text) {
