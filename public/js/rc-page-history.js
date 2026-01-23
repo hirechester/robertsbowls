@@ -19,6 +19,7 @@
     const normalizeId = (val) => {
       const s = String(val ?? "").trim();
       if (!s) return "";
+      if (!/^\d+$/.test(s)) return s;
       const n = parseInt(s, 10);
       return Number.isFinite(n) ? String(n) : s;
     };

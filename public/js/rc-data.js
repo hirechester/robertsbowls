@@ -204,7 +204,7 @@
   function mapHallOfFameFromSupabase(rows) {
     return (rows || []).map((row) => ({
       "Year": row.year ?? "",
-      "Player": row.player ?? "",
+      "Player ID": row.player_id ?? "",
       "Wins": row.wins ?? "",
       "Losses": row.losses ?? "",
       "Champ Team": row.champ_team_id ?? "",
@@ -471,9 +471,19 @@
     return settings;
   }
 
-  function buildPeopleIndex(picksIds) {
+  function buildPeopleIndex(picksIds, playerDisplayById) {
     const byId = {};
     const byName = {};
+
+    Object.keys(playerDisplayById || {}).forEach((id) => {
+      const name = String(playerDisplayById[id] || "").trim();
+      if (!name) return;
+      if (!byId[id]) byId[id] = name;
+      const key = name.toLowerCase();
+      if (!byName[key]) byName[key] = [];
+      if (!byName[key].includes(name)) byName[key].push(name);
+    });
+
     (picksIds || []).forEach((p) => {
       const name = String(p?.Name || "").trim();
       if (!name) return;
@@ -664,7 +674,7 @@
     const picksIds = buildPicksIdsFromSupabase(picksRows, picksMetaRows, playerDisplayById)
       .filter(p => p && p.Name);
     const picksBracket = (await bracketPromise) || [];
-    const peopleIndex = buildPeopleIndex(picksIds);
+    const peopleIndex = buildPeopleIndex(picksIds, playerDisplayById);
 
     // Picks sheet is now ID-based:
     // - Header columns for games use Bowl ID (stable unique ID)
@@ -703,7 +713,7 @@
     });
     const history = [];
 
-    const requiredHallHeaders = ["Year", "Player", "Wins", "Losses", "Champ Team", "Champ Rank", "Title"];
+    const requiredHallHeaders = ["Year", "Player ID", "Wins", "Losses", "Champ Team", "Champ Rank", "Title"];
     let hallOfFameByYear = new Map();
 
     try {
@@ -729,7 +739,7 @@
           const champRankVal = parseInt(champRankRaw, 10);
           const entry = {
             year: yearNum,
-            playerRaw: getFirst(row, ["Player"]),
+            playerRaw: getFirst(row, ["Player ID", "PlayerID", "Player Id"]),
             wins: Number.isFinite(winsRaw) ? winsRaw : 0,
             losses: Number.isFinite(lossesRaw) ? lossesRaw : 0,
             champTeamId: normalizeId(getFirst(row, ["Champ Team"])),
