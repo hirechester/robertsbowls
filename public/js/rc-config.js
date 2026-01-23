@@ -16,6 +16,8 @@
   RC.SUPABASE_PICKS_META_TABLE = "picks_meta";
   RC.SUPABASE_APP_SETTINGS_TABLE = "app_settings";
   RC.SUPABASE_BOWL_GAMES_TABLE = "bowl_games";
+  RC.SUPABASE_PLAYERS_TABLE = "players";
+  RC.SUPABASE_PICKS_BRACKET_TABLE = "picks_bracket";
 
   // --- HELPER: CSV PARSER ---
   RC.parseCSV = function (text) {

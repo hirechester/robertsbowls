@@ -111,27 +111,6 @@
   };
 
 
-  const CFP_BRACKET = [
-    { bowlId: "401779840", homeId: "201", awayId: "333", advancesTo: "401769072", label: "Opening Round" },
-    { bowlId: "401779841", homeId: "245", awayId: "2390", advancesTo: "401769070", label: "Opening Round" },
-    { bowlId: "401779842", homeId: "145", awayId: "2655", advancesTo: "401769073", label: "Opening Round" },
-    { bowlId: "401779843", homeId: "2483", awayId: "256", advancesTo: "401769071", label: "Opening Round" },
-    { bowlId: "401769070", homeId: "194", awayId: "", advancesTo: "401769075", label: "Quarterfinal" },
-    { bowlId: "401769071", homeId: "2641", awayId: "", advancesTo: "401769074", label: "Quarterfinal" },
-    { bowlId: "401769072", homeId: "84", awayId: "", advancesTo: "401769074", label: "Quarterfinal" },
-    { bowlId: "401769073", homeId: "61", awayId: "", advancesTo: "401769075", label: "Quarterfinal" },
-    { bowlId: "401769075", homeId: "", awayId: "", advancesTo: "MANUAL_CHAMP", label: "Semifinal" },
-    { bowlId: "401769074", homeId: "", awayId: "", advancesTo: "MANUAL_CHAMP", label: "Semifinal" },
-    { bowlId: "MANUAL_CHAMP", homeId: "", awayId: "", advancesTo: "", label: "National Championship" }
-  ];
-
-  const CFP_SECTIONS = {
-    opening: ["401779840", "401779841", "401779842", "401779843"],
-    quarterfinals: ["401769070", "401769071", "401769072", "401769073"],
-    semifinals: ["401769075", "401769074"],
-    championship: "MANUAL_CHAMP"
-  };
-
   const pickFirst = (row, keys) => {
     for (const k of keys) {
       const val = row && row[k];
@@ -661,11 +640,89 @@
   };
 
   const PredictionsPage = () => {
-    const { bowlGames, teams, teamById, loading, error } = RC.data.useLeagueData();
+    const { appSettings, bowlGames, teams, teamById, picksIds, players, picksBracket, loading, error, refresh } = RC.data.useLeagueData();
     const [pickerName, setPickerName] = useState("");
+    const [pickerId, setPickerId] = useState("");
     const [template, setTemplate] = useState(TEMPLATE_CUSTOM);
     const [picksByBowlId, setPicksByBowlId] = useState({});
     const [tiebreakerScore, setTiebreakerScore] = useState("");
+    const [submitStatus, setSubmitStatus] = useState("idle"); // idle | submitting | success | error
+    const [submitError, setSubmitError] = useState("");
+
+    const settingInt = (key) => {
+      const entry = appSettings && appSettings[key];
+      const raw = entry && (entry.value_int ?? entry.value_text);
+      const parsed = parseInt(raw, 10);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const settingText = (key) => {
+      const entry = appSettings && appSettings[key];
+      if (!entry) return "";
+      const raw = entry.value_text ?? entry.value_int ?? "";
+      return String(raw || "").trim();
+    };
+
+    const seasonYear = settingInt("season_year");
+    const submissionCode = settingText("submission_code");
+
+    const playersList = useMemo(() => {
+      const rows = (players || []).map((p) => {
+        const first = String(p.first_name || "").trim();
+        const last = String(p.last_name || "").trim();
+        const id = String(p.id || "").trim();
+        const lastInitial = last ? `${last[0].toUpperCase()}.` : "";
+        return {
+          id,
+          first_name: first,
+          last_name: last,
+          family_level: p.family_level || "",
+          family_unit: p.family_unit || "",
+          state: p.state || "",
+          last_initial: lastInitial
+        };
+      }).filter(p => p.id);
+
+      const firstNameCounts = rows.reduce((acc, row) => {
+        const key = row.first_name.toLowerCase();
+        if (!key) return acc;
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {});
+
+      return rows.map((p) => {
+        const firstKey = p.first_name.toLowerCase();
+        const needsInitial = firstKey && firstNameCounts[firstKey] > 1;
+        const display = needsInitial && p.last_initial
+          ? `${p.first_name} ${p.last_initial}`
+          : p.first_name;
+        return {
+          ...p,
+          display_name: display || "Unknown"
+        };
+      });
+    }, [players]);
+
+    const submittedPlayerIds = useMemo(() => {
+      const byName = new Map(playersList.map(p => [p.display_name.toLowerCase(), p.id]));
+      const submitted = new Set();
+      (picksIds || []).forEach((row) => {
+        const pid = String(row?.["Player ID"] || "").trim();
+        if (pid) {
+          submitted.add(pid);
+          return;
+        }
+        const name = String(row?.Name || "").trim().toLowerCase();
+        if (!name) return;
+        const id = byName.get(name);
+        if (id) submitted.add(id);
+      });
+      return submitted;
+    }, [picksIds, playersList]);
+
+    const availablePlayers = useMemo(() => {
+      return playersList.filter(p => !submittedPlayerIds.has(p.id));
+    }, [playersList, submittedPlayerIds]);
 
     const gamesData = useMemo(() => {
       if (!Array.isArray(bowlGames)) return { cfp: [], nonCfp: [] };
@@ -735,21 +792,78 @@
       return map;
     }, [bowlGames]);
 
+    const normalizeRoundKey = (roundLabel) => {
+      const raw = String(roundLabel || "").toLowerCase();
+      if (raw.includes("opening")) return "opening";
+      if (raw.includes("quarter")) return "quarterfinals";
+      if (raw.includes("semi")) return "semifinals";
+      if (raw.includes("champ")) return "championship";
+      return "";
+    };
+
+    const bracketSections = useMemo(() => {
+      const sections = { opening: [], quarterfinals: [], semifinals: [], championship: null };
+      if (!Array.isArray(picksBracket)) return sections;
+
+      const grouped = { opening: [], quarterfinals: [], semifinals: [], championship: [] };
+      picksBracket.forEach((row) => {
+        const roundKey = normalizeRoundKey(row?.round);
+        if (!roundKey) return;
+        const bowlId = normalizeId(row?.bowl_id);
+        if (!bowlId) return;
+        const entry = {
+          bowlId,
+          advancesTo: normalizeId(row?.advances_to),
+          label: String(row?.round || "").trim(),
+          slot: Number(row?.slot || 0) || 0
+        };
+        grouped[roundKey].push(entry);
+      });
+
+      const sortBySlot = (a, b) => (a.slot || 0) - (b.slot || 0);
+      grouped.opening.sort(sortBySlot);
+      grouped.quarterfinals.sort(sortBySlot);
+      grouped.semifinals.sort(sortBySlot);
+      grouped.championship.sort(sortBySlot);
+
+      sections.opening = grouped.opening;
+      sections.quarterfinals = grouped.quarterfinals;
+      sections.semifinals = grouped.semifinals;
+      sections.championship = grouped.championship[0] || null;
+      return sections;
+    }, [picksBracket]);
+
     const cfpBracketGames = useMemo(() => {
+      const allRounds = [
+        ...bracketSections.opening,
+        ...bracketSections.quarterfinals,
+        ...bracketSections.semifinals
+      ];
+      if (bracketSections.championship) allRounds.push(bracketSections.championship);
+      if (!allRounds.length) return null;
+
       const gameById = {};
-      CFP_BRACKET.forEach((g) => { gameById[g.bowlId] = g; });
+      allRounds.forEach((g) => {
+        gameById[g.bowlId] = {
+          bowlId: g.bowlId,
+          advancesTo: g.advancesTo,
+          label: g.label
+        };
+      });
 
       const feedersFor = (bowlId) =>
-        CFP_BRACKET.filter((g) => g.advancesTo === bowlId).map((g) => g.bowlId);
+        allRounds.filter((g) => g.advancesTo === bowlId).map((g) => g.bowlId);
 
       const resolveParticipants = (game) => {
-        let homeId = normalizeId(game.homeId);
-        let awayId = normalizeId(game.awayId);
+        let homeId = "";
+        let awayId = "";
         const row = bowlById[game.bowlId];
         const rowHomeId = row ? normalizeId(pickFirst(row, ["Home ID", "HomeID"])) : "";
         const rowAwayId = row ? normalizeId(pickFirst(row, ["Away ID", "AwayID"])) : "";
-        if (rowHomeId) homeId = rowHomeId;
-        if (rowAwayId) awayId = rowAwayId;
+        if (game.bowlId !== "MANUAL_CHAMP") {
+          if (rowHomeId) homeId = rowHomeId;
+          if (rowAwayId) awayId = rowAwayId;
+        }
 
         if (!homeId || !awayId) {
           const feeders = feedersFor(game.bowlId);
@@ -796,43 +910,139 @@
         };
       };
 
-      const opening = CFP_SECTIONS.opening.map((bowlId) => {
-        const game = buildGame(bowlId);
-        if (!game) return null;
-        return game;
-      }).filter(Boolean);
-      const quarterfinals = CFP_SECTIONS.quarterfinals.map((bowlId) => {
-        const game = buildGame(bowlId);
+      const opening = bracketSections.opening.map((g) => buildGame(g.bowlId)).filter(Boolean);
+      const quarterfinals = bracketSections.quarterfinals.map((g) => {
+        const game = buildGame(g.bowlId);
         if (!game) return null;
         game.awayFallback = "Winner of Opening Round";
         game.homeFallback = "Seeded Team";
         return game;
       }).filter(Boolean);
-      const semifinals = CFP_SECTIONS.semifinals.map((bowlId) => {
-        const game = buildGame(bowlId);
+      const semifinals = bracketSections.semifinals.map((g) => {
+        const game = buildGame(g.bowlId);
         if (!game) return null;
         game.awayFallback = "Winner of Quarterfinal";
         game.homeFallback = "Winner of Quarterfinal";
         return game;
       }).filter(Boolean);
-      const championship = buildGame(CFP_SECTIONS.championship) || {
-        slotId: CFP_SECTIONS.championship,
-        bowlId: CFP_SECTIONS.championship,
-        label: "National Championship",
-        awayId: "",
-        homeId: "",
-        awayFallback: "Winner of Semifinal",
-        homeFallback: "Winner of Semifinal",
-        allow: new Set(),
-        locked: true
-      };
+      const champId = bracketSections.championship?.bowlId;
+      const championship = champId ? buildGame(champId) : null;
       if (championship) {
         championship.awayFallback = "Winner of Semifinal";
         championship.homeFallback = "Winner of Semifinal";
       }
 
       return { opening, quarterfinals, semifinals, championship };
-    }, [bowlById, picksByBowlId]);
+    }, [bowlById, picksByBowlId, bracketSections]);
+
+    const isSubmitted = pickerId ? submittedPlayerIds.has(pickerId) : false;
+
+    const parseTeamId = (val) => {
+      const raw = String(val || "").trim();
+      if (!raw) return null;
+      const num = parseInt(raw, 10);
+      return Number.isFinite(num) ? num : raw;
+    };
+
+    const handleSubmit = async () => {
+      setSubmitError("");
+      if (submitStatus === "submitting") return;
+      if (!seasonYear) {
+        setSubmitError("Season is not set in app settings.");
+        setSubmitStatus("error");
+        return;
+      }
+      if (!pickerId || !pickerName) {
+        setSubmitError("Select your name to submit picks.");
+        setSubmitStatus("error");
+        return;
+      }
+      const tiebreaker = String(tiebreakerScore || "").trim();
+      if (!tiebreaker) {
+        setSubmitError("Enter a tiebreaker score before submitting.");
+        setSubmitStatus("error");
+        return;
+      }
+      if (isSubmitted) {
+        setSubmitError("This player has already submitted picks.");
+        setSubmitStatus("error");
+        return;
+      }
+      if (!submissionCode) {
+        setSubmitError("Submission code is missing in app settings.");
+        setSubmitStatus("error");
+        return;
+      }
+
+      const picksRows = Object.entries(picksByBowlId)
+        .filter(([bowlId, teamId]) => bowlId && teamId && bowlId !== "MANUAL_CHAMP")
+        .map(([bowlId, teamId]) => ({
+          season: seasonYear,
+          player_id: pickerId,
+          player_name: pickerName,
+          bowl_id: bowlId,
+          team_id: parseTeamId(teamId)
+        }));
+
+      if (!picksRows.length) {
+        setSubmitError("Please make at least one pick before submitting.");
+        setSubmitStatus("error");
+        return;
+      }
+
+      const champTeamId = parseTeamId(picksByBowlId["MANUAL_CHAMP"]);
+      const tiebreakerVal = tiebreaker ? parseInt(tiebreaker, 10) : null;
+
+      const metaRow = {
+        season: seasonYear,
+        player_id: pickerId,
+        player_name: pickerName
+      };
+      if (Number.isFinite(tiebreakerVal)) metaRow.tiebreaker_score = tiebreakerVal;
+      if (champTeamId) metaRow.champ_team_id = champTeamId;
+
+      const baseUrl = String(RC.SUPABASE_URL || "").replace(/\/+$/, "");
+      const key = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
+      if (!baseUrl || !key) {
+        setSubmitError("Supabase config is missing.");
+        setSubmitStatus("error");
+        return;
+      }
+
+      const postRows = async (table, rows) => {
+        const res = await fetch(`${baseUrl}/rest/v1/${table}`, {
+          method: "POST",
+          headers: {
+            apikey: key,
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+            Prefer: "return=minimal",
+            "x-submission-code": submissionCode
+          },
+          body: JSON.stringify(rows)
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || `Failed to submit ${table}.`);
+        }
+      };
+
+      try {
+        setSubmitStatus("submitting");
+        await postRows(RC.SUPABASE_PICKS_TABLE || "picks", picksRows);
+        await postRows(RC.SUPABASE_PICKS_META_TABLE || "picks_meta", [metaRow]);
+        setSubmitStatus("success");
+        setPickerId("");
+        setPickerName("");
+        setPicksByBowlId({});
+        setTiebreakerScore("");
+        setTemplate(TEMPLATE_CUSTOM);
+        if (typeof refresh === "function") refresh();
+      } catch (err) {
+        setSubmitError(err.message || "Failed to submit picks.");
+        setSubmitStatus("error");
+      }
+    };
 
     const applyTemplate = (templateKey) => {
       if (!templateKey || templateKey === TEMPLATE_CUSTOM) return;
@@ -887,7 +1097,7 @@
         if (pickId) nextPicks[game.bowlId] = pickId;
       });
 
-      if (CFP_BRACKET.length) {
+      if (bracketSections && (bracketSections.opening.length || bracketSections.quarterfinals.length || bracketSections.semifinals.length || bracketSections.championship)) {
         const pickFavorite = (awayId, homeId, fallbackId) => {
           if (templateKey !== TEMPLATE_VEGAS) return "";
           const key = `${awayId}|${homeId}`;
@@ -911,19 +1121,28 @@
           return choices[Math.floor(Math.random() * choices.length)];
         };
 
+        const bracketOrder = [
+          ...bracketSections.opening,
+          ...bracketSections.quarterfinals,
+          ...bracketSections.semifinals
+        ];
+        if (bracketSections.championship) bracketOrder.push(bracketSections.championship);
+
         const gameById = {};
-        CFP_BRACKET.forEach((g) => { gameById[g.bowlId] = g; });
+        bracketOrder.forEach((g) => { gameById[g.bowlId] = g; });
         const feedersFor = (bowlId) =>
-          CFP_BRACKET.filter((g) => g.advancesTo === bowlId).map((g) => g.bowlId);
+          bracketOrder.filter((g) => g.advancesTo === bowlId).map((g) => g.bowlId);
 
         const resolveParticipants = (game, picks) => {
-          let homeId = normalizeId(game.homeId);
-          let awayId = normalizeId(game.awayId);
+          let homeId = "";
+          let awayId = "";
           const row = bowlById[game.bowlId];
           const rowHomeId = row ? normalizeId(pickFirst(row, ["Home ID", "HomeID"])) : "";
           const rowAwayId = row ? normalizeId(pickFirst(row, ["Away ID", "AwayID"])) : "";
-          if (rowHomeId) homeId = rowHomeId;
-          if (rowAwayId) awayId = rowAwayId;
+          if (game.bowlId !== "MANUAL_CHAMP") {
+            if (rowHomeId) homeId = rowHomeId;
+            if (rowAwayId) awayId = rowAwayId;
+          }
 
           if (!homeId || !awayId) {
             const feeders = feedersFor(game.bowlId);
@@ -943,15 +1162,8 @@
           return { homeId, awayId };
         };
 
-        const playOrder = [
-          ...CFP_SECTIONS.opening,
-          ...CFP_SECTIONS.quarterfinals,
-          ...CFP_SECTIONS.semifinals,
-          CFP_SECTIONS.championship
-        ];
-
-        playOrder.forEach((bowlId) => {
-          const game = gameById[bowlId];
+        bracketOrder.forEach((gameRow) => {
+          const game = gameById[gameRow.bowlId];
           if (!game) return;
           const participants = resolveParticipants(game, nextPicks);
           const awayId = participants.awayId;
@@ -968,14 +1180,14 @@
           } else if (templateKey === TEMPLATE_ZEBRA) {
             pickId = pickZebra(awayId, homeId);
           } else {
-            const matchupRaw = bowlById[bowlId] || matchupRawByKey[`${awayId}|${homeId}`];
+            const matchupRaw = bowlById[gameRow.bowlId] || matchupRawByKey[`${awayId}|${homeId}`];
             const awayMeta = getTeamMeta(teamById, awayId, "Winner");
             const homeMeta = getTeamMeta(teamById, homeId, "Winner");
             const choice = pickTemplateTeam(templateKey, awayMeta, homeMeta, matchupRaw);
             pickId = choice === "away" ? awayId : (choice === "home" ? homeId : "");
           }
 
-          if (pickId) nextPicks[bowlId] = pickId;
+          if (pickId) nextPicks[gameRow.bowlId] = pickId;
         });
       }
 
@@ -1091,13 +1303,26 @@
               <div className="mt-6 grid gap-4 md:grid-cols-2">
                 <div className="flex flex-col gap-2">
                   <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Player Name</label>
-                  <input
-                    type="text"
-                    value={pickerName}
-                    onChange={(e) => setPickerName(e.target.value)}
-                    placeholder="Your name"
+                  <select
+                    value={pickerId}
+                    onChange={(e) => {
+                      const nextId = e.target.value;
+                      setPickerId(nextId);
+                      const selected = availablePlayers.find(p => p.id === nextId);
+                      setPickerName(selected ? selected.display_name : "");
+                    }}
                     className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  >
+                    <option value="">Select your name</option>
+                    {availablePlayers.map((player) => (
+                      <option key={player.id} value={player.id}>
+                        {player.display_name}
+                      </option>
+                    ))}
+                  </select>
+                  {!availablePlayers.length && (
+                    <div className="text-xs text-slate-500">All players have submitted picks for {seasonYear || "this season"}.</div>
+                  )}
                 </div>
                 <div className="flex flex-col gap-2">
                   <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">Template Picker</label>
@@ -1160,7 +1385,6 @@
             <section className="mt-8">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-xl font-bold text-slate-900">CFP Playoff Bracket</h2>
-                <div className="text-xs uppercase tracking-widest text-slate-500 font-semibold">12-Team Bracket</div>
               </div>
               <div className="grid gap-4">
                 <div className="text-sm font-bold text-slate-700">Opening Round</div>
@@ -1189,6 +1413,7 @@
                 ))}
               </div>
               <div className="mt-6">
+                <div className="text-sm font-bold text-slate-700 mb-3">Finals</div>
                 {cfpBracketGames.championship.locked && (
                   <div className="text-xs text-slate-500 mb-2">Pick both semifinal winners to unlock the title matchup.</div>
                 )}
@@ -1227,6 +1452,40 @@
             <h2 className="text-xl font-bold text-slate-900 mb-3">All Other Bowls</h2>
             <div className="grid gap-4">
               {gamesData.nonCfp.map((game) => renderGamePick(game))}
+            </div>
+          </section>
+
+          <section className="mt-10">
+            <div className="rounded-3xl border border-slate-200 bg-white shadow-lg p-6">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.35em] text-blue-600 font-bold">Submit Picks</div>
+                  <div className="text-2xl font-black text-slate-900">Lock In Your Board</div>
+                  <div className="text-sm text-slate-600 mt-1">Submissions are final. Make sure you like your picks first.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={!pickerId || !String(tiebreakerScore || "").trim() || submitStatus === "submitting" || isSubmitted}
+                  className={`w-full md:w-auto rounded-2xl px-6 py-3 text-sm font-bold uppercase tracking-widest shadow-sm transition ${
+                    (!pickerId || !String(tiebreakerScore || "").trim() || isSubmitted)
+                      ? "bg-slate-200 text-slate-500 cursor-not-allowed"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  {submitStatus === "submitting" ? "Submitting..." : (isSubmitted ? "Submitted" : "Submit Picks")}
+                </button>
+              </div>
+              {submitStatus === "success" && (
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                  Picks submitted! You’re locked in for {seasonYear || "this season"}.
+                </div>
+              )}
+              {submitStatus === "error" && submitError && (
+                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+                  {submitError}
+                </div>
+              )}
             </div>
           </section>
 

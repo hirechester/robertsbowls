@@ -98,7 +98,7 @@
 
   const cache = {
     status: "idle", // "idle" | "loading" | "ready" | "error"
-    data: null,     // { schedule, bowlGames, picks, picksIds, history, teams, teamById, hallOfFameByYear, peopleById, peopleByName }
+    data: null,     // { appSettings, schedule, bowlGames, picks, picksIds, history, teams, teamById, players, picksBracket, hallOfFameByYear, peopleById, peopleByName }
     error: null,
     promise: null,
     ts: null
@@ -254,6 +254,13 @@
     return Number.isFinite(parsed) ? parsed : null;
   }
 
+  function getSettingText(settings, key) {
+    const entry = settings && settings[key];
+    if (!entry) return "";
+    const raw = entry.value_text ?? entry.value_int ?? "";
+    return String(raw || "").trim();
+  }
+
   function getSupabasePicksSeason(settings) {
     const fromSettings = getSettingInt(settings, "season_year");
     if (Number.isFinite(fromSettings)) return fromSettings;
@@ -271,7 +278,7 @@
     const rows = [];
 
     while (true) {
-      const url = `${baseUrl}/rest/v1/${table}?select=player_name,bowl_id,team_id&season=eq.${season}&order=player_name.asc,bowl_id.asc&limit=${limit}&offset=${offset}`;
+      const url = `${baseUrl}/rest/v1/${table}?select=player_id,player_name,bowl_id,team_id&season=eq.${season}&order=player_name.asc,bowl_id.asc&limit=${limit}&offset=${offset}`;
       const res = await fetch(url, {
         cache: "no-store",
         headers: {
@@ -298,7 +305,7 @@
     if (!baseUrl || !publishableKey || !season) return null;
 
     const table = RC.SUPABASE_PICKS_META_TABLE || "picks_meta";
-    const url = `${baseUrl}/rest/v1/${table}?select=player_name,tiebreaker_score,champ_team_id&season=eq.${season}`;
+    const url = `${baseUrl}/rest/v1/${table}?select=player_id,player_name,tiebreaker_score,champ_team_id&season=eq.${season}`;
     const res = await fetch(url, {
       cache: "no-store",
       headers: {
@@ -330,6 +337,8 @@
       const name = String(row?.player_name || "").trim();
       if (!name) return;
       if (!byName.has(name)) byName.set(name, { Name: name });
+      const playerId = String(row?.player_id || "").trim();
+      if (playerId) byName.get(name)["Player ID"] = playerId;
       const bowlId = String(row?.bowl_id || "").trim();
       if (!bowlId) return;
       const teamId = normalizeId(row?.team_id);
@@ -341,6 +350,8 @@
       const name = String(row?.player_name || "").trim();
       if (!name) return;
       if (!byName.has(name)) byName.set(name, { Name: name });
+      const playerId = String(row?.player_id || "").trim();
+      if (playerId) byName.get(name)["Player ID"] = playerId;
       const tiebreaker = row?.tiebreaker_score ?? "";
       const champTeamId = row?.champ_team_id ?? "";
       if (tiebreaker !== "" && tiebreaker !== null && tiebreaker !== undefined) {
@@ -356,6 +367,48 @@
       throw new Error("Supabase picks returned 0 rows.");
     }
     return picksIds;
+  }
+
+  async function fetchPlayersFromSupabase() {
+    const baseUrl = String(RC.SUPABASE_URL || "").replace(/\/+$/, "");
+    const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
+    if (!baseUrl || !publishableKey) return null;
+
+    const table = RC.SUPABASE_PLAYERS_TABLE || "players";
+    const url = `${baseUrl}/rest/v1/${table}?select=id,first_name,last_name,family_level,state,family_unit&order=last_name.asc,first_name.asc`;
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: {
+        apikey: publishableKey,
+        Authorization: `Bearer ${publishableKey}`
+      }
+    });
+    if (!res.ok) {
+      throw new Error(`Supabase players fetch failed (${res.status})`);
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  async function fetchPicksBracketFromSupabase(season) {
+    const baseUrl = String(RC.SUPABASE_URL || "").replace(/\/+$/, "");
+    const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
+    if (!baseUrl || !publishableKey || !season) return null;
+
+    const table = RC.SUPABASE_PICKS_BRACKET_TABLE || "picks_bracket";
+    const url = `${baseUrl}/rest/v1/${table}?select=season,round,slot,bowl_id,advances_to&season=eq.${season}&order=round.asc,slot.asc`;
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: {
+        apikey: publishableKey,
+        Authorization: `Bearer ${publishableKey}`
+      }
+    });
+    if (!res.ok) {
+      throw new Error(`Supabase picks_bracket fetch failed (${res.status})`);
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
   }
 
   function mapBowlGamesFromSupabase(rows) {
@@ -561,6 +614,8 @@
     const settings = await settingsPromise;
     const bowlGamesPromise = fetchBowlGamesData(settings);
     const picksPromise = fetchPicksData(settings);
+    const playersPromise = fetchPlayersFromSupabase();
+    const bracketPromise = fetchPicksBracketFromSupabase(getSupabasePicksSeason(settings));
     await Promise.resolve();
 
     const bowlGames = (await bowlGamesPromise).filter(r => r && Object.keys(r).length);
@@ -576,6 +631,8 @@
 
     
     const picksIds = (await picksPromise).filter(p => p && p.Name);
+    const players = (await playersPromise) || [];
+    const picksBracket = (await bracketPromise) || [];
     const peopleIndex = buildPeopleIndex(picksIds);
 
     // Picks sheet is now ID-based:
@@ -665,6 +722,8 @@
       history,
       teams,
       teamById,
+      players,
+      picksBracket,
       hallOfFameByYear,
       peopleById: peopleIndex.byId,
       peopleByName: peopleIndex.byName
@@ -700,6 +759,7 @@
 
   RC.data.useLeagueData = function useLeagueData() {
     const [state, setState] = useState(() => ({
+      appSettings: cache.data?.appSettings || null,
       schedule: cache.data?.schedule || null,
       bowlGames: cache.data?.bowlGames || null,
       picks: cache.data?.picks || null,
@@ -707,6 +767,8 @@
       history: cache.data?.history || null,
       teams: cache.data?.teams || null,
       teamById: cache.data?.teamById || null,
+      players: cache.data?.players || null,
+      picksBracket: cache.data?.picksBracket || null,
       hallOfFameByYear: cache.data?.hallOfFameByYear || null,
       peopleById: cache.data?.peopleById || null,
       peopleByName: cache.data?.peopleByName || null,
@@ -727,6 +789,7 @@
       try {
         const data = await loadOnce();
         setState({
+          appSettings: data.appSettings,
           schedule: data.schedule,
           bowlGames: data.bowlGames,
           picks: data.picks,
@@ -734,6 +797,8 @@
           history: data.history,
           teams: data.teams,
           teamById: data.teamById,
+          players: data.players,
+          picksBracket: data.picksBracket,
           hallOfFameByYear: data.hallOfFameByYear,
           peopleById: data.peopleById,
           peopleByName: data.peopleByName,
@@ -752,6 +817,7 @@
       if (cache.data && cache.status === "ready") {
         setState((s) => ({
           ...s,
+          appSettings: cache.data.appSettings,
           schedule: cache.data.schedule,
           bowlGames: cache.data.bowlGames,
           picks: cache.data.picks,
@@ -759,6 +825,8 @@
           history: cache.data.history,
           teams: cache.data.teams,
           teamById: cache.data.teamById,
+          players: cache.data.players,
+          picksBracket: cache.data.picksBracket,
           hallOfFameByYear: cache.data.hallOfFameByYear,
           peopleById: cache.data.peopleById,
           peopleByName: cache.data.peopleByName,
@@ -775,21 +843,24 @@
         .then((data) => {
           if (!alive) return;
           setState({
+            appSettings: data.appSettings,
             schedule: data.schedule,
             bowlGames: data.bowlGames,
-          picks: data.picks,
-          picksIds: data.picksIds,
+            picks: data.picks,
+            picksIds: data.picksIds,
             history: data.history,
-          teams: data.teams,
-          teamById: data.teamById,
-          hallOfFameByYear: data.hallOfFameByYear,
-          peopleById: data.peopleById,
-          peopleByName: data.peopleByName,
-          loading: false,
-          error: null,
-          lastUpdated: cache.ts
-        });
-      })
+            teams: data.teams,
+            teamById: data.teamById,
+            players: data.players,
+            picksBracket: data.picksBracket,
+            hallOfFameByYear: data.hallOfFameByYear,
+            peopleById: data.peopleById,
+            peopleByName: data.peopleByName,
+            loading: false,
+            error: null,
+            lastUpdated: cache.ts
+          });
+        })
         .catch((e) => {
           if (!alive) return;
           setState((s) => ({ ...s, loading: false, error: e, lastUpdated: cache.ts }));
@@ -799,6 +870,7 @@
     }, []);
 
     return {
+      appSettings: state.appSettings,
       schedule: state.schedule,
       bowlGames: state.bowlGames,
       picks: state.picks,
@@ -806,6 +878,8 @@
       history: state.history,
       teams: state.teams,
       teamById: state.teamById,
+      players: state.players,
+      picksBracket: state.picksBracket,
       hallOfFameByYear: state.hallOfFameByYear,
       peopleById: state.peopleById,
       peopleByName: state.peopleByName,
