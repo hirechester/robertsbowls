@@ -871,27 +871,49 @@
   ];
 
   const BingoPage = () => {
-    const { schedule, bowlGames, picksIds, teamById, loading, error } = RC.data.useLeagueData();
+    const { schedule, bowlGames, picksIds, teamById, players, loading, error } = RC.data.useLeagueData();
     const [selectedPlayer, setSelectedPlayer] = useState("");
     const [expandedId, setExpandedId] = useState("");
 
-    const players = useMemo(() => {
+    const firstNameById = useMemo(() => {
+      const map = {};
+      (players || []).forEach((p) => {
+        const id = normalizeId(p?.id);
+        const first = String(p?.first_name || "").trim();
+        if (id && first) map[id] = first;
+      });
+      return map;
+    }, [players]);
+
+    const playerOptions = useMemo(() => {
       if (!Array.isArray(picksIds)) return [];
-      return picksIds.filter(p => p && p.Name).map(p => ({ name: p.Name, row: p }));
-    }, [picksIds]);
+      return picksIds
+        .filter(p => p && p.Name)
+        .map(p => ({ name: p.Name, row: p }))
+        .sort((a, b) => {
+          const aId = normalizeId(a?.row?.["Player ID"]);
+          const bId = normalizeId(b?.row?.["Player ID"]);
+          const aName = String(a?.name || "");
+          const bName = String(b?.name || "");
+          const aFirst = String(firstNameById[aId] || aName).toLowerCase();
+          const bFirst = String(firstNameById[bId] || bName).toLowerCase();
+          if (aFirst !== bFirst) return aFirst.localeCompare(bFirst);
+          return aName.localeCompare(bName);
+        });
+    }, [picksIds, firstNameById]);
 
     useEffect(() => {
-      if (!players.length) return;
+      if (!playerOptions.length) return;
       if (!selectedPlayer) {
-        const pick = players[Math.floor(Math.random() * players.length)];
+        const pick = playerOptions[Math.floor(Math.random() * playerOptions.length)];
         setSelectedPlayer(pick ? pick.name : "");
         return;
       }
-      if (!players.some(p => p.name === selectedPlayer)) {
-        const pick = players[Math.floor(Math.random() * players.length)];
+      if (!playerOptions.some(p => p.name === selectedPlayer)) {
+        const pick = playerOptions[Math.floor(Math.random() * playerOptions.length)];
         setSelectedPlayer(pick ? pick.name : "");
       }
-    }, [players, selectedPlayer]);
+    }, [playerOptions, selectedPlayer]);
 
     const seasonYear = useMemo(() => {
       const rows = Array.isArray(schedule) ? schedule : [];
@@ -1085,7 +1107,7 @@
                 onChange={(e) => setSelectedPlayer(e.target.value)}
                 className="appearance-none bg-white border border-gray-300 text-gray-900 text-lg rounded-xl focus:ring-blue-500 focus:border-blue-500 block w-full p-4 font-bold shadow-sm text-center"
               >
-                {players.map((p) => (
+                {playerOptions.map((p) => (
                   <option key={p.name} value={p.name}>{p.name}</option>
                 ))}
               </select>
@@ -1188,6 +1210,7 @@
   function normalizeId(val) {
     const s = String(val ?? "").trim();
     if (!s) return "";
+    if (!/^\d+$/.test(s)) return s;
     const n = parseInt(s, 10);
     return Number.isFinite(n) ? String(n) : s;
   }

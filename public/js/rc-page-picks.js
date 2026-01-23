@@ -15,7 +15,7 @@ const { useMemo, useEffect, useRef, useState } = React;
   // --- PICKS PAGE ---
   const PicksPage = () => {
     // Shared league data (fetched once per session by rc-data.js)
-    const { schedule, bowlGames, picksIds, teamById, loading, error } = RC.data.useLeagueData();
+    const { schedule, bowlGames, picksIds, teamById, players, loading, error } = RC.data.useLeagueData();
     const tableScrollRef = useRef(null);
     const mostRecentThRef = useRef(null);
     const didAutoScrollRef = useRef(false);
@@ -30,10 +30,36 @@ const { useMemo, useEffect, useRef, useState } = React;
       return schedule.filter(g => g.Bowl && g.Date);
     }, [schedule]);
 
+    const playerSortKeyById = useMemo(() => {
+      const map = {};
+      (players || []).forEach((p) => {
+        const id = String(p?.id || "").trim().toLowerCase();
+        if (!id) return;
+        const first = String(p?.first_name || "").trim().toLowerCase();
+        const last = String(p?.last_name || "").trim().toLowerCase();
+        map[id] = `${first}|${last}|${id}`;
+      });
+      return map;
+    }, [players]);
+
     const pickRows = useMemo(() => {
       if (!Array.isArray(picksIds)) return [];
-      return picksIds.filter(p => p && p.Name);
-    }, [picksIds]);
+      return picksIds
+        .filter(p => p && p.Name)
+        .slice()
+        .sort((a, b) => {
+          const aId = String(a?.["Player ID"] || "").trim().toLowerCase();
+          const bId = String(b?.["Player ID"] || "").trim().toLowerCase();
+          const aKey = playerSortKeyById[aId];
+          const bKey = playerSortKeyById[bId];
+          if (aKey && bKey) return aKey.localeCompare(bKey);
+          if (aKey) return -1;
+          if (bKey) return 1;
+          const aName = String(a?.Name || "");
+          const bName = String(b?.Name || "");
+          return aName.localeCompare(bName);
+        });
+    }, [picksIds, playerSortKeyById]);
 
 
 
@@ -58,6 +84,7 @@ const { useMemo, useEffect, useRef, useState } = React;
     const normalizeId = (val) => {
       const s = String(val ?? "").trim();
       if (!s) return "";
+      if (!/^\d+$/.test(s)) return s;
       const n = parseInt(s, 10);
       return Number.isFinite(n) ? String(n) : s;
     };
@@ -219,7 +246,21 @@ const { useMemo, useEffect, useRef, useState } = React;
     const matchupCards = useMemo(() => {
       const rows = Array.isArray(scheduleRows) ? scheduleRows : [];
       const players = Array.isArray(picksIds)
-        ? picksIds.filter(p => p && p.Name).slice().sort((a, b) => String(a.Name).localeCompare(String(b.Name)))
+        ? picksIds
+          .filter(p => p && p.Name)
+          .slice()
+          .sort((a, b) => {
+            const aId = String(a?.["Player ID"] || "").trim().toLowerCase();
+            const bId = String(b?.["Player ID"] || "").trim().toLowerCase();
+            const aKey = playerSortKeyById[aId];
+            const bKey = playerSortKeyById[bId];
+            if (aKey && bKey) return aKey.localeCompare(bKey);
+            if (aKey) return -1;
+            if (bKey) return 1;
+            const aName = String(a?.Name || "");
+            const bName = String(b?.Name || "");
+            return aName.localeCompare(bName);
+          })
         : [];
 
       return rows.map((game) => {
