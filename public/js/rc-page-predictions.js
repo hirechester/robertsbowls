@@ -641,7 +641,6 @@
 
   const PredictionsPage = () => {
     const { appSettings, bowlGames, teams, teamById, picksIds, players, picksBracket, loading, error, refresh } = RC.data.useLeagueData();
-    const [pickerName, setPickerName] = useState("");
     const [pickerId, setPickerId] = useState("");
     const [template, setTemplate] = useState(TEMPLATE_CUSTOM);
     const [picksByBowlId, setPicksByBowlId] = useState({});
@@ -704,21 +703,13 @@
     }, [players]);
 
     const submittedPlayerIds = useMemo(() => {
-      const byName = new Map(playersList.map(p => [p.display_name.toLowerCase(), p.id]));
       const submitted = new Set();
       (picksIds || []).forEach((row) => {
         const pid = String(row?.["Player ID"] || "").trim();
-        if (pid) {
-          submitted.add(pid);
-          return;
-        }
-        const name = String(row?.Name || "").trim().toLowerCase();
-        if (!name) return;
-        const id = byName.get(name);
-        if (id) submitted.add(id);
+        if (pid) submitted.add(pid);
       });
       return submitted;
-    }, [picksIds, playersList]);
+    }, [picksIds]);
 
     const availablePlayers = useMemo(() => {
       return playersList.filter(p => !submittedPlayerIds.has(p.id));
@@ -952,7 +943,7 @@
         setSubmitStatus("error");
         return;
       }
-      if (!pickerId || !pickerName) {
+      if (!pickerId) {
         setSubmitError("Select your name to submit picks.");
         setSubmitStatus("error");
         return;
@@ -979,7 +970,6 @@
         .map(([bowlId, teamId]) => ({
           season: seasonYear,
           player_id: pickerId,
-          player_name: pickerName,
           bowl_id: bowlId,
           team_id: parseTeamId(teamId)
         }));
@@ -995,8 +985,7 @@
 
       const metaRow = {
         season: seasonYear,
-        player_id: pickerId,
-        player_name: pickerName
+        player_id: pickerId
       };
       if (Number.isFinite(tiebreakerVal)) metaRow.tiebreaker_score = tiebreakerVal;
       if (champTeamId) metaRow.champ_team_id = champTeamId;
@@ -1033,7 +1022,6 @@
         await postRows(RC.SUPABASE_PICKS_META_TABLE || "picks_meta", [metaRow]);
         setSubmitStatus("success");
         setPickerId("");
-        setPickerName("");
         setPicksByBowlId({});
         setTiebreakerScore("");
         setTemplate(TEMPLATE_CUSTOM);
@@ -1309,7 +1297,6 @@
                       const nextId = e.target.value;
                       setPickerId(nextId);
                       const selected = availablePlayers.find(p => p.id === nextId);
-                      setPickerName(selected ? selected.display_name : "");
                     }}
                     className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >

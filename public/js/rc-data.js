@@ -122,6 +122,7 @@
   function normalizeId(val) {
     const s = String(val ?? "").trim();
     if (!s) return "";
+    if (!/^\d+$/.test(s)) return s;
     const n = parseInt(s, 10);
     return Number.isFinite(n) ? String(n) : s;
   }
@@ -278,7 +279,7 @@
     const rows = [];
 
     while (true) {
-      const url = `${baseUrl}/rest/v1/${table}?select=player_id,player_name,bowl_id,team_id&season=eq.${season}&order=player_name.asc,bowl_id.asc&limit=${limit}&offset=${offset}`;
+      const url = `${baseUrl}/rest/v1/${table}?select=player_id,bowl_id,team_id&season=eq.${season}&order=player_id.asc,bowl_id.asc&limit=${limit}&offset=${offset}`;
       const res = await fetch(url, {
         cache: "no-store",
         headers: {
@@ -305,7 +306,7 @@
     if (!baseUrl || !publishableKey || !season) return null;
 
     const table = RC.SUPABASE_PICKS_META_TABLE || "picks_meta";
-    const url = `${baseUrl}/rest/v1/${table}?select=player_id,player_name,tiebreaker_score,champ_team_id&season=eq.${season}`;
+    const url = `${baseUrl}/rest/v1/${table}?select=player_id,tiebreaker_score,champ_team_id&season=eq.${season}`;
     const res = await fetch(url, {
       cache: "no-store",
       headers: {
@@ -318,55 +319,6 @@
     }
     const rows = await res.json();
     return Array.isArray(rows) ? rows : [];
-  }
-
-  async function fetchPicksData(settings) {
-    const hasSupabase = Boolean(RC.SUPABASE_URL && RC.SUPABASE_PUBLISHABLE_KEY);
-    const season = getSupabasePicksSeason(settings);
-    if (!hasSupabase || !season) {
-      throw new Error("RC.SUPABASE_* and app_settings.season_year are required for Picks data.");
-    }
-
-    const [picksRows, metaRows] = await Promise.all([
-      fetchPicksFromSupabase(season),
-      fetchPicksMetaFromSupabase(season)
-    ]);
-
-    const byName = new Map();
-    (picksRows || []).forEach((row) => {
-      const name = String(row?.player_name || "").trim();
-      if (!name) return;
-      if (!byName.has(name)) byName.set(name, { Name: name });
-      const playerId = String(row?.player_id || "").trim();
-      if (playerId) byName.get(name)["Player ID"] = playerId;
-      const bowlId = String(row?.bowl_id || "").trim();
-      if (!bowlId) return;
-      const teamId = normalizeId(row?.team_id);
-      if (!teamId) return;
-      byName.get(name)[bowlId] = teamId;
-    });
-
-    (metaRows || []).forEach((row) => {
-      const name = String(row?.player_name || "").trim();
-      if (!name) return;
-      if (!byName.has(name)) byName.set(name, { Name: name });
-      const playerId = String(row?.player_id || "").trim();
-      if (playerId) byName.get(name)["Player ID"] = playerId;
-      const tiebreaker = row?.tiebreaker_score ?? "";
-      const champTeamId = row?.champ_team_id ?? "";
-      if (tiebreaker !== "" && tiebreaker !== null && tiebreaker !== undefined) {
-        byName.get(name)["Tiebreaker Score"] = String(tiebreaker).trim();
-      }
-      if (champTeamId !== "" && champTeamId !== null && champTeamId !== undefined) {
-        byName.get(name)["MANUAL_CHAMP"] = String(champTeamId).trim();
-      }
-    });
-
-    const picksIds = Array.from(byName.values());
-    if (!picksIds.length) {
-      throw new Error("Supabase picks returned 0 rows.");
-    }
-    return picksIds;
   }
 
   async function fetchPlayersFromSupabase() {
@@ -534,6 +486,78 @@
     return { byId, byName };
   }
 
+  function buildPlayerDisplayMap(players) {
+    const rows = (players || []).map((p) => {
+      const id = normalizeId(p?.id);
+      const first = String(p?.first_name || "").trim();
+      const last = String(p?.last_name || "").trim();
+      return {
+        id,
+        first,
+        last,
+        lastInitial: last ? `${last[0].toUpperCase()}.` : ""
+      };
+    }).filter(p => p.id && p.first);
+
+    const firstCounts = rows.reduce((acc, row) => {
+      const key = row.first.toLowerCase();
+      if (!key) return acc;
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    const byId = {};
+    rows.forEach((row) => {
+      const key = row.first.toLowerCase();
+      const needsInitial = key && firstCounts[key] > 1;
+      const display = needsInitial && row.lastInitial
+        ? `${row.first} ${row.lastInitial}`
+        : row.first;
+      byId[row.id] = display || row.first || String(row.id);
+    });
+
+    return byId;
+  }
+
+  function buildPicksIdsFromSupabase(picksRows, metaRows, playerDisplayById) {
+    const byId = new Map();
+    const getNameForId = (playerId) => (
+      playerDisplayById[playerId] || `Player ${playerId}`
+    );
+
+    (picksRows || []).forEach((row) => {
+      const playerId = normalizeId(row?.player_id);
+      if (!playerId) return;
+      if (!byId.has(playerId)) {
+        byId.set(playerId, { Name: getNameForId(playerId), "Player ID": playerId });
+      }
+      const bowlId = String(row?.bowl_id || "").trim();
+      if (!bowlId) return;
+      const teamId = normalizeId(row?.team_id);
+      if (!teamId) return;
+      byId.get(playerId)[bowlId] = teamId;
+    });
+
+    (metaRows || []).forEach((row) => {
+      const playerId = normalizeId(row?.player_id);
+      if (!playerId) return;
+      if (!byId.has(playerId)) {
+        byId.set(playerId, { Name: getNameForId(playerId), "Player ID": playerId });
+      }
+      const tiebreaker = row?.tiebreaker_score ?? "";
+      const champTeamId = row?.champ_team_id ?? "";
+      if (tiebreaker !== "" && tiebreaker !== null && tiebreaker !== undefined) {
+        byId.get(playerId)["Tiebreaker Score"] = String(tiebreaker).trim();
+      }
+      if (champTeamId !== "" && champTeamId !== null && champTeamId !== undefined) {
+        byId.get(playerId)["MANUAL_CHAMP"] = String(champTeamId).trim();
+      }
+    });
+
+    const picksIds = Array.from(byId.values());
+    return picksIds;
+  }
+
   function teamDisplayName(team) {
     if (!team) return "";
     return getFirst(team, ["School Name", "School", "Team", "Name"]);
@@ -612,10 +636,12 @@
     const teamsPromise = fetchTeamsData();
     const hallPromise = fetchHallOfFameData();
     const settings = await settingsPromise;
+    const season = getSupabasePicksSeason(settings);
     const bowlGamesPromise = fetchBowlGamesData(settings);
-    const picksPromise = fetchPicksData(settings);
+    const picksRowsPromise = fetchPicksFromSupabase(season);
+    const picksMetaPromise = fetchPicksMetaFromSupabase(season);
     const playersPromise = fetchPlayersFromSupabase();
-    const bracketPromise = fetchPicksBracketFromSupabase(getSupabasePicksSeason(settings));
+    const bracketPromise = fetchPicksBracketFromSupabase(season);
     await Promise.resolve();
 
     const bowlGames = (await bowlGamesPromise).filter(r => r && Object.keys(r).length);
@@ -629,9 +655,14 @@
       .map(r => normalizeScheduleFromBowlGames(r, teamById))
       .filter(g => g.Bowl && g.Date);
 
-    
-    const picksIds = (await picksPromise).filter(p => p && p.Name);
-    const players = (await playersPromise) || [];
+    const [picksRows, picksMetaRows, players] = await Promise.all([
+      picksRowsPromise,
+      picksMetaPromise,
+      playersPromise
+    ]);
+    const playerDisplayById = buildPlayerDisplayMap(players || []);
+    const picksIds = buildPicksIdsFromSupabase(picksRows, picksMetaRows, playerDisplayById)
+      .filter(p => p && p.Name);
     const picksBracket = (await bracketPromise) || [];
     const peopleIndex = buildPeopleIndex(picksIds);
 
