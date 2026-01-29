@@ -90,3 +90,55 @@ If you ever need to override this, pass `cfbdSeason` in the request body:
 - `bowl_id` is expected to match CFBD game id. If it does not, you’ll need a mapping table.
 - The function requires an `x-admin-code` header, but it does **not** validate it against a secret yet.
   If you want that, we can add `ADMIN_CODE` as a secret and verify it server-side.
+- Reminder for next season: if you want hourly odds updates, use Supabase **Integrations → Cron**
+  with `pg_cron` + `pg_net` to call this function on a schedule. (Not needed now that the season is over.)
+
+## Optional: Hourly Vegas odds cron (next season)
+Use Supabase **Integrations → Cron** + `pg_net` to call the Edge Function hourly.
+
+1) In Supabase, go to **Database → Extensions** and enable:
+   - `pg_cron`
+   - `pg_net`
+
+2) Go to **SQL Editor** and run the following (replace placeholders):
+
+```sql
+-- 1) One-time test call (optional)
+select
+  net.http_post(
+    url := 'https://<project-ref>.functions.supabase.co/cfbd-bowls-sync',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-admin-code', '<your_admin_code>'
+    ),
+    body := jsonb_build_object('season', 2026, 'mode', 'odds')
+  ) as request_id;
+
+-- 2) Schedule hourly job (runs at minute 0 of every hour, UTC)
+select
+  cron.schedule(
+    'rc_cfbd_odds_hourly',
+    '0 * * * *',
+    $$
+    select
+      net.http_post(
+        url := 'https://<project-ref>.functions.supabase.co/cfbd-bowls-sync',
+        headers := jsonb_build_object(
+          'Content-Type', 'application/json',
+          'x-admin-code', '<your_admin_code>'
+        ),
+        body := jsonb_build_object('season', 2026, 'mode', 'odds')
+      );
+    $$
+  );
+```
+
+3) If you ever need to stop it:
+
+```sql
+select cron.unschedule('rc_cfbd_odds_hourly');
+```
+
+Notes:
+- Cron runs in UTC. If you want a different timing, adjust the cron string.
+- Replace `season` with the current Roberts Cup season (CFBD uses `season - 1` inside the function).
