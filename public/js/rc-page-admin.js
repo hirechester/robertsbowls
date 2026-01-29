@@ -38,6 +38,9 @@
     const [cfbdUpdates, setCfbdUpdates] = useState([]);
     const [cfbdApplyStatus, setCfbdApplyStatus] = useState({});
     const [cfbdApplyErrors, setCfbdApplyErrors] = useState({});
+    const [oddsStatus, setOddsStatus] = useState("idle");
+    const [oddsMessage, setOddsMessage] = useState("");
+    const [oddsError, setOddsError] = useState("");
 
     const normalizeId = (val) => {
       const s = String(val ?? "").trim();
@@ -368,6 +371,79 @@
       } catch (err) {
         setCfbdStatus("error");
         setCfbdError(err.message || "Failed to fetch CFBD updates.");
+      }
+    };
+
+    const updateVegasOdds = async () => {
+      setOddsStatus("loading");
+      setOddsMessage("");
+      setOddsError("");
+
+      const season = parseInt(seasonYear, 10);
+      if (!Number.isFinite(season)) {
+        setOddsStatus("error");
+        setOddsError("Season year is missing or invalid.");
+        return;
+      }
+
+      const baseUrl = String(RC.SUPABASE_FUNCTIONS_URL || "").replace(/\/+$/, "");
+      const fnName = String(RC.CFBD_SYNC_FUNCTION || "").trim();
+      const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
+      if (!baseUrl || !fnName) {
+        setOddsStatus("error");
+        setOddsError("Supabase Functions URL or CFBD function name is missing in rc-config.js.");
+        return;
+      }
+      if (!publishableKey) {
+        setOddsStatus("error");
+        setOddsError("Supabase publishable key is missing.");
+        return;
+      }
+
+      try {
+        const code = String(adminCode || "").trim();
+        if (!code) throw new Error("Admin code is required.");
+        const res = await fetch(`${baseUrl}/${fnName}`, {
+          method: "POST",
+          headers: {
+            apikey: publishableKey,
+            Authorization: `Bearer ${publishableKey}`,
+            "Content-Type": "application/json",
+            "x-admin-code": code
+          },
+          body: JSON.stringify({ season, mode: "odds" })
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || "Failed to fetch CFBD odds.");
+        }
+        const data = await res.json();
+        const updates = Array.isArray(data?.updates) ? data.updates : [];
+        if (!updates.length) {
+          setOddsStatus("saved");
+          setOddsMessage("No odds updates returned.");
+          return;
+        }
+
+        let savedCount = 0;
+        let errorCount = 0;
+        for (const update of updates) {
+          const bowlId = getCfbdBowlId(update);
+          const payload = normalizeCfbdPayload(update);
+          if (!bowlId || !Object.keys(payload).length) continue;
+          try {
+            await updateBowlGame(season, bowlId, payload);
+            savedCount += 1;
+          } catch {
+            errorCount += 1;
+          }
+        }
+        setOddsStatus("saved");
+        setOddsMessage(`Updated odds for ${savedCount} bowls${errorCount ? ` (${errorCount} errors)` : ""}.`);
+        if (typeof refresh === "function") refresh();
+      } catch (err) {
+        setOddsStatus("error");
+        setOddsError(err.message || "Failed to update odds.");
       }
     };
 
@@ -787,6 +863,12 @@
                 >
                   Fetch CFBD Updates
                 </button>
+                <button
+                  onClick={updateVegasOdds}
+                  className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500 shadow-sm"
+                >
+                  Update Vegas Odds
+                </button>
                 {cfbdPendingUpdates.length > 0 && (
                   <button
                     onClick={() => applyAllCfbdUpdates(cfbdPendingUpdates)}
@@ -800,6 +882,13 @@
             {cfbdStatus === "loading" && <div className="text-xs text-slate-500">Fetching updates...</div>}
             {cfbdStatus === "error" && cfbdError && (
               <div className="text-xs text-red-600">{cfbdError}</div>
+            )}
+            {oddsStatus === "loading" && <div className="text-xs text-slate-500">Updating odds...</div>}
+            {oddsStatus === "saved" && oddsMessage && (
+              <div className="text-xs text-emerald-600">{oddsMessage}</div>
+            )}
+            {oddsStatus === "error" && oddsError && (
+              <div className="text-xs text-red-600">{oddsError}</div>
             )}
             {cfbdStatus === "ready" && !cfbdUpdates.length && (
               <div className="text-sm text-slate-500">No CFBD updates returned.</div>

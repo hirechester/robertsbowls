@@ -203,8 +203,15 @@ function parseFormattedSpread(val: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function buildPayload(game: CfbdGame, lines: CfbdLine[] | null, media: CfbdMedia | null, weather: CfbdWeather | null) {
+function buildPayload(
+  game: CfbdGame,
+  lines: CfbdLine[] | null,
+  media: CfbdMedia | null,
+  weather: CfbdWeather | null,
+  options?: { oddsOnly?: boolean }
+) {
   const payload: Record<string, JsonValue> = {};
+  const oddsOnly = Boolean(options?.oddsOnly);
   const date = formatDateEt(game.start_date ?? game.startDate);
   const time = formatTimeEt(game.start_date ?? game.startDate);
   const city = String(game.city ?? "").trim();
@@ -217,20 +224,22 @@ function buildPayload(game: CfbdGame, lines: CfbdLine[] | null, media: CfbdMedia
   const indoor = game.indoor ?? game.gameIndoors ?? weather?.gameIndoors;
   const excitement = toNumber(game.excitement_index ?? game.excitementIndex);
 
-  if (date) payload.date = date;
-  if (time) payload.time = time;
-  if (city) payload.city = city;
-  if (state) payload.state = state;
-  if (homeId) payload.home_id = Number.parseInt(homeId, 10);
-  if (awayId) payload.away_id = Number.parseInt(awayId, 10);
-  if (homePts !== null) payload.home_pts = homePts;
-  if (awayPts !== null) payload.away_pts = awayPts;
-  if (homePts !== null && awayPts !== null && homePts !== awayPts) {
-    payload.winner_id = homePts > awayPts ? Number.parseInt(homeId, 10) : Number.parseInt(awayId, 10);
+  if (!oddsOnly) {
+    if (date) payload.date = date;
+    if (time) payload.time = time;
+    if (city) payload.city = city;
+    if (state) payload.state = state;
+    if (homeId) payload.home_id = Number.parseInt(homeId, 10);
+    if (awayId) payload.away_id = Number.parseInt(awayId, 10);
+    if (homePts !== null) payload.home_pts = homePts;
+    if (awayPts !== null) payload.away_pts = awayPts;
+    if (homePts !== null && awayPts !== null && homePts !== awayPts) {
+      payload.winner_id = homePts > awayPts ? Number.parseInt(homeId, 10) : Number.parseInt(awayId, 10);
+    }
+    if (typeof neutral === "boolean") payload.neutral = neutral;
+    if (typeof indoor === "boolean") payload.indoor = indoor;
+    if (excitement !== null) payload.excitement = excitement;
   }
-  if (typeof neutral === "boolean") payload.neutral = neutral;
-  if (typeof indoor === "boolean") payload.indoor = indoor;
-  if (excitement !== null) payload.excitement = excitement;
 
   const line = selectLine(lines || undefined);
   if (line) {
@@ -243,14 +252,16 @@ function buildPayload(game: CfbdGame, lines: CfbdLine[] | null, media: CfbdMedia
     }
   }
 
-  if (typeof indoor === "boolean" && indoor) {
-    payload.temp_text = "Indoors";
-    payload.weather = "Indoors";
-  } else if (weather) {
-    const tempText = formatTemp(weather.temperature ?? weather.temp);
-    const conditions = String(weather.weatherCondition ?? weather.weather ?? weather.conditions ?? weather.condition ?? "").trim();
-    if (tempText) payload.temp_text = tempText;
-    if (conditions) payload.weather = conditions;
+  if (!oddsOnly) {
+    if (typeof indoor === "boolean" && indoor) {
+      payload.temp_text = "Indoors";
+      payload.weather = "Indoors";
+    } else if (weather) {
+      const tempText = formatTemp(weather.temperature ?? weather.temp);
+      const conditions = String(weather.weatherCondition ?? weather.weather ?? weather.conditions ?? weather.condition ?? "").trim();
+      if (tempText) payload.temp_text = tempText;
+      if (conditions) payload.weather = conditions;
+    }
   }
 
   return payload;
@@ -279,7 +290,7 @@ serve(async (req) => {
     return jsonResponse({ error: "Missing x-admin-code header" }, 401);
   }
 
-  let payload: { season?: number; cfbdSeason?: number } = {};
+  let payload: { season?: number; cfbdSeason?: number; mode?: string } = {};
   try {
     payload = await req.json();
   } catch {
@@ -292,6 +303,8 @@ serve(async (req) => {
   }
 
   const cfbdSeason = Number.isFinite(Number(payload.cfbdSeason)) ? Number(payload.cfbdSeason) : season - 1;
+  const mode = String(payload.mode ?? "").trim().toLowerCase();
+  const oddsOnly = mode === "odds";
 
   const supabaseUrl = String(Deno.env.get("SUPABASE_URL") ?? "").trim();
   const supabaseKey = String(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
@@ -376,7 +389,7 @@ serve(async (req) => {
       const lineEntries = linesById.get(gameId) ?? null;
       const mediaEntry = selectMedia(mediaById.get(gameId) ?? null);
       const weatherEntry = selectWeather(weatherById.get(gameId) ?? null);
-      const update = buildPayload(game, lineEntries, mediaEntry, weatherEntry);
+      const update = buildPayload(game, lineEntries, mediaEntry, weatherEntry, { oddsOnly });
       return [{ bowl_id: gameId, ...update }];
     });
 
