@@ -5,7 +5,7 @@
   const RC = window.RC;
 
   const AdminConsolePage = () => {
-    const { loading, error, appSettings, bowlGames, teamById, refresh } = RC.data.useLeagueData();
+    const { loading, error, appSettings, bowlGames, teamById, teams, refresh } = RC.data.useLeagueData();
     const { LoadingSpinner, ErrorMessage } = (RC.ui || {});
     const Spinner = LoadingSpinner || (({ text }) => <div className="px-4 py-8 text-gray-600">{text || "Loading..."}</div>);
     const Err = ErrorMessage || (({ message }) => <div className="px-4 py-8 text-red-600">{message}</div>);
@@ -14,6 +14,21 @@
     const [seasonMode, setSeasonMode] = useState("");
     const [settingsStatus, setSettingsStatus] = useState("idle");
     const [settingsError, setSettingsError] = useState("");
+    const [addForm, setAddForm] = useState({
+      bowlId: "",
+      sponsoredName: "",
+      bowlName: "",
+      date: "",
+      time: "",
+      city: "",
+      state: "",
+      homeId: "",
+      awayId: "",
+      cfp: false,
+      weight: ""
+    });
+    const [addStatus, setAddStatus] = useState("idle");
+    const [addError, setAddError] = useState("");
     const [gameEdits, setGameEdits] = useState({});
     const [gameStatus, setGameStatus] = useState({});
     const [gameErrors, setGameErrors] = useState({});
@@ -48,6 +63,18 @@
       const nick = String(team["Team Nickname"] || team.Nickname || team.Mascot || "").trim();
       return nick ? `${school} ${nick}` : school;
     };
+
+    const teamOptions = useMemo(() => {
+      const list = Array.isArray(teams) ? teams.slice() : Object.values(teamById || {});
+      return list
+        .map((team) => {
+          const id = normalizeId(team?.["Team ID"] ?? team?.TeamID ?? team?.ID ?? team?.Id);
+          const label = teamLabel(id);
+          return { id, label };
+        })
+        .filter((t) => t.id && t.label)
+        .sort((a, b) => a.label.localeCompare(b.label));
+    }, [teams, teamById]);
 
     useEffect(() => {
       if (!appSettings) return;
@@ -130,6 +157,40 @@
       }
     };
 
+    const createBowlGame = async (payload) => {
+      const baseUrl = String(RC.SUPABASE_URL || "").replace(/\/+$/, "");
+      const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
+      if (!baseUrl || !publishableKey) throw new Error("Supabase config is missing.");
+      const table = RC.SUPABASE_BOWL_GAMES_TABLE || "bowl_games";
+      const url = `${baseUrl}/rest/v1/${table}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          apikey: publishableKey,
+          Authorization: `Bearer ${publishableKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal"
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Failed to add bowl game.");
+      }
+    };
+
+    const toNull = (val) => {
+      const s = String(val ?? "").trim();
+      return s === "" ? null : s;
+    };
+
+    const toNumberOrNull = (val) => {
+      const s = String(val ?? "").trim();
+      if (!s) return null;
+      const n = parseFloat(s);
+      return Number.isFinite(n) ? n : null;
+    };
+
     const parseScore = (val) => {
       const s = String(val ?? "").trim();
       if (s === "") return null;
@@ -138,6 +199,7 @@
     };
 
     const handleSeasonSave = async () => {
+      if (!window.confirm("Save season settings?")) return;
       setSettingsStatus("saving");
       setSettingsError("");
       const year = parseInt(seasonYear, 10);
@@ -155,6 +217,83 @@
       } catch (err) {
         setSettingsStatus("error");
         setSettingsError(err.message || "Failed to update settings.");
+      }
+    };
+
+    const handleAddChange = (field, value) => {
+      setAddForm((prev) => ({ ...prev, [field]: value }));
+    };
+
+    const handleAddBowl = async () => {
+      if (!window.confirm("Add this bowl game?")) return;
+      setAddStatus("saving");
+      setAddError("");
+
+      const season = parseInt(seasonYear, 10);
+      if (!Number.isFinite(season)) {
+        setAddStatus("error");
+        setAddError("Season year is missing or invalid.");
+        return;
+      }
+
+      const bowlId = String(addForm.bowlId || "").trim();
+      const bowlName = String(addForm.bowlName || "").trim();
+      const date = String(addForm.date || "").trim();
+      const homeId = normalizeId(addForm.homeId);
+      const awayId = normalizeId(addForm.awayId);
+      const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+      if (!bowlId || !bowlName || !date || !homeId || !awayId) {
+        setAddStatus("error");
+        setAddError("Bowl ID, Bowl Name, Date, Home ID, and Away ID are required.");
+        return;
+      }
+
+      if (!datePattern.test(date)) {
+        setAddStatus("error");
+        setAddError("Date must be in YYYY-MM-DD format.");
+        return;
+      }
+
+      if (homeId === awayId) {
+        setAddStatus("error");
+        setAddError("Home and Away teams must be different.");
+        return;
+      }
+
+      try {
+        await createBowlGame([{
+          season,
+          bowl_id: bowlId,
+          sponsored_bowl_name: toNull(addForm.sponsoredName),
+          bowl_name: bowlName,
+          date,
+          time: toNull(addForm.time),
+          city: toNull(addForm.city),
+          state: toNull(addForm.state),
+          home_id: parseInt(homeId, 10),
+          away_id: parseInt(awayId, 10),
+          cfp: Boolean(addForm.cfp),
+          weight: toNumberOrNull(addForm.weight)
+        }]);
+        setAddStatus("saved");
+        setAddForm({
+          bowlId: "",
+          sponsoredName: "",
+          bowlName: "",
+          date: "",
+          time: "",
+          city: "",
+          state: "",
+          homeId: "",
+          awayId: "",
+          cfp: false,
+          weight: ""
+        });
+        if (typeof refresh === "function") refresh();
+      } catch (err) {
+        setAddStatus("error");
+        setAddError(err.message || "Failed to add bowl game.");
       }
     };
 
@@ -177,6 +316,9 @@
       const homeScore = parseScore(edits.homePts);
       const awayScore = parseScore(edits.awayPts);
       const winnerId = normalizeId(edits.winnerId);
+
+      const confirmLabel = String(game?.["Sponsored Bowl Name"] || game?.["Bowl Name"] || "this bowl");
+      if (!window.confirm(`Save result for ${confirmLabel}?`)) return;
 
       setGameStatus((prev) => ({ ...prev, [bowlId]: "saving" }));
       setGameErrors((prev) => ({ ...prev, [bowlId]: "" }));
@@ -215,12 +357,14 @@
     if (error) return <Err message={error?.message || "Failed to load league data."} />;
 
     return (
-      <div className="min-h-screen bg-slate-50">
-        <div className="max-w-6xl mx-auto px-4 py-8">
-          <div className="mb-6">
-            <h1 className="text-3xl font-extrabold text-slate-900">Admin Console</h1>
-            <p className="text-sm text-slate-500 mt-1">Hidden page for commissioner-only updates.</p>
+      <div className="flex flex-col min-h-screen bg-white font-sans pb-24">
+        <div className="bg-white pt-8 pb-6 px-4">
+          <div className="max-w-7xl mx-auto text-center">
+            <h2 className="text-3xl text-blue-900 font-bold mb-1">Admin Console</h2>
+            <p className="text-gray-600 text-sm">Hidden page for commissioner-only updates.</p>
           </div>
+        </div>
+        <div className="max-w-6xl mx-auto px-4 w-full">
 
           <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-8 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900 mb-4">Season Controls</h2>
@@ -261,7 +405,7 @@
             )}
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-8 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-slate-900">Pending Bowl Results</h2>
               <span className="text-xs text-slate-500">{pendingGames.length} games need results</span>
@@ -283,7 +427,7 @@
 
                   return (
                     <div key={bowlId} className="border border-slate-200 rounded-xl p-4">
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div>
                           <div className="text-sm font-semibold text-slate-900">{bowlName || "Bowl Game"}</div>
                           <div className="text-xs text-slate-500">{date}{date && time ? " · " : ""}{time}</div>
@@ -291,41 +435,45 @@
                             {teamLabel(awayId)} at {teamLabel(homeId)}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min="0"
-                            className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-sm"
-                            placeholder="Away"
-                            value={edits.awayPts ?? ""}
-                            onChange={(e) => handleGameChange(bowlId, "awayPts", e.target.value)}
-                          />
-                          <span className="text-xs text-slate-500">at</span>
-                          <input
-                            type="number"
-                            min="0"
-                            className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-sm"
-                            placeholder="Home"
-                            value={edits.homePts ?? ""}
-                            onChange={(e) => handleGameChange(bowlId, "homePts", e.target.value)}
-                          />
-                          <select
-                            className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
-                            value={edits.winnerId ?? ""}
-                            onChange={(e) => handleGameChange(bowlId, "winnerId", e.target.value)}
-                          >
-                            <option value="">Winner</option>
-                            <option value={awayId}>{teamLabel(awayId) || "Away"}</option>
-                            <option value={homeId}>{teamLabel(homeId) || "Home"}</option>
-                          </select>
-                          <button
-                            onClick={() => handleGameSave(game)}
-                            className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-500"
-                          >
-                            Save Result
-                          </button>
-                          {status === "saving" && <span className="text-xs text-slate-500">Saving...</span>}
-                          {status === "saved" && <span className="text-xs text-emerald-600">Saved</span>}
+                        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="0"
+                              className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                              placeholder="Away"
+                              value={edits.awayPts ?? ""}
+                              onChange={(e) => handleGameChange(bowlId, "awayPts", e.target.value)}
+                            />
+                            <span className="text-xs text-slate-500">at</span>
+                            <input
+                              type="number"
+                              min="0"
+                              className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                              placeholder="Home"
+                              value={edits.homePts ?? ""}
+                              onChange={(e) => handleGameChange(bowlId, "homePts", e.target.value)}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <select
+                              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm"
+                              value={edits.winnerId ?? ""}
+                              onChange={(e) => handleGameChange(bowlId, "winnerId", e.target.value)}
+                            >
+                              <option value="">Winner</option>
+                              <option value={awayId}>{teamLabel(awayId) || "Away"}</option>
+                              <option value={homeId}>{teamLabel(homeId) || "Home"}</option>
+                            </select>
+                            <button
+                              onClick={() => handleGameSave(game)}
+                              className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-500"
+                            >
+                              Save Result
+                            </button>
+                            {status === "saving" && <span className="text-xs text-slate-500">Saving...</span>}
+                            {status === "saved" && <span className="text-xs text-emerald-600">Saved</span>}
+                          </div>
                         </div>
                       </div>
                       {status === "error" && errMsg && (
@@ -337,6 +485,151 @@
               </div>
             )}
           </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-8 shadow-sm">
+            <h2 className="text-lg font-bold text-slate-900 mb-4">Add Bowl Game</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Season Year</label>
+                <input
+                  type="text"
+                  readOnly
+                  className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
+                  value={seasonYear || ""}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Bowl ID</label>
+                <input
+                  type="text"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={addForm.bowlId}
+                  onChange={(e) => handleAddChange("bowlId", e.target.value)}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Sponsored Bowl Name</label>
+                <input
+                  type="text"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={addForm.sponsoredName}
+                  onChange={(e) => handleAddChange("sponsoredName", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Bowl Name</label>
+                <input
+                  type="text"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={addForm.bowlName}
+                  onChange={(e) => handleAddChange("bowlName", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Date</label>
+                <input
+                  type="text"
+                  placeholder="YYYY-MM-DD"
+                  className="w-full min-w-0 max-w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  value={addForm.date}
+                  onChange={(e) => handleAddChange("date", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Time</label>
+                <input
+                  type="text"
+                  placeholder="7:30 PM"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={addForm.time}
+                  onChange={(e) => handleAddChange("time", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">City</label>
+                <input
+                  type="text"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={addForm.city}
+                  onChange={(e) => handleAddChange("city", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">State</label>
+                <input
+                  type="text"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={addForm.state}
+                  onChange={(e) => handleAddChange("state", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Home Team</label>
+                <select
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  value={addForm.homeId}
+                  onChange={(e) => handleAddChange("homeId", e.target.value)}
+                >
+                  <option value="">Select home team</option>
+                  {teamOptions.map((team) => (
+                    <option key={`home-${team.id}`} value={team.id}>
+                      {team.label} ({team.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Away Team</label>
+                <select
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  value={addForm.awayId}
+                  onChange={(e) => handleAddChange("awayId", e.target.value)}
+                >
+                  <option value="">Select away team</option>
+                  {teamOptions.map((team) => (
+                    <option key={`away-${team.id}`} value={team.id}>
+                      {team.label} ({team.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(addForm.cfp)}
+                    onChange={(e) => handleAddChange("cfp", e.target.checked)}
+                  />
+                  CFP Game
+                </label>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Weight</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={addForm.weight}
+                  onChange={(e) => handleAddChange("weight", e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                onClick={handleAddBowl}
+                className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+              >
+                Add Bowl Game
+              </button>
+              {addStatus === "saving" && <span className="text-xs text-slate-500">Saving...</span>}
+              {addStatus === "saved" && <span className="text-xs text-emerald-600">Saved</span>}
+            </div>
+            {addStatus === "error" && addError && (
+              <div className="mt-3 text-xs text-red-600">{addError}</div>
+            )}
+          </div>
+
+          
         </div>
       </div>
     );
