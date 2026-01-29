@@ -18,6 +18,8 @@
   RC.SUPABASE_BOWL_GAMES_TABLE = "bowl_games";
   RC.SUPABASE_PLAYERS_TABLE = "players";
   RC.SUPABASE_PICKS_BRACKET_TABLE = "picks_bracket";
+  RC.SUPABASE_FUNCTIONS_URL = "https://hylpkyymmtckliwlngdu.functions.supabase.co";
+  RC.CFBD_SYNC_FUNCTION = "cfbd-bowls-sync";
 
   // --- HELPER: CSV PARSER ---
   RC.parseCSV = function (text) {

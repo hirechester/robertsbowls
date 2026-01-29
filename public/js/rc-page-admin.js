@@ -33,6 +33,14 @@
     const [gameEdits, setGameEdits] = useState({});
     const [gameStatus, setGameStatus] = useState({});
     const [gameErrors, setGameErrors] = useState({});
+    const [cfbdStatus, setCfbdStatus] = useState("idle");
+    const [cfbdError, setCfbdError] = useState("");
+    const [cfbdUpdates, setCfbdUpdates] = useState([]);
+    const [cfbdApplyStatus, setCfbdApplyStatus] = useState({});
+    const [cfbdApplyErrors, setCfbdApplyErrors] = useState({});
+    const [oddsStatus, setOddsStatus] = useState("idle");
+    const [oddsMessage, setOddsMessage] = useState("");
+    const [oddsError, setOddsError] = useState("");
 
     const normalizeId = (val) => {
       const s = String(val ?? "").trim();
@@ -85,6 +93,76 @@
       setSeasonMode(Number.isFinite(mode) ? String(mode) : "");
     }, [appSettings]);
 
+    const coerceBool = (val) => {
+      if (typeof val === "boolean") return val;
+      const s = String(val ?? "").trim().toLowerCase();
+      if (!s) return null;
+      if (["1", "true", "yes", "y", "t"].includes(s)) return true;
+      if (["0", "false", "no", "n", "f"].includes(s)) return false;
+      return null;
+    };
+
+    const normalizeCfbdPayload = (raw) => {
+      const source = raw && raw.payload && typeof raw.payload === "object" ? raw.payload : raw;
+      const payload = {};
+      const aliases = {
+        bowl_id: "bowl_id",
+        bowlId: "bowl_id",
+        date: "date",
+        time: "time",
+        city: "city",
+        state: "state",
+        stadium: "stadium",
+        tv: "tv",
+        network: "tv",
+        home_id: "home_id",
+        homeId: "home_id",
+        away_id: "away_id",
+        awayId: "away_id",
+        home_pts: "home_pts",
+        homePts: "home_pts",
+        away_pts: "away_pts",
+        awayPts: "away_pts",
+        winner_id: "winner_id",
+        winnerId: "winner_id",
+        favorite_id: "favorite_id",
+        favoriteId: "favorite_id",
+        spread: "spread",
+        line: "spread",
+        over_under: "over_under",
+        overUnder: "over_under",
+        total: "over_under",
+        temp_text: "temp_text",
+        temp: "temp_text",
+        weather: "weather",
+        cfp: "cfp",
+        indoor: "indoor",
+        neutral: "neutral",
+        excitement: "excitement",
+        weight: "weight"
+      };
+
+      Object.keys(source || {}).forEach((key) => {
+        const mapped = aliases[key];
+        if (!mapped || mapped === "bowl_id") return;
+        const val = source[key];
+        if (val === undefined || val === null || String(val).trim() === "") return;
+        if (mapped === "cfp" || mapped === "indoor" || mapped === "neutral") {
+          const boolVal = coerceBool(val);
+          if (boolVal !== null) payload[mapped] = boolVal;
+          return;
+        }
+        payload[mapped] = val;
+      });
+
+      return payload;
+    };
+
+    const getCfbdBowlId = (raw) => {
+      const source = raw && raw.payload && typeof raw.payload === "object" ? raw.payload : raw;
+      return normalizeId(raw?.bowl_id ?? raw?.bowlId ?? source?.bowl_id ?? source?.bowlId);
+    };
+
     const pendingGames = useMemo(() => {
       if (!Array.isArray(bowlGames)) return [];
       return bowlGames.filter((game) => {
@@ -95,6 +173,17 @@
         return !winnerId || !hasScores;
       });
     }, [bowlGames]);
+
+    const cfbdPendingUpdates = useMemo(() => {
+      if (!Array.isArray(cfbdUpdates) || !cfbdUpdates.length) return [];
+      return cfbdUpdates.filter((update) => {
+        const bowlId = getCfbdBowlId(update);
+        if (!bowlId) return false;
+        const game = (bowlGames || []).find((g) => normalizeId(g?.["Bowl ID"]) === bowlId);
+        const winnerId = normalizeId(game?.["Winner ID"]);
+        return !winnerId;
+      });
+    }, [cfbdUpdates, bowlGames]);
 
     useEffect(() => {
       if (!pendingGames.length) return;
@@ -206,6 +295,191 @@
       if (s === "") return null;
       const n = parseInt(s, 10);
       return Number.isFinite(n) ? n : null;
+    };
+
+    const cfbdFieldLabels = {
+      date: "Date",
+      time: "Time",
+      city: "City",
+      state: "State",
+      stadium: "Stadium",
+      tv: "TV",
+      home_id: "Home ID",
+      away_id: "Away ID",
+      home_pts: "Home Pts",
+      away_pts: "Away Pts",
+      winner_id: "Winner ID",
+      favorite_id: "Favorite ID",
+      spread: "Spread",
+      over_under: "O/U",
+      temp_text: "Temp",
+      weather: "Weather",
+      cfp: "CFP",
+      indoor: "Indoor",
+      neutral: "Neutral",
+      excitement: "Excitement",
+      weight: "Weight"
+    };
+
+    const fetchCfbdUpdates = async () => {
+      setCfbdStatus("loading");
+      setCfbdError("");
+      setCfbdUpdates([]);
+
+      const season = parseInt(seasonYear, 10);
+      if (!Number.isFinite(season)) {
+        setCfbdStatus("error");
+        setCfbdError("Season year is missing or invalid.");
+        return;
+      }
+
+      const baseUrl = String(RC.SUPABASE_FUNCTIONS_URL || "").replace(/\/+$/, "");
+      const fnName = String(RC.CFBD_SYNC_FUNCTION || "").trim();
+      const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
+      if (!baseUrl || !fnName) {
+        setCfbdStatus("error");
+        setCfbdError("Supabase Functions URL or CFBD function name is missing in rc-config.js.");
+        return;
+      }
+      if (!publishableKey) {
+        setCfbdStatus("error");
+        setCfbdError("Supabase publishable key is missing.");
+        return;
+      }
+
+      try {
+        const code = String(adminCode || "").trim();
+        if (!code) throw new Error("Admin code is required.");
+        const res = await fetch(`${baseUrl}/${fnName}`, {
+          method: "POST",
+          headers: {
+            apikey: publishableKey,
+            Authorization: `Bearer ${publishableKey}`,
+            "Content-Type": "application/json",
+            "x-admin-code": code
+          },
+          body: JSON.stringify({ season })
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || "Failed to fetch CFBD updates.");
+        }
+        const data = await res.json();
+        const updates = Array.isArray(data?.updates) ? data.updates : [];
+        setCfbdUpdates(updates);
+        setCfbdStatus("ready");
+      } catch (err) {
+        setCfbdStatus("error");
+        setCfbdError(err.message || "Failed to fetch CFBD updates.");
+      }
+    };
+
+    const updateVegasOdds = async () => {
+      setOddsStatus("loading");
+      setOddsMessage("");
+      setOddsError("");
+
+      const season = parseInt(seasonYear, 10);
+      if (!Number.isFinite(season)) {
+        setOddsStatus("error");
+        setOddsError("Season year is missing or invalid.");
+        return;
+      }
+
+      const baseUrl = String(RC.SUPABASE_FUNCTIONS_URL || "").replace(/\/+$/, "");
+      const fnName = String(RC.CFBD_SYNC_FUNCTION || "").trim();
+      const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
+      if (!baseUrl || !fnName) {
+        setOddsStatus("error");
+        setOddsError("Supabase Functions URL or CFBD function name is missing in rc-config.js.");
+        return;
+      }
+      if (!publishableKey) {
+        setOddsStatus("error");
+        setOddsError("Supabase publishable key is missing.");
+        return;
+      }
+
+      try {
+        const code = String(adminCode || "").trim();
+        if (!code) throw new Error("Admin code is required.");
+        const res = await fetch(`${baseUrl}/${fnName}`, {
+          method: "POST",
+          headers: {
+            apikey: publishableKey,
+            Authorization: `Bearer ${publishableKey}`,
+            "Content-Type": "application/json",
+            "x-admin-code": code
+          },
+          body: JSON.stringify({ season, mode: "odds" })
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || "Failed to fetch CFBD odds.");
+        }
+        const data = await res.json();
+        const updates = Array.isArray(data?.updates) ? data.updates : [];
+        if (!updates.length) {
+          setOddsStatus("saved");
+          setOddsMessage("No odds updates returned.");
+          return;
+        }
+
+        let savedCount = 0;
+        let errorCount = 0;
+        for (const update of updates) {
+          const bowlId = getCfbdBowlId(update);
+          const payload = normalizeCfbdPayload(update);
+          if (!bowlId || !Object.keys(payload).length) continue;
+          try {
+            await updateBowlGame(season, bowlId, payload);
+            savedCount += 1;
+          } catch {
+            errorCount += 1;
+          }
+        }
+        setOddsStatus("saved");
+        setOddsMessage(`Updated odds for ${savedCount} bowls${errorCount ? ` (${errorCount} errors)` : ""}.`);
+        if (typeof refresh === "function") refresh();
+      } catch (err) {
+        setOddsStatus("error");
+        setOddsError(err.message || "Failed to update odds.");
+      }
+    };
+
+    const applyCfbdUpdate = async (update) => {
+      const season = parseInt(seasonYear, 10);
+      const bowlId = getCfbdBowlId(update);
+      if (!bowlId || !Number.isFinite(season)) {
+        setCfbdApplyStatus((prev) => ({ ...prev, [bowlId || "unknown"]: "error" }));
+        setCfbdApplyErrors((prev) => ({ ...prev, [bowlId || "unknown"]: "Missing bowl ID or season year." }));
+        return;
+      }
+      const payload = normalizeCfbdPayload(update);
+      if (!Object.keys(payload).length) {
+        setCfbdApplyStatus((prev) => ({ ...prev, [bowlId]: "error" }));
+        setCfbdApplyErrors((prev) => ({ ...prev, [bowlId]: "No update fields available for this bowl." }));
+        return;
+      }
+
+      setCfbdApplyStatus((prev) => ({ ...prev, [bowlId]: "saving" }));
+      setCfbdApplyErrors((prev) => ({ ...prev, [bowlId]: "" }));
+      try {
+        await updateBowlGame(season, bowlId, payload);
+        setCfbdApplyStatus((prev) => ({ ...prev, [bowlId]: "saved" }));
+        if (typeof refresh === "function") refresh();
+      } catch (err) {
+        setCfbdApplyStatus((prev) => ({ ...prev, [bowlId]: "error" }));
+        setCfbdApplyErrors((prev) => ({ ...prev, [bowlId]: err.message || "Failed to apply CFBD update." }));
+      }
+    };
+
+    const applyAllCfbdUpdates = async (updates) => {
+      if (!updates.length) return;
+      if (!window.confirm(`Apply CFBD updates for ${updates.length} bowls?`)) return;
+      for (const update of updates) {
+        await applyCfbdUpdate(update);
+      }
     };
 
     const handleSeasonSave = async () => {
@@ -569,6 +843,126 @@
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-8 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 text-lg">⚡</div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">CFBD Live Sync</h2>
+                  <p className="text-xs text-slate-500">Pull live game data, then approve updates to the bowl_games table.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchCfbdUpdates}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-500 shadow-sm"
+                >
+                  Fetch CFBD Updates
+                </button>
+                <button
+                  onClick={updateVegasOdds}
+                  className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500 shadow-sm"
+                >
+                  Update Vegas Odds
+                </button>
+                {cfbdPendingUpdates.length > 0 && (
+                  <button
+                    onClick={() => applyAllCfbdUpdates(cfbdPendingUpdates)}
+                    className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 shadow-sm"
+                  >
+                    Apply All
+                  </button>
+                )}
+              </div>
+            </div>
+            {cfbdStatus === "loading" && <div className="text-xs text-slate-500">Fetching updates...</div>}
+            {cfbdStatus === "error" && cfbdError && (
+              <div className="text-xs text-red-600">{cfbdError}</div>
+            )}
+            {oddsStatus === "loading" && <div className="text-xs text-slate-500">Updating odds...</div>}
+            {oddsStatus === "saved" && oddsMessage && (
+              <div className="text-xs text-emerald-600">{oddsMessage}</div>
+            )}
+            {oddsStatus === "error" && oddsError && (
+              <div className="text-xs text-red-600">{oddsError}</div>
+            )}
+            {cfbdStatus === "ready" && !cfbdUpdates.length && (
+              <div className="text-sm text-slate-500">No CFBD updates returned.</div>
+            )}
+            {cfbdUpdates.length > 0 && (
+              <div className="space-y-4">
+                {(() => {
+                  if (!cfbdPendingUpdates.length) {
+                    return (
+                      <div className="text-sm text-slate-500">
+                        All CFBD updates are already completed in the database.
+                      </div>
+                    );
+                  }
+
+                  return cfbdPendingUpdates.map((update, index) => {
+                    const bowlId = getCfbdBowlId(update) || `row-${index}`;
+                    const payload = normalizeCfbdPayload(update);
+                    const status = cfbdApplyStatus[bowlId] || "idle";
+                    const errMsg = cfbdApplyErrors[bowlId];
+                    const game = (bowlGames || []).find((g) => normalizeId(g?.["Bowl ID"]) === bowlId);
+                    const bowlName = String(game?.["Sponsored Bowl Name"] || game?.["Bowl Name"] || "").trim();
+                    const homeId = normalizeId(game?.["Home ID"]);
+                    const awayId = normalizeId(game?.["Away ID"]);
+
+                  return (
+                    <div key={bowlId} className="border border-slate-200 rounded-2xl p-4 md:p-5 bg-slate-50 shadow-sm">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="text-base font-bold text-slate-900">
+                            {bowlName || "Bowl Game"} {bowlId ? <span className="text-xs text-slate-500">({bowlId})</span> : null}
+                          </div>
+                          {(homeId || awayId) && (
+                            <div className="text-xs text-slate-600 mt-1">
+                              {teamLabel(awayId)} at {teamLabel(homeId)}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => applyCfbdUpdate(update)}
+                            className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 shadow-sm"
+                          >
+                            Apply Update
+                          </button>
+                          {status === "saving" && <span className="text-xs text-slate-500">Saving...</span>}
+                          {status === "saved" && <span className="text-xs text-emerald-600">Saved</span>}
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-700">
+                        {Object.keys(payload).length ? (
+                          Object.keys(payload).map((key) => {
+                            const label = cfbdFieldLabels[key] || key;
+                            const val = payload[key];
+                            const isTeamField = key === "winner_id" || key === "favorite_id" || key === "home_id" || key === "away_id";
+                            const display = isTeamField ? teamLabel(normalizeId(val)) || val : String(val);
+                            return (
+                              <div key={`${bowlId}-${key}`} className="flex items-center justify-between gap-2">
+                                <span className="font-semibold text-slate-500">{label}</span>
+                                <span className="text-slate-800">{display}</span>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="text-xs text-slate-500">No fields to apply.</div>
+                        )}
+                      </div>
+                      {status === "error" && errMsg && (
+                        <div className="mt-2 text-xs text-red-600">{errMsg}</div>
+                      )}
+                    </div>
+                  );
+                  });
+                })()}
               </div>
             )}
           </div>
