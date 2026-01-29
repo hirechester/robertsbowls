@@ -14,6 +14,7 @@
     const [seasonMode, setSeasonMode] = useState("");
     const [settingsStatus, setSettingsStatus] = useState("idle");
     const [settingsError, setSettingsError] = useState("");
+    const [adminCode, setAdminCode] = useState("");
     const [addForm, setAddForm] = useState({
       bowlId: "",
       sponsoredName: "",
@@ -79,9 +80,9 @@
     useEffect(() => {
       if (!appSettings) return;
       const year = getSettingInt(appSettings, "season_year");
-      const mode = getSettingText(appSettings, "season_mode");
+      const mode = getSettingInt(appSettings, "season_mode");
       setSeasonYear(Number.isFinite(year) ? String(year) : "");
-      setSeasonMode(mode);
+      setSeasonMode(Number.isFinite(mode) ? String(mode) : "");
     }, [appSettings]);
 
     const pendingGames = useMemo(() => {
@@ -116,6 +117,8 @@
       const baseUrl = String(RC.SUPABASE_URL || "").replace(/\/+$/, "");
       const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
       if (!baseUrl || !publishableKey) throw new Error("Supabase config is missing.");
+      const code = String(adminCode || "").trim();
+      if (!code) throw new Error("Admin code is required.");
       const table = RC.SUPABASE_APP_SETTINGS_TABLE || "app_settings";
       const url = `${baseUrl}/rest/v1/${table}?key=eq.${encodeURIComponent(key)}`;
       const res = await fetch(url, {
@@ -124,7 +127,8 @@
           apikey: publishableKey,
           Authorization: `Bearer ${publishableKey}`,
           "Content-Type": "application/json",
-          Prefer: "return=minimal"
+          Prefer: "return=minimal",
+          "x-admin-code": code
         },
         body: JSON.stringify(payload)
       });
@@ -139,6 +143,8 @@
       const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
       if (!baseUrl || !publishableKey) throw new Error("Supabase config is missing.");
       if (!season) throw new Error("Missing season year.");
+      const code = String(adminCode || "").trim();
+      if (!code) throw new Error("Admin code is required.");
       const table = RC.SUPABASE_BOWL_GAMES_TABLE || "bowl_games";
       const url = `${baseUrl}/rest/v1/${table}?season=eq.${encodeURIComponent(season)}&bowl_id=eq.${encodeURIComponent(bowlId)}`;
       const res = await fetch(url, {
@@ -147,7 +153,8 @@
           apikey: publishableKey,
           Authorization: `Bearer ${publishableKey}`,
           "Content-Type": "application/json",
-          Prefer: "return=minimal"
+          Prefer: "return=minimal",
+          "x-admin-code": code
         },
         body: JSON.stringify(payload)
       });
@@ -161,6 +168,8 @@
       const baseUrl = String(RC.SUPABASE_URL || "").replace(/\/+$/, "");
       const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
       if (!baseUrl || !publishableKey) throw new Error("Supabase config is missing.");
+      const code = String(adminCode || "").trim();
+      if (!code) throw new Error("Admin code is required.");
       const table = RC.SUPABASE_BOWL_GAMES_TABLE || "bowl_games";
       const url = `${baseUrl}/rest/v1/${table}`;
       const res = await fetch(url, {
@@ -169,7 +178,8 @@
           apikey: publishableKey,
           Authorization: `Bearer ${publishableKey}`,
           "Content-Type": "application/json",
-          Prefer: "return=minimal"
+          Prefer: "return=minimal",
+          "x-admin-code": code
         },
         body: JSON.stringify(payload)
       });
@@ -208,10 +218,15 @@
         setSettingsError("Enter a valid season year.");
         return;
       }
-      const modeText = String(seasonMode || "").trim();
+      const modeValue = parseInt(seasonMode, 10);
+      if (!Number.isFinite(modeValue)) {
+        setSettingsStatus("error");
+        setSettingsError("Select a valid season mode.");
+        return;
+      }
       try {
         await updateAppSetting("season_year", { value_int: year, value_text: null, value_bool: null });
-        await updateAppSetting("season_mode", { value_text: modeText, value_int: null, value_bool: null });
+        await updateAppSetting("season_mode", { value_int: modeValue, value_text: null, value_bool: null });
         setSettingsStatus("saved");
         if (typeof refresh === "function") refresh();
       } catch (err) {
@@ -396,6 +411,27 @@
           </div>
         </div>
         <div className="max-w-6xl mx-auto px-4 w-full">
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-8 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 text-lg">🔒</div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Admin Access</h2>
+                  <p className="text-xs text-slate-500">Required for all write actions on this page.</p>
+                </div>
+              </div>
+            </div>
+            <div className="max-w-md">
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Admin Code</label>
+              <input
+                type="password"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                value={adminCode}
+                onChange={(e) => setAdminCode(e.target.value)}
+                placeholder="Enter admin code"
+              />
+            </div>
+          </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-8 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
