@@ -1,5 +1,5 @@
 (() => {
-  const { useEffect, useMemo, useState } = React;
+  const { useEffect, useMemo, useRef, useState } = React;
   window.RC = window.RC || {};
   window.RC.pages = window.RC.pages || {};
   const RC = window.RC;
@@ -41,6 +41,14 @@
     const [oddsStatus, setOddsStatus] = useState("idle");
     const [oddsMessage, setOddsMessage] = useState("");
     const [oddsError, setOddsError] = useState("");
+    const [confirmState, setConfirmState] = useState({
+      open: false,
+      title: "Confirm action",
+      message: "",
+      confirmText: "Confirm",
+      cancelText: "Cancel"
+    });
+    const confirmResolverRef = useRef(null);
 
     const normalizeId = (val) => {
       const s = String(val ?? "").trim();
@@ -201,6 +209,27 @@
         return next;
       });
     }, [pendingGames]);
+
+    const requestConfirm = ({ title, message, confirmText, cancelText }) => {
+      return new Promise((resolve) => {
+        confirmResolverRef.current = resolve;
+        setConfirmState({
+          open: true,
+          title: title || "Confirm action",
+          message: message || "",
+          confirmText: confirmText || "Confirm",
+          cancelText: cancelText || "Cancel"
+        });
+      });
+    };
+
+    const closeConfirm = (result) => {
+      if (confirmResolverRef.current) {
+        confirmResolverRef.current(result);
+      }
+      confirmResolverRef.current = null;
+      setConfirmState((prev) => ({ ...prev, open: false }));
+    };
 
     const updateAppSetting = async (key, payload) => {
       const baseUrl = String(RC.SUPABASE_URL || "").replace(/\/+$/, "");
@@ -476,14 +505,24 @@
 
     const applyAllCfbdUpdates = async (updates) => {
       if (!updates.length) return;
-      if (!window.confirm(`Apply CFBD updates for ${updates.length} bowls?`)) return;
+      const ok = await requestConfirm({
+        title: "Apply CFBD updates?",
+        message: `Apply updates for ${updates.length} bowls?`,
+        confirmText: "Apply updates"
+      });
+      if (!ok) return;
       for (const update of updates) {
         await applyCfbdUpdate(update);
       }
     };
 
     const handleSeasonSave = async () => {
-      if (!window.confirm("Save season settings?")) return;
+      const ok = await requestConfirm({
+        title: "Save season settings?",
+        message: "These changes will update season year and mode immediately.",
+        confirmText: "Save settings"
+      });
+      if (!ok) return;
       setSettingsStatus("saving");
       setSettingsError("");
       const year = parseInt(seasonYear, 10);
@@ -514,7 +553,12 @@
     };
 
     const handleAddBowl = async () => {
-      if (!window.confirm("Add this bowl game?")) return;
+      const ok = await requestConfirm({
+        title: "Add new bowl game?",
+        message: "This will create a new bowl entry for the current season.",
+        confirmText: "Add bowl"
+      });
+      if (!ok) return;
       setAddStatus("saving");
       setAddError("");
 
@@ -627,7 +671,12 @@
       let winnerId = normalizeId(edits.winnerId);
 
       const confirmLabel = String(game?.["Sponsored Bowl Name"] || game?.["Bowl Name"] || "this bowl");
-      if (!window.confirm(`Save result for ${confirmLabel}?`)) return;
+      const ok = await requestConfirm({
+        title: "Save game result?",
+        message: `Save result for ${confirmLabel}?`,
+        confirmText: "Save result"
+      });
+      if (!ok) return;
 
       setGameStatus((prev) => ({ ...prev, [bowlId]: "saving" }));
       setGameErrors((prev) => ({ ...prev, [bowlId]: "" }));
@@ -1120,6 +1169,46 @@
 
           
         </div>
+
+        {confirmState.open && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center px-4">
+            <div
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              onClick={() => closeConfirm(false)}
+            />
+            <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">{confirmState.title}</h3>
+                  {confirmState.message && (
+                    <p className="mt-2 text-sm text-slate-600">{confirmState.message}</p>
+                  )}
+                </div>
+                <button
+                  className="text-slate-400 hover:text-slate-600 text-xl leading-none"
+                  onClick={() => closeConfirm(false)}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="mt-6 flex flex-wrap justify-end gap-3">
+                <button
+                  className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                  onClick={() => closeConfirm(false)}
+                >
+                  {confirmState.cancelText}
+                </button>
+                <button
+                  className="rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-500"
+                  onClick={() => closeConfirm(true)}
+                >
+                  {confirmState.confirmText}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
