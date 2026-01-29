@@ -298,13 +298,33 @@
     };
 
     const handleGameChange = (bowlId, field, value) => {
-      setGameEdits((prev) => ({
-        ...prev,
-        [bowlId]: {
-          ...(prev[bowlId] || {}),
-          [field]: value
+      setGameEdits((prev) => {
+        const next = {
+          ...prev,
+          [bowlId]: {
+            ...(prev[bowlId] || {}),
+            [field]: value
+          }
+        };
+
+        if (field === "homePts" || field === "awayPts") {
+          const current = next[bowlId] || {};
+          const homeScore = parseScore(current.homePts);
+          const awayScore = parseScore(current.awayPts);
+          if (homeScore !== null && awayScore !== null) {
+            const game = (bowlGames || []).find((g) => normalizeId(g?.["Bowl ID"]) === bowlId);
+            const homeId = normalizeId(game?.["Home ID"]);
+            const awayId = normalizeId(game?.["Away ID"]);
+            if (homeScore === awayScore) {
+              next[bowlId].winnerId = "";
+            } else {
+              next[bowlId].winnerId = homeScore > awayScore ? homeId : awayId;
+            }
+          }
         }
-      }));
+
+        return next;
+      });
     };
 
     const handleGameSave = async (game) => {
@@ -315,7 +335,7 @@
       const awayId = normalizeId(game?.["Away ID"]);
       const homeScore = parseScore(edits.homePts);
       const awayScore = parseScore(edits.awayPts);
-      const winnerId = normalizeId(edits.winnerId);
+      let winnerId = normalizeId(edits.winnerId);
 
       const confirmLabel = String(game?.["Sponsored Bowl Name"] || game?.["Bowl Name"] || "this bowl");
       if (!window.confirm(`Save result for ${confirmLabel}?`)) return;
@@ -328,11 +348,22 @@
         setGameErrors((prev) => ({ ...prev, [bowlId]: "Missing bowl ID or season year." }));
         return;
       }
-      if (homeScore === null || awayScore === null || !winnerId) {
+      if (homeScore === null || awayScore === null) {
         setGameStatus((prev) => ({ ...prev, [bowlId]: "error" }));
-        setGameErrors((prev) => ({ ...prev, [bowlId]: "Enter home/away scores and select a winner." }));
+        setGameErrors((prev) => ({ ...prev, [bowlId]: "Enter home and away scores." }));
         return;
       }
+
+      if (homeScore === awayScore) {
+        setGameStatus((prev) => ({ ...prev, [bowlId]: "error" }));
+        setGameErrors((prev) => ({ ...prev, [bowlId]: "Scores cannot be tied." }));
+        return;
+      }
+
+      if (!winnerId) {
+        winnerId = homeScore > awayScore ? homeId : awayId;
+      }
+
       if (winnerId !== homeId && winnerId !== awayId) {
         setGameStatus((prev) => ({ ...prev, [bowlId]: "error" }));
         setGameErrors((prev) => ({ ...prev, [bowlId]: "Winner must be the home or away team." }));
@@ -367,7 +398,15 @@
         <div className="max-w-6xl mx-auto px-4 w-full">
 
           <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-8 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-900 mb-4">Season Controls</h2>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 text-lg">🗓️</div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Season Controls</h2>
+                  <p className="text-xs text-slate-500">Set the active season year and mode.</p>
+                </div>
+              </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Season Year</label>
@@ -381,18 +420,21 @@
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Season Mode</label>
-                <input
-                  type="text"
-                  placeholder="preseason / in-season / final"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                <select
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
                   value={seasonMode}
                   onChange={(e) => setSeasonMode(e.target.value)}
-                />
+                >
+                  <option value="">Select a mode</option>
+                  <option value="1">1 - Preseason (picks open)</option>
+                  <option value="2">2 - In Season (live results)</option>
+                  <option value="3">3 - Final (season locked)</option>
+                </select>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 md:col-start-1 md:col-span-3">
                 <button
                   onClick={handleSeasonSave}
-                  className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-500 shadow-sm"
                 >
                   Save Season Settings
                 </button>
@@ -406,9 +448,17 @@
           </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-8 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-slate-900">Pending Bowl Results</h2>
-              <span className="text-xs text-slate-500">{pendingGames.length} games need results</span>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 text-lg">🏈</div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Pending Bowl Results</h2>
+                  <p className="text-xs text-slate-500">Finalize scores and winners as games go final.</p>
+                </div>
+              </div>
+              <span className="text-xs font-semibold uppercase tracking-widest text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1 rounded-full">
+                {pendingGames.length} pending
+              </span>
             </div>
             {!pendingGames.length ? (
               <div className="text-sm text-slate-500">All bowl results are complete.</div>
@@ -424,23 +474,33 @@
                   const time = String(game?.["Time"] || "").trim();
                   const status = gameStatus[bowlId] || "idle";
                   const errMsg = gameErrors[bowlId];
+                  const homeScore = parseScore(edits.homePts);
+                  const awayScore = parseScore(edits.awayPts);
+                  const winnerLabel = (homeScore !== null && awayScore !== null && homeScore !== awayScore)
+                    ? (homeScore > awayScore ? teamLabel(homeId) : teamLabel(awayId))
+                    : "";
 
                   return (
-                    <div key={bowlId} className="border border-slate-200 rounded-xl p-4">
+                    <div key={bowlId} className="border border-slate-200 rounded-2xl p-4 md:p-5 bg-gradient-to-br from-white via-slate-50 to-blue-50 shadow-md">
                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div>
-                          <div className="text-sm font-semibold text-slate-900">{bowlName || "Bowl Game"}</div>
+                          <div className="text-base font-bold text-slate-900">{bowlName || "Bowl Game"}</div>
                           <div className="text-xs text-slate-500">{date}{date && time ? " · " : ""}{time}</div>
                           <div className="text-xs text-slate-600 mt-1">
                             {teamLabel(awayId)} at {teamLabel(homeId)}
                           </div>
+                          {winnerLabel && (
+                            <div className="mt-2 text-xs font-semibold text-emerald-700">
+                              Winner: {winnerLabel}
+                            </div>
+                          )}
                         </div>
                         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
                           <div className="flex items-center gap-2">
                             <input
                               type="number"
                               min="0"
-                              className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                              className="w-24 rounded-lg border border-slate-300 bg-white px-3 py-2 text-base shadow-sm"
                               placeholder="Away"
                               value={edits.awayPts ?? ""}
                               onChange={(e) => handleGameChange(bowlId, "awayPts", e.target.value)}
@@ -449,25 +509,16 @@
                             <input
                               type="number"
                               min="0"
-                              className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                              className="w-24 rounded-lg border border-slate-300 bg-white px-3 py-2 text-base shadow-sm"
                               placeholder="Home"
                               value={edits.homePts ?? ""}
                               onChange={(e) => handleGameChange(bowlId, "homePts", e.target.value)}
                             />
                           </div>
                           <div className="flex items-center gap-2">
-                            <select
-                              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm"
-                              value={edits.winnerId ?? ""}
-                              onChange={(e) => handleGameChange(bowlId, "winnerId", e.target.value)}
-                            >
-                              <option value="">Winner</option>
-                              <option value={awayId}>{teamLabel(awayId) || "Away"}</option>
-                              <option value={homeId}>{teamLabel(homeId) || "Home"}</option>
-                            </select>
                             <button
                               onClick={() => handleGameSave(game)}
-                              className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-500"
+                              className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-500 shadow-sm"
                             >
                               Save Result
                             </button>
@@ -487,7 +538,15 @@
           </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-8 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-900 mb-4">Add Bowl Game</h2>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 text-lg">➕</div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Add Bowl Game</h2>
+                  <p className="text-xs text-slate-500">Create a new matchup for the current season.</p>
+                </div>
+              </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Season Year</label>
@@ -617,7 +676,7 @@
             <div className="mt-4 flex items-center gap-3">
               <button
                 onClick={handleAddBowl}
-                className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-500 shadow-sm"
               >
                 Add Bowl Game
               </button>
