@@ -163,6 +163,7 @@
       "Enrollment": row.enrollment ?? "",
       "Graduation Rate": row.graduation_rate ?? "",
       "Year Founded": row.year_founded ?? "",
+      "Recruiting Rank": row.recruiting_rank ?? "",
       "_source": "SUPABASE"
     }));
   }

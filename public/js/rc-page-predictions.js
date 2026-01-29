@@ -38,6 +38,7 @@
   const TEMPLATE_LIGHTER = "lighter";
   const TEMPLATE_DARKER = "darker";
   const TEMPLATE_GRAD = "grad";
+  const TEMPLATE_RECRUITING = "recruiting";
   const TEMPLATE_OLDEST = "oldest";
   const TEMPLATE_BUCEES = "bucees";
 
@@ -66,6 +67,7 @@
     [TEMPLATE_SMALLEST]: "Smaller School",
     [TEMPLATE_OLDEST]: "Oldest Institution",
     [TEMPLATE_GRAD]: "Higher Graduation Rate",
+    [TEMPLATE_RECRUITING]: "Higher Recruiting Class Rank",
     [TEMPLATE_ANIMAL]: "Animal Mascots",
     [TEMPLATE_HUMAN]: "Human Mascots",
     [TEMPLATE_SEC]: "SEC Teams",
@@ -100,6 +102,7 @@
     [TEMPLATE_SMALLEST]: "Chip on the shoulder season - picks the school with lower enrollment.",
     [TEMPLATE_OLDEST]: "They've been doing this longer than your grandparents - picks the school founded earlier.",
     [TEMPLATE_GRAD]: "Smarter teams make fewer mistakes - picks the school with the higher graduation rate.",
+    [TEMPLATE_RECRUITING]: "Talent wins games, and recruiting wins talent - picks the school with the higher recruiting class rank.",
     [TEMPLATE_ANIMAL]: "Never bet against nature - picks the team with an animal mascot, if there's only one.",
     [TEMPLATE_HUMAN]: "Opposable thumbs are an advantage - picks the team with a human mascot, if there's only one.",
     [TEMPLATE_SEC]: "The conference your uncle won't shut up about - picks the SEC team if exactly one is in the matchup.",
@@ -236,6 +239,14 @@
   const getTeamGradRate = (team) => {
     if (!team) return null;
     const raw = pickFirst(team, ["Graduation Rate", "Grad Rate", "GraduationRate", "GradRate"]);
+    if (!raw) return null;
+    const num = parseFloat(String(raw).replace(/[^0-9.+-]/g, ""));
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const getTeamRecruitingRank = (team) => {
+    if (!team) return null;
+    const raw = pickFirst(team, ["Recruiting Rank", "RecruitingRank", "Recruiting"]);
     if (!raw) return null;
     const num = parseFloat(String(raw).replace(/[^0-9.+-]/g, ""));
     return Number.isFinite(num) ? num : null;
@@ -567,6 +578,13 @@
       if (!Number.isFinite(awayRate) || !Number.isFinite(homeRate)) return "";
       if (awayRate === homeRate) return "";
       return awayRate > homeRate ? "away" : "home";
+    }
+    if (templateKey === TEMPLATE_RECRUITING) {
+      const awayRank = getTeamRecruitingRank(awayMeta.team);
+      const homeRank = getTeamRecruitingRank(homeMeta.team);
+      if (!Number.isFinite(awayRank) || !Number.isFinite(homeRank)) return "";
+      if (awayRank === homeRank) return "";
+      return awayRank > homeRank ? "away" : "home";
     }
     if (templateKey === TEMPLATE_OLDEST) {
       const awayYear = getTeamFounded(awayMeta.team);
@@ -1346,6 +1364,7 @@
                   <option value={TEMPLATE_SMALLEST}>Smaller School</option>
                   <option value={TEMPLATE_OLDEST}>Oldest Institution</option>
                   <option value={TEMPLATE_GRAD}>Higher Graduation Rate</option>
+                  <option value={TEMPLATE_RECRUITING}>Higher Recruiting Class Rank</option>
                   <option value={TEMPLATE_ANIMAL}>Animal Mascots</option>
                   <option value={TEMPLATE_HUMAN}>Human Mascots</option>
                   <option value={TEMPLATE_SEC}>SEC Teams</option>
