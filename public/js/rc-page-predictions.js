@@ -1282,7 +1282,7 @@
           <div className="pt-8 pb-8 px-4">
             <div className="max-w-7xl mx-auto text-center">
               <h2 className="text-3xl text-blue-900 font-bold mb-1">Predictions</h2>
-              <p className="text-gray-600 text-sm">Pick the Winners</p>
+              <p className="text-gray-600 text-sm">The family feud starts here.</p>
             </div>
           </div>
           <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">

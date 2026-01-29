@@ -73,6 +73,28 @@ const App = () => {
         const params = new URLSearchParams(window.location.search || "");
         return Boolean(params.get("poster"));
     }, []);
+    const { appSettings } = (window.RC && window.RC.data) ? window.RC.data.useLeagueData() : { appSettings: null };
+
+    const settingInt = (key) => {
+        const entry = appSettings && appSettings[key];
+        const raw = entry && (entry.value_int ?? entry.value_text);
+        const parsed = parseInt(raw, 10);
+        return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const seasonMode = settingInt("season_mode") || 2;
+
+    const defaultTab = useMemo(() => {
+        if (seasonMode === 1) return "predictions";
+        if (seasonMode === 3) return "wrapped";
+        return "home";
+    }, [seasonMode]);
+
+    const allowedTabs = useMemo(() => {
+        if (seasonMode === 1) return new Set(["predictions", "history", "admin"]);
+        if (seasonMode === 3) return new Set(["wrapped", "history", "admin"]);
+        return VALID_TABS;
+    }, [seasonMode]);
 
     useEffect(() => {
         const onHashChange = () => {
@@ -82,25 +104,30 @@ const App = () => {
         window.addEventListener('hashchange', onHashChange);
         return () => window.removeEventListener('hashchange', onHashChange);
     }, []);
+    useEffect(() => {
+        if (!allowedTabs.has(activeTab)) {
+            setActiveTab(defaultTab);
+        }
+    }, [activeTab, allowedTabs, defaultTab]);
     return (
         <div className={isPosterOnly ? "min-h-screen bg-white" : "min-h-screen bg-slate-900 pt-16"}>
-            {!isPosterOnly && <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />}
+            {!isPosterOnly && <Navigation activeTab={activeTab} setActiveTab={setActiveTab} seasonMode={seasonMode} defaultTab={defaultTab} />}
             <div className="min-h-screen bg-white">
-                {activeTab === 'home' && <HomePage />}
-                {activeTab === 'standings' && <StandingsPage />}
-                {activeTab === 'picks' && <PicksPage />}
-                {activeTab === 'race' && <RacePage />}
-                {activeTab === 'badges' && <BadgesPage />}
-                {activeTab === 'versus' && <VersusPage />}
-                {activeTab === 'simulator' && <SimulatorPage />}
-                {activeTab === 'scouting' && <ScoutingReportPage />}
-                {activeTab === 'history' && <HistoryPage />}
-                {activeTab === 'rules' && <RulesPage />}
-                {activeTab === 'bingo' && <BingoPage />}
-                {activeTab === 'daily' && <DailyPage />}
-                {activeTab === 'predictions' && <PredictionsPage />}
-                {activeTab === 'admin' && <AdminConsolePage />}
-                {activeTab === 'wrapped' && <WrappedPage />}
+                {activeTab === 'home' && allowedTabs.has('home') && <HomePage />}
+                {activeTab === 'standings' && allowedTabs.has('standings') && <StandingsPage />}
+                {activeTab === 'picks' && allowedTabs.has('picks') && <PicksPage />}
+                {activeTab === 'race' && allowedTabs.has('race') && <RacePage />}
+                {activeTab === 'badges' && allowedTabs.has('badges') && <BadgesPage />}
+                {activeTab === 'versus' && allowedTabs.has('versus') && <VersusPage />}
+                {activeTab === 'simulator' && allowedTabs.has('simulator') && <SimulatorPage />}
+                {activeTab === 'scouting' && allowedTabs.has('scouting') && <ScoutingReportPage />}
+                {activeTab === 'history' && allowedTabs.has('history') && <HistoryPage />}
+                {activeTab === 'rules' && allowedTabs.has('rules') && <RulesPage />}
+                {activeTab === 'bingo' && allowedTabs.has('bingo') && <BingoPage />}
+                {activeTab === 'daily' && allowedTabs.has('daily') && <DailyPage />}
+                {activeTab === 'predictions' && allowedTabs.has('predictions') && <PredictionsPage />}
+                {activeTab === 'admin' && allowedTabs.has('admin') && <AdminConsolePage />}
+                {activeTab === 'wrapped' && allowedTabs.has('wrapped') && <WrappedPage />}
             </div>
         </div>
     );
