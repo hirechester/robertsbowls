@@ -90,6 +90,76 @@
       setSeasonMode(Number.isFinite(mode) ? String(mode) : "");
     }, [appSettings]);
 
+    const coerceBool = (val) => {
+      if (typeof val === "boolean") return val;
+      const s = String(val ?? "").trim().toLowerCase();
+      if (!s) return null;
+      if (["1", "true", "yes", "y", "t"].includes(s)) return true;
+      if (["0", "false", "no", "n", "f"].includes(s)) return false;
+      return null;
+    };
+
+    const normalizeCfbdPayload = (raw) => {
+      const source = raw && raw.payload && typeof raw.payload === "object" ? raw.payload : raw;
+      const payload = {};
+      const aliases = {
+        bowl_id: "bowl_id",
+        bowlId: "bowl_id",
+        date: "date",
+        time: "time",
+        city: "city",
+        state: "state",
+        stadium: "stadium",
+        tv: "tv",
+        network: "tv",
+        home_id: "home_id",
+        homeId: "home_id",
+        away_id: "away_id",
+        awayId: "away_id",
+        home_pts: "home_pts",
+        homePts: "home_pts",
+        away_pts: "away_pts",
+        awayPts: "away_pts",
+        winner_id: "winner_id",
+        winnerId: "winner_id",
+        favorite_id: "favorite_id",
+        favoriteId: "favorite_id",
+        spread: "spread",
+        line: "spread",
+        over_under: "over_under",
+        overUnder: "over_under",
+        total: "over_under",
+        temp_text: "temp_text",
+        temp: "temp_text",
+        weather: "weather",
+        cfp: "cfp",
+        indoor: "indoor",
+        neutral: "neutral",
+        excitement: "excitement",
+        weight: "weight"
+      };
+
+      Object.keys(source || {}).forEach((key) => {
+        const mapped = aliases[key];
+        if (!mapped || mapped === "bowl_id") return;
+        const val = source[key];
+        if (val === undefined || val === null || String(val).trim() === "") return;
+        if (mapped === "cfp" || mapped === "indoor" || mapped === "neutral") {
+          const boolVal = coerceBool(val);
+          if (boolVal !== null) payload[mapped] = boolVal;
+          return;
+        }
+        payload[mapped] = val;
+      });
+
+      return payload;
+    };
+
+    const getCfbdBowlId = (raw) => {
+      const source = raw && raw.payload && typeof raw.payload === "object" ? raw.payload : raw;
+      return normalizeId(raw?.bowl_id ?? raw?.bowlId ?? source?.bowl_id ?? source?.bowlId);
+    };
+
     const pendingGames = useMemo(() => {
       if (!Array.isArray(bowlGames)) return [];
       return bowlGames.filter((game) => {
@@ -100,6 +170,17 @@
         return !winnerId || !hasScores;
       });
     }, [bowlGames]);
+
+    const cfbdPendingUpdates = useMemo(() => {
+      if (!Array.isArray(cfbdUpdates) || !cfbdUpdates.length) return [];
+      return cfbdUpdates.filter((update) => {
+        const bowlId = getCfbdBowlId(update);
+        if (!bowlId) return false;
+        const game = (bowlGames || []).find((g) => normalizeId(g?.["Bowl ID"]) === bowlId);
+        const winnerId = normalizeId(game?.["Winner ID"]);
+        return !winnerId;
+      });
+    }, [cfbdUpdates, bowlGames]);
 
     useEffect(() => {
       if (!pendingGames.length) return;
@@ -237,76 +318,6 @@
       weight: "Weight"
     };
 
-    const coerceBool = (val) => {
-      if (typeof val === "boolean") return val;
-      const s = String(val ?? "").trim().toLowerCase();
-      if (!s) return null;
-      if (["1", "true", "yes", "y", "t"].includes(s)) return true;
-      if (["0", "false", "no", "n", "f"].includes(s)) return false;
-      return null;
-    };
-
-    const normalizeCfbdPayload = (raw) => {
-      const source = raw && raw.payload && typeof raw.payload === "object" ? raw.payload : raw;
-      const payload = {};
-      const aliases = {
-        bowl_id: "bowl_id",
-        bowlId: "bowl_id",
-        date: "date",
-        time: "time",
-        city: "city",
-        state: "state",
-        stadium: "stadium",
-        tv: "tv",
-        network: "tv",
-        home_id: "home_id",
-        homeId: "home_id",
-        away_id: "away_id",
-        awayId: "away_id",
-        home_pts: "home_pts",
-        homePts: "home_pts",
-        away_pts: "away_pts",
-        awayPts: "away_pts",
-        winner_id: "winner_id",
-        winnerId: "winner_id",
-        favorite_id: "favorite_id",
-        favoriteId: "favorite_id",
-        spread: "spread",
-        line: "spread",
-        over_under: "over_under",
-        overUnder: "over_under",
-        total: "over_under",
-        temp_text: "temp_text",
-        temp: "temp_text",
-        weather: "weather",
-        cfp: "cfp",
-        indoor: "indoor",
-        neutral: "neutral",
-        excitement: "excitement",
-        weight: "weight"
-      };
-
-      Object.keys(source || {}).forEach((key) => {
-        const mapped = aliases[key];
-        if (!mapped || mapped === "bowl_id") return;
-        const val = source[key];
-        if (val === undefined || val === null || String(val).trim() === "") return;
-        if (mapped === "cfp" || mapped === "indoor" || mapped === "neutral") {
-          const boolVal = coerceBool(val);
-          if (boolVal !== null) payload[mapped] = boolVal;
-          return;
-        }
-        payload[mapped] = val;
-      });
-
-      return payload;
-    };
-
-    const getCfbdBowlId = (raw) => {
-      const source = raw && raw.payload && typeof raw.payload === "object" ? raw.payload : raw;
-      return normalizeId(raw?.bowl_id ?? raw?.bowlId ?? source?.bowl_id ?? source?.bowlId);
-    };
-
     const fetchCfbdUpdates = async () => {
       setCfbdStatus("loading");
       setCfbdError("");
@@ -387,10 +398,10 @@
       }
     };
 
-    const applyAllCfbdUpdates = async () => {
-      if (!cfbdUpdates.length) return;
-      if (!window.confirm(`Apply CFBD updates for ${cfbdUpdates.length} bowls?`)) return;
-      for (const update of cfbdUpdates) {
+    const applyAllCfbdUpdates = async (updates) => {
+      if (!updates.length) return;
+      if (!window.confirm(`Apply CFBD updates for ${updates.length} bowls?`)) return;
+      for (const update of updates) {
         await applyCfbdUpdate(update);
       }
     };
@@ -776,9 +787,9 @@
                 >
                   Fetch CFBD Updates
                 </button>
-                {cfbdUpdates.length > 0 && (
+                {cfbdPendingUpdates.length > 0 && (
                   <button
-                    onClick={applyAllCfbdUpdates}
+                    onClick={() => applyAllCfbdUpdates(cfbdPendingUpdates)}
                     className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 shadow-sm"
                   >
                     Apply All
@@ -795,15 +806,24 @@
             )}
             {cfbdUpdates.length > 0 && (
               <div className="space-y-4">
-                {cfbdUpdates.map((update, index) => {
-                  const bowlId = getCfbdBowlId(update) || `row-${index}`;
-                  const payload = normalizeCfbdPayload(update);
-                  const status = cfbdApplyStatus[bowlId] || "idle";
-                  const errMsg = cfbdApplyErrors[bowlId];
-                  const game = (bowlGames || []).find((g) => normalizeId(g?.["Bowl ID"]) === bowlId);
-                  const bowlName = String(game?.["Sponsored Bowl Name"] || game?.["Bowl Name"] || "").trim();
-                  const homeId = normalizeId(game?.["Home ID"]);
-                  const awayId = normalizeId(game?.["Away ID"]);
+                {(() => {
+                  if (!cfbdPendingUpdates.length) {
+                    return (
+                      <div className="text-sm text-slate-500">
+                        All CFBD updates are already completed in the database.
+                      </div>
+                    );
+                  }
+
+                  return cfbdPendingUpdates.map((update, index) => {
+                    const bowlId = getCfbdBowlId(update) || `row-${index}`;
+                    const payload = normalizeCfbdPayload(update);
+                    const status = cfbdApplyStatus[bowlId] || "idle";
+                    const errMsg = cfbdApplyErrors[bowlId];
+                    const game = (bowlGames || []).find((g) => normalizeId(g?.["Bowl ID"]) === bowlId);
+                    const bowlName = String(game?.["Sponsored Bowl Name"] || game?.["Bowl Name"] || "").trim();
+                    const homeId = normalizeId(game?.["Home ID"]);
+                    const awayId = normalizeId(game?.["Away ID"]);
 
                   return (
                     <div key={bowlId} className="border border-slate-200 rounded-2xl p-4 md:p-5 bg-slate-50 shadow-sm">
@@ -852,7 +872,8 @@
                       )}
                     </div>
                   );
-                })}
+                  });
+                })()}
               </div>
             )}
           </div>

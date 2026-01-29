@@ -24,6 +24,7 @@ type CfbdGame = {
   neutral_site?: boolean;
   neutralSite?: boolean;
   indoor?: boolean;
+  gameIndoors?: boolean;
   excitement_index?: number | string;
   excitementIndex?: number | string;
   tv?: string;
@@ -34,8 +35,10 @@ type CfbdLine = {
   id?: number | string;
   game_id?: number | string;
   gameId?: number | string;
+  lines?: CfbdLine[];
   provider?: string;
   providerName?: string;
+  formattedSpread?: string;
   spread?: number | string;
   homeSpread?: number | string;
   overUnder?: number | string;
@@ -61,9 +64,11 @@ type CfbdWeather = {
   gameId?: number | string;
   temperature?: number | string;
   temp?: number | string;
+  weatherCondition?: string;
   weather?: string;
   conditions?: string;
   condition?: string;
+  gameIndoors?: boolean;
 };
 
 const corsHeaders = {
@@ -104,36 +109,50 @@ function pickFirst<T>(list: T[] | undefined | null, predicate?: (item: T) => boo
   return list.find(predicate) ?? list[0] ?? null;
 }
 
-function parseDate(value: unknown): string | null {
+function formatDateEt(value: unknown): string | null {
   const s = String(value ?? "").trim();
   if (!s) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  if (s.includes("T")) {
-    return s.slice(0, 10);
-  }
-  return null;
+  const date = new Date(s);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const map: Record<string, string> = {};
+  parts.forEach((part) => {
+    if (part.type !== "literal") map[part.type] = part.value;
+  });
+  if (!map.year || !map.month || !map.day) return null;
+  return `${map.year}-${map.month}-${map.day}`;
 }
 
-function parseTime(value: unknown): string | null {
+function formatTimeEt(value: unknown): string | null {
   const s = String(value ?? "").trim();
-  if (!s || !s.includes("T")) return null;
-  const timePart = s.split("T")[1];
-  if (!timePart) return null;
-  const match = timePart.match(/^(\d{2}):(\d{2})/);
-  if (!match) return null;
-  const hour = Number.parseInt(match[1], 10);
-  const minute = match[2];
-  if (!Number.isFinite(hour)) return null;
-  const meridiem = hour >= 12 ? "PM" : "AM";
-  const hour12 = ((hour + 11) % 12) + 1;
-  return `${hour12}:${minute} ${meridiem}`;
+  if (!s) return null;
+  const date = new Date(s);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(date);
+  const map: Record<string, string> = {};
+  parts.forEach((part) => {
+    if (part.type !== "literal") map[part.type] = part.value;
+  });
+  if (!map.hour || !map.minute || !map.dayPeriod) return null;
+  return `${map.hour}:${map.minute} ${map.dayPeriod}`;
 }
 
 function selectLine(lines: CfbdLine[] | undefined | null): CfbdLine | null {
   if (!Array.isArray(lines) || !lines.length) return null;
   return pickFirst(lines, (line) => {
     const label = String(line.provider ?? line.providerName ?? "").toLowerCase();
-    return label.includes("consensus") || label.includes("average") || label.includes("vegas");
+    if (label.includes("consensus") || label.includes("average") || label.includes("vegas")) return true;
+    return false;
   });
 }
 
@@ -151,33 +170,57 @@ function selectWeather(entries: CfbdWeather[] | undefined | null): CfbdWeather |
 }
 
 function formatTemp(val: unknown): string | null {
+  if (val === null || val === undefined) return null;
   const n = toNumber(val);
-  if (n === null) return null;
-  return `${n}°`;
+  if (n !== null) return String(n);
+  const s = String(val).trim();
+  return s || null;
+}
+
+function extractGameId(entry: CfbdLine | CfbdMedia | CfbdWeather): string {
+  return normalizeId(entry.id ?? (entry as CfbdLine).game_id ?? (entry as CfbdLine).gameId);
+}
+
+function normalizeLineEntries(raw: CfbdLine[] | undefined | null): CfbdLine[] {
+  if (!Array.isArray(raw) || !raw.length) return [];
+  const flattened: CfbdLine[] = [];
+  raw.forEach((entry) => {
+    if (Array.isArray(entry?.lines) && entry.lines.length) {
+      entry.lines.forEach((line) => flattened.push({ ...line, game_id: entry.game_id ?? entry.gameId ?? entry.id }));
+    } else {
+      flattened.push(entry);
+    }
+  });
+  return flattened;
+}
+
+function parseFormattedSpread(val: unknown): number | null {
+  const s = String(val ?? "").trim();
+  if (!s) return null;
+  const match = s.match(/(-?\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const n = Number.parseFloat(match[1]);
+  return Number.isFinite(n) ? n : null;
 }
 
 function buildPayload(game: CfbdGame, lines: CfbdLine[] | null, media: CfbdMedia | null, weather: CfbdWeather | null) {
   const payload: Record<string, JsonValue> = {};
-  const date = parseDate(game.start_date ?? game.startDate);
-  const time = parseTime(game.start_date ?? game.startDate);
-  const venue = String(game.venue_name ?? game.venueName ?? game.venue ?? "").trim();
+  const date = formatDateEt(game.start_date ?? game.startDate);
+  const time = formatTimeEt(game.start_date ?? game.startDate);
   const city = String(game.city ?? "").trim();
   const state = String(game.state ?? "").trim();
-  const tv = String(media?.outlet ?? media?.outletName ?? media?.network ?? media?.tv ?? game.tv ?? game.network ?? "").trim();
   const homeId = normalizeId(game.home_id ?? game.homeId);
   const awayId = normalizeId(game.away_id ?? game.awayId);
   const homePts = toNumber(game.home_points ?? game.homePoints);
   const awayPts = toNumber(game.away_points ?? game.awayPoints);
   const neutral = game.neutral_site ?? game.neutralSite;
-  const indoor = game.indoor;
+  const indoor = game.indoor ?? game.gameIndoors ?? weather?.gameIndoors;
   const excitement = toNumber(game.excitement_index ?? game.excitementIndex);
 
   if (date) payload.date = date;
   if (time) payload.time = time;
   if (city) payload.city = city;
   if (state) payload.state = state;
-  if (venue) payload.stadium = venue;
-  if (tv) payload.tv = tv;
   if (homeId) payload.home_id = Number.parseInt(homeId, 10);
   if (awayId) payload.away_id = Number.parseInt(awayId, 10);
   if (homePts !== null) payload.home_pts = homePts;
@@ -191,7 +234,7 @@ function buildPayload(game: CfbdGame, lines: CfbdLine[] | null, media: CfbdMedia
 
   const line = selectLine(lines || undefined);
   if (line) {
-    const spread = toNumber(line.spread ?? line.homeSpread);
+    const spread = toNumber(line.homeSpread ?? line.spread) ?? parseFormattedSpread(line.formattedSpread);
     const overUnder = toNumber(line.overUnder ?? line.over_under ?? line.total);
     if (spread !== null) payload.spread = spread;
     if (overUnder !== null) payload.over_under = overUnder;
@@ -200,9 +243,12 @@ function buildPayload(game: CfbdGame, lines: CfbdLine[] | null, media: CfbdMedia
     }
   }
 
-  if (weather) {
+  if (typeof indoor === "boolean" && indoor) {
+    payload.temp_text = "Indoors";
+    payload.weather = "Indoors";
+  } else if (weather) {
     const tempText = formatTemp(weather.temperature ?? weather.temp);
-    const conditions = String(weather.weather ?? weather.conditions ?? weather.condition ?? "").trim();
+    const conditions = String(weather.weatherCondition ?? weather.weather ?? weather.conditions ?? weather.condition ?? "").trim();
     if (tempText) payload.temp_text = tempText;
     if (conditions) payload.weather = conditions;
   }
@@ -298,9 +344,11 @@ serve(async (req) => {
       fetchJson<CfbdWeather[]>(weatherUrl.toString(), cfbdHeaders).catch(() => []),
     ]);
 
+    const normalizedLines = normalizeLineEntries(lines || []);
+
     const linesById = new Map<string, CfbdLine[]>();
-    (lines || []).forEach((line) => {
-      const id = normalizeId(line.id ?? line.game_id ?? line.gameId);
+    normalizedLines.forEach((line) => {
+      const id = normalizeId(line.game_id ?? line.gameId ?? line.id);
       if (!id) return;
       if (!linesById.has(id)) linesById.set(id, []);
       linesById.get(id)?.push(line);
@@ -308,7 +356,7 @@ serve(async (req) => {
 
     const mediaById = new Map<string, CfbdMedia[]>();
     (media || []).forEach((entry) => {
-      const id = normalizeId(entry.id ?? entry.game_id ?? entry.gameId);
+      const id = extractGameId(entry);
       if (!id) return;
       if (!mediaById.has(id)) mediaById.set(id, []);
       mediaById.get(id)?.push(entry);
@@ -316,7 +364,7 @@ serve(async (req) => {
 
     const weatherById = new Map<string, CfbdWeather[]>();
     (weather || []).forEach((entry) => {
-      const id = normalizeId(entry.id ?? entry.game_id ?? entry.gameId);
+      const id = extractGameId(entry);
       if (!id) return;
       if (!weatherById.has(id)) weatherById.set(id, []);
       weatherById.get(id)?.push(entry);

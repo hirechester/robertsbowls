@@ -30,6 +30,7 @@ These are stored server-side only (do **not** put them in the database or client
 3) Name it `cfbd-bowls-sync`.
 4) Paste the contents of `supabase/functions/cfbd-bowls-sync/index.ts` into the editor.
 5) Save + Deploy.
+6) Any time you change `index.ts` locally, repeat steps 4–5 to update the deployed function.
 
 ## Optional: Deploy + test with the CLI
 If you later prefer the CLI, you can use these commands from the repo root.
