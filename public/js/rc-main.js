@@ -13,7 +13,7 @@ const { Navigation } = window.RC;
 
 // 0. HOME PAGE (loaded from js/rc-page-home.js)
 window.RC.pages = window.RC.pages || {};
-const { HomePage, StandingsPage, PicksPage, RacePage, BadgesPage, VersusPage, SimulatorPage, ScoutingReportPage, HistoryPage, RulesPage, BingoPage, DailyPage, PredictionsPage, AdminConsolePage } = window.RC.pages;
+const { HomePage, StandingsPage, PicksPage, RacePage, BadgesPage, VersusPage, SimulatorPage, ScoutingReportPage, HistoryPage, RulesPage, BingoPage, DailyPage, PredictionsPage, AdminConsolePage, WrappedPage } = window.RC.pages;
 
 // 1. STANDINGS PAGE (loaded from js/rc-page-standings.js)
 
@@ -56,7 +56,8 @@ const VALID_TABS = new Set([
     'rules',
     'daily',
     'predictions',
-    'admin'
+    'admin',
+    'wrapped'
 ]);
 
 const getInitialTab = () => {
@@ -99,6 +100,7 @@ const App = () => {
                 {activeTab === 'daily' && <DailyPage />}
                 {activeTab === 'predictions' && <PredictionsPage />}
                 {activeTab === 'admin' && <AdminConsolePage />}
+                {activeTab === 'wrapped' && <WrappedPage />}
             </div>
         </div>
     );
