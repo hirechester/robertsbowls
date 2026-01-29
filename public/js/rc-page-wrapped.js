@@ -79,11 +79,13 @@
     return out;
   };
 
-  const WrappedCard = ({ title, main, sub, line, theme, kicker, badge, detail, context }) => {
+  const WrappedCard = ({ title, main, sub, line, theme, kicker, badge, detail, context, patternClass }) => {
     return (
-      <div className="wrapped-card" style={{ "--card-bg": theme.bg, "--card-accent": theme.accent }}>
+      <div
+        className={`wrapped-card ${patternClass || ""}`}
+        style={{ "--card-bg": theme.bg, "--card-accent": theme.accent }}
+      >
         <span className="wrapped-orb orb-a" />
-        <span className="wrapped-orb orb-b" />
         {badge ? <div className="wrapped-badge">{badge}</div> : null}
         <div className="wrapped-kicker">{kicker || "League Highlight"}</div>
         <div className="wrapped-title">{title}</div>
@@ -793,6 +795,17 @@
       setCardOrder(order);
     }, [allCards, cardOrder]);
 
+    const patternClasses = [
+      "pattern-waves",
+      "pattern-grid",
+      "pattern-burst",
+      "pattern-pills",
+      "pattern-stripes",
+      "pattern-orbit",
+      "pattern-tilt",
+      "pattern-dots"
+    ];
+
     const orderedCards = useMemo(() => {
       if (!cardOrder || cardOrder.length !== allCards.length) return allCards;
       return cardOrder.map((idx) => allCards[idx]).filter(Boolean);
@@ -893,6 +906,101 @@
             overflow: hidden;
             border: 1px solid rgba(255,255,255,0.4);
           }
+          .wrapped-card::before,
+          .wrapped-card::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+          }
+          .wrapped-card::before {
+            opacity: 0.35;
+            mix-blend-mode: soft-light;
+          }
+          .wrapped-card::after {
+            opacity: 0.32;
+            mix-blend-mode: overlay;
+          }
+          .wrapped-orb {
+            background: rgba(255,255,255,0.6);
+          }
+          .pattern-waves::before {
+            background-image:
+              radial-gradient(circle at 20% 20%, rgba(255,255,255,0.8) 0 6px, transparent 7px),
+              repeating-linear-gradient(120deg, rgba(255,255,255,0.45) 0 10px, transparent 10px 24px);
+          }
+          .pattern-waves::after {
+            background-image:
+              repeating-radial-gradient(circle at 70% 75%, rgba(255,255,255,0.35) 0 10px, transparent 10px 24px);
+          }
+          .pattern-grid::before {
+            background-image:
+              linear-gradient(rgba(255,255,255,0.45) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(255,255,255,0.45) 1px, transparent 1px);
+            background-size: 24px 24px;
+          }
+          .pattern-grid::after {
+            background-image:
+              linear-gradient(rgba(255,255,255,0.25) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(255,255,255,0.25) 1px, transparent 1px);
+            background-size: 48px 48px;
+            transform: rotate(12deg);
+          }
+          .pattern-burst::before {
+            background-image:
+              repeating-conic-gradient(from 15deg, rgba(255,255,255,0.55) 0 12deg, transparent 12deg 24deg);
+            mask-image: radial-gradient(circle at 70% 30%, black 0 55%, transparent 70%);
+          }
+          .pattern-burst::after {
+            background-image:
+              radial-gradient(circle at 25% 80%, rgba(255,255,255,0.45) 0 120px, transparent 121px);
+          }
+          .pattern-pills::before {
+            background-image:
+              radial-gradient(circle at 15% 25%, rgba(255,255,255,0.65) 0 18px, transparent 19px),
+              radial-gradient(circle at 75% 70%, rgba(255,255,255,0.55) 0 22px, transparent 23px),
+              radial-gradient(circle at 45% 85%, rgba(255,255,255,0.5) 0 16px, transparent 17px);
+          }
+          .pattern-pills::after {
+            background-image:
+              radial-gradient(circle at 85% 20%, rgba(255,255,255,0.35) 0 28px, transparent 29px),
+              radial-gradient(circle at 35% 60%, rgba(255,255,255,0.35) 0 34px, transparent 35px);
+          }
+          .pattern-stripes::before {
+            background-image:
+              repeating-linear-gradient(135deg, rgba(255,255,255,0.45) 0 10px, transparent 10px 22px);
+          }
+          .pattern-stripes::after {
+            background-image:
+              repeating-linear-gradient(45deg, rgba(255,255,255,0.25) 0 6px, transparent 6px 16px);
+          }
+          .pattern-orbit::before {
+            background-image:
+              radial-gradient(circle at 30% 30%, transparent 0 42px, rgba(255,255,255,0.5) 42px 44px, transparent 45px),
+              radial-gradient(circle at 70% 70%, transparent 0 50px, rgba(255,255,255,0.45) 50px 52px, transparent 53px);
+          }
+          .pattern-orbit::after {
+            background-image:
+              radial-gradient(circle at 70% 30%, transparent 0 28px, rgba(255,255,255,0.35) 28px 30px, transparent 31px);
+          }
+          .pattern-tilt::before {
+            background-image:
+              linear-gradient(160deg, rgba(255,255,255,0.55) 0 26%, transparent 26% 100%);
+          }
+          .pattern-tilt::after {
+            background-image:
+              linear-gradient(330deg, rgba(255,255,255,0.35) 0 18%, transparent 18% 100%);
+          }
+          .pattern-dots::before {
+            background-image:
+              radial-gradient(rgba(255,255,255,0.6) 2px, transparent 2px);
+            background-size: 20px 20px;
+          }
+          .pattern-dots::after {
+            background-image:
+              radial-gradient(rgba(255,255,255,0.35) 3px, transparent 3px);
+            background-size: 44px 44px;
+          }
           .wrapped-orb {
             position: absolute;
             border-radius: 999px;
@@ -905,13 +1013,6 @@
             background: rgba(255,255,255,0.6);
             top: -50px;
             right: -60px;
-          }
-          .orb-b {
-            width: 120px;
-            height: 120px;
-            background: rgba(0,0,0,0.2);
-            bottom: -40px;
-            left: -20px;
           }
           .wrapped-badge {
             position: absolute;
@@ -1023,7 +1124,7 @@
         </div>
 
         <div className="wrapped-rail">
-          {orderedCards.map((card) => (
+          {orderedCards.map((card, idx) => (
             <WrappedCard
               key={card.__key}
               title={card.title}
@@ -1035,6 +1136,7 @@
               badge={card.badge}
               theme={themeForIndex(card.__themeIndex)}
               kicker={card.__kicker}
+              patternClass={patternClasses[idx % patternClasses.length]}
             />
           ))}
         </div>
