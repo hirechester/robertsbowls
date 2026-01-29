@@ -70,7 +70,16 @@
     return team?.["Team Nickname"] || team?.Nickname || team?.Mascot || "team";
   };
 
-  const WrappedCard = ({ title, main, sub, line, theme, kicker, badge }) => {
+  const shuffleArray = (arr) => {
+    const out = arr.slice();
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  };
+
+  const WrappedCard = ({ title, main, sub, line, theme, kicker, badge, detail, context }) => {
     return (
       <div className="wrapped-card" style={{ "--card-bg": theme.bg, "--card-accent": theme.accent }}>
         <span className="wrapped-orb orb-a" />
@@ -80,6 +89,8 @@
         <div className="wrapped-title">{title}</div>
         <div className="wrapped-main">{main}</div>
         {sub ? <div className="wrapped-sub">{sub}</div> : null}
+        {detail ? <div className="wrapped-detail">{detail}</div> : null}
+        {context ? <div className="wrapped-context">{context}</div> : null}
         {line ? <div className="wrapped-line">{line}</div> : null}
       </div>
     );
@@ -88,13 +99,19 @@
   const WrappedPage = () => {
     const { appSettings, schedule, picksIds, teamById, loading, error } = RC.data.useLeagueData();
     const [selectedPlayer, setSelectedPlayer] = useState("");
+    const [cardOrder, setCardOrder] = useState(null);
 
     const players = useMemo(() => {
-      return (picksIds || []).map(p => p?.Name).filter(Boolean);
+      return (picksIds || [])
+        .map(p => p?.Name)
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
     }, [picksIds]);
 
     useEffect(() => {
-      if (!selectedPlayer && players.length) setSelectedPlayer(players[0]);
+      if (selectedPlayer || !players.length) return;
+      const idx = Math.floor(Math.random() * players.length);
+      setSelectedPlayer(players[idx]);
     }, [players, selectedPlayer]);
 
     const computed = useMemo(() => {
@@ -551,6 +568,8 @@
           title: "Champion",
           main: `${champions} took it home`,
           sub: champRecord,
+          detail: totalPlayers ? `${totalPlayers} players battled all season` : "",
+          context: "Every bowl counted. Every pick mattered.",
           line: "Crowned with style and a little bit of chaos.",
           badge: "🏆"
         },
@@ -558,55 +577,82 @@
           title: "The Crowd Favorite",
           main: `${crowdFavoriteTeam} was picked the most`,
           sub: crowdPct ? `${crowdPct}% of all picks` : `${computed.crowdFavoriteCount || 0} total picks`,
-          line: "Family hive-mind, activated."
+          detail: computed.totalPickCount ? `${computed.totalPickCount} picks across the league` : "",
+          context: "When the family leans in, it leans hard.",
+          line: "Family hive-mind, activated.",
+          badge: "👥"
         },
         {
           title: "Shock of the Year",
           main: `${shockWinner} upset ${shockFavorite}`,
           sub: computed.shockSpread ? `${computed.shockSpread}-point underdog` : shockBowl,
-          line: "Nobody saw it. Somebody got it."
+          detail: shockBowl,
+          context: "This is where the bracket chaos began.",
+          line: "Nobody saw it. Somebody got it.",
+          badge: "⚡"
         },
         {
           title: "Everyone Agreed",
           main: `${cleanTeam} was a clean sweep`,
           sub: cleanBowl,
-          line: "Unanimous... and still stressful."
+          detail: "Unanimous picks across the league",
+          context: "A rare moment of total agreement.",
+          line: "Unanimous... and still stressful.",
+          badge: "✅"
         },
         {
           title: "Split the Room",
           main: `${splitPct} on ${getBowlName(computed.splitGame || {})}`,
           sub: "Closest split of the year",
-          line: "Group text went quiet for a while."
+          detail: "Right down the middle",
+          context: "This one divided the group chat.",
+          line: "Group text went quiet for a while.",
+          badge: "⚖️"
         },
         {
           title: "League MVP",
           main: `${mvpTeam} paid out ${computed.mvpCount || 0} times`,
           sub: "Most correct picks",
-          line: "You’ll be buying their merch by now."
+          detail: "Reliable all the way through",
+          context: "They were the league’s steady win.",
+          line: "You’ll be buying their merch by now.",
+          badge: "🏅"
         },
         {
           title: "Heartbreaker",
           main: `${heartbreakTeam} broke ${computed.heartbreakCount || 0} picks`,
           sub: "Most painful miss",
-          line: "We still talk about it at dinner."
+          detail: "The pick that haunted everyone",
+          context: "The upset that still stings.",
+          line: "We still talk about it at dinner.",
+          badge: "💔"
         },
         {
           title: "So Close",
           main: nailBowl,
           sub: nailMargin,
-          line: "Cardiac bowl. Classic."
+          detail: "Closest finish on the board",
+          context: "A finish you could feel in your bones.",
+          line: "Cardiac bowl. Classic.",
+          badge: "😅"
         },
         {
           title: "Conference Crown",
           main: `${computed.bestConf || "Conference"} went ${bestConfRecord}`,
           sub: "Best bowl record",
-          line: "Bragging rights secured."
+          detail: "Conference bragging rights",
+          context: "This year’s banner goes here.",
+          line: "Bragging rights secured.",
+          badge: "🏰"
         },
         {
           title: "Season Chaos",
           main: `${computed.chaosUpsets || 0} big upsets`,
           sub: chaosPct ? `${chaosPct}% against the spread` : "Chaos never slept",
-          line: "Predictable? Not even close."
+          detail: "The year the script broke",
+          context: "The picks kept you guessing.",
+          line: "Predictable? Not even close.",
+          badge: "🌪️"
         }
       ];
     }, [computed, teamById, totalPlayers]);
@@ -641,6 +687,8 @@
           title: "Your Season",
           main: `#${computed.playerStats.rank || "-"}`,
           sub: `${computed.playerStats.wins || 0}-${computed.playerStats.losses || 0} record`,
+          detail: selectedPlayer ? `Season recap for ${selectedPlayer}` : "",
+          context: "Every pick told your story.",
           line: "A season to remember.",
           badge: "✨"
         },
@@ -648,52 +696,107 @@
           title: "You Called It",
           main: signatureBowl,
           sub: signatureCount ? `Only ${signatureCount} got the ${signatureNickname} right` : `Only a few got ${signatureTeam} right`,
-          line: "You saw the twist coming."
+          detail: signatureBowl,
+          context: "Your boldest moment of the year.",
+          line: "You saw the twist coming.",
+          badge: "🔮"
         },
         {
           title: "Rode With",
           main: `${favoriteTeam} ${computed.favoriteTeamCount || 0} times`,
           sub: "Most-picked team",
-          line: "Loyalty pays... sometimes."
+          detail: "Your season-long ride or die",
+          context: "Loyalty is a strategy (mostly).",
+          line: "Loyalty pays... sometimes.",
+          badge: "🤝"
         },
         {
           title: "Nemesis",
           main: `${nemesisTeam} hurt you ${computed.nemesisCount || 0} times`,
           sub: "Most wrong picks",
-          line: "We all have that one team."
+          detail: "The team you couldn't quite shake",
+          context: "We all have that one team.",
+          line: "We all have that one team.",
+          badge: "😤"
         },
         {
           title: "Peak Form",
           main: `${computed.maxStreak || 0} straight wins`,
           sub: "Best run",
-          line: "You were unstoppable."
+          detail: "You were locked in",
+          context: "This stretch was pure magic.",
+          line: "You were unstoppable.",
+          badge: "🔥"
         },
         {
           title: "Go Your Own Way",
           main: `Against the crowd ${contrarianPct}%`,
           sub: "Boldest styles",
-          line: "Independent thinker energy."
+          detail: "Not afraid to zig",
+          context: "Independent thinker energy.",
+          line: "Independent thinker energy.",
+          badge: "🧭"
         },
         {
           title: "Sweaty Picks",
           main: closeCallLine,
           sub: "Nail-biters survived",
-          line: "Fingernails were harmed."
+          detail: "Your closest calls",
+          context: "The games that made you pace.",
+          line: "Fingernails were harmed.",
+          badge: "😬"
         },
         {
           title: "Your Moment",
           main: swingBowl,
           sub: computed.swingDelta > 0 ? `You beat ${computed.swingDelta} picks here` : "Season-swinger",
-          line: "The moment that moved you."
+          detail: "The pick that moved the needle",
+          context: "This one shifted the standings.",
+          line: "The moment that moved you.",
+          badge: "🎯"
         },
         {
           title: "Finish Strong",
           main: `${computed.finishWins || 0}/5 to close`,
           sub: "Clutch factor",
-          line: "Late-game heroics."
+          detail: "The final stretch",
+          context: "You brought it home late.",
+          line: "Late-game heroics.",
+          badge: "💪"
         }
       ];
-    }, [computed, teamById]);
+    }, [computed, teamById, selectedPlayer]);
+
+    const allCards = useMemo(() => {
+      const league = leagueCards.map((card, idx) => ({
+        ...card,
+        __key: `league-${card.title}`,
+        __themeIndex: idx,
+        __kicker: "League highlight"
+      }));
+      const playersList = playerCards.map((card, idx) => ({
+        ...card,
+        __key: `player-${card.title}-${idx}`,
+        __themeIndex: idx + 3,
+        __kicker: selectedPlayer || "Player spotlight"
+      }));
+      return [...league, ...playersList];
+    }, [leagueCards, playerCards, selectedPlayer]);
+
+    useEffect(() => {
+      if (!allCards.length) return;
+      if (cardOrder && cardOrder.length === allCards.length) return;
+      const championIndex = allCards.findIndex((card) => card.title === "Champion");
+      const indices = allCards.map((_, idx) => idx).filter((idx) => idx !== championIndex);
+      const shuffled = shuffleArray(indices);
+      const order = championIndex >= 0 ? [championIndex, ...shuffled] : shuffled;
+      setCardOrder(order);
+    }, [allCards, cardOrder]);
+
+    const orderedCards = useMemo(() => {
+      if (!cardOrder || cardOrder.length !== allCards.length) return allCards;
+      return cardOrder.map((idx) => allCards[idx]).filter(Boolean);
+    }, [allCards, cardOrder]);
 
     const { LoadingSpinner, ErrorMessage } = (RC.ui || {});
     const Spinner = LoadingSpinner || (() => <div className="p-6">Loading…</div>);
@@ -730,6 +833,18 @@
             z-index: 1;
             max-width: 980px;
             margin: 0 auto 24px;
+          }
+          .wrapped-hero-row {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+          }
+          @media (min-width: 768px) {
+            .wrapped-hero-row {
+              flex-direction: row;
+              align-items: flex-start;
+              justify-content: space-between;
+            }
           }
           .wrapped-kicker-text {
             font-family: "Space Grotesk", sans-serif;
@@ -768,7 +883,7 @@
             position: relative;
             flex: 0 0 auto;
             width: min(82vw, 360px);
-            min-height: 360px;
+            min-height: 500px;
             border-radius: 26px;
             padding: 24px 22px;
             background: var(--card-bg);
@@ -838,6 +953,18 @@
             margin-top: 10px;
             font-weight: 500;
           }
+          .wrapped-detail {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 14px;
+            margin-top: 8px;
+            opacity: 0.85;
+          }
+          .wrapped-context {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 13px;
+            margin-top: 6px;
+            opacity: 0.75;
+          }
           .wrapped-line {
             margin-top: auto;
             padding-top: 18px;
@@ -849,12 +976,11 @@
           .wrapped-select {
             position: relative;
             z-index: 1;
-            max-width: 980px;
-            margin: 0 auto 16px;
             display: flex;
             flex-direction: column;
             gap: 10px;
             font-family: "Space Grotesk", sans-serif;
+            min-width: min(280px, 100%);
           }
           .wrapped-select label {
             text-transform: uppercase;
@@ -870,82 +996,49 @@
             padding: 12px 14px;
             font-size: 16px;
           }
-          .wrapped-footer {
-            position: relative;
-            z-index: 1;
-            max-width: 980px;
-            margin: 28px auto 0;
-            font-family: "Space Grotesk", sans-serif;
-            color: rgba(248, 250, 252, 0.8);
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            justify-content: space-between;
-          }
-          .wrapped-pill {
-            background: rgba(248, 250, 252, 0.12);
-            border: 1px solid rgba(248, 250, 252, 0.2);
-            padding: 10px 16px;
-            border-radius: 999px;
-            font-size: 14px;
-          }
         `}</style>
 
         <div className="wrapped-hero">
-          <div className="wrapped-kicker-text">Roberts Cup Wrapped</div>
-          <h1 className="wrapped-hero-title">{seasonYear} Recap</h1>
-          <p className="wrapped-hero-sub">
-            The season you made personal. Swipe through the league’s loudest moments.
-          </p>
+          <div className="wrapped-hero-row">
+            <div>
+              <div className="wrapped-kicker-text">Roberts Cup Wrapped</div>
+              <h1 className="wrapped-hero-title">{seasonYear} Recap</h1>
+              <p className="wrapped-hero-sub">
+                The season you made personal. Swipe through the league’s most memorable moments.
+              </p>
+            </div>
+            <div className="wrapped-select">
+              <label htmlFor="wrapped-player">Choose a player</label>
+              <select
+                id="wrapped-player"
+                value={selectedPlayer}
+                onChange={(e) => setSelectedPlayer(e.target.value)}
+              >
+                {players.map((player) => (
+                  <option key={player} value={player}>{player}</option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
         <div className="wrapped-rail">
-          {leagueCards.map((card, idx) => (
+          {orderedCards.map((card) => (
             <WrappedCard
-              key={card.title}
+              key={card.__key}
               title={card.title}
               main={card.main}
               sub={card.sub}
+              detail={card.detail}
+              context={card.context}
               line={card.line}
               badge={card.badge}
-              theme={themeForIndex(idx)}
-              kicker="League highlight"
+              theme={themeForIndex(card.__themeIndex)}
+              kicker={card.__kicker}
             />
           ))}
         </div>
 
-        <div className="wrapped-select">
-          <label htmlFor="wrapped-player">Choose a player</label>
-          <select
-            id="wrapped-player"
-            value={selectedPlayer}
-            onChange={(e) => setSelectedPlayer(e.target.value)}
-          >
-            {players.map((player) => (
-              <option key={player} value={player}>{player}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="wrapped-rail">
-          {playerCards.map((card, idx) => (
-            <WrappedCard
-              key={`${card.title}-${idx}`}
-              title={card.title}
-              main={card.main}
-              sub={card.sub}
-              line={card.line}
-              badge={card.badge}
-              theme={themeForIndex(idx + 3)}
-              kicker={selectedPlayer || "Player spotlight"}
-            />
-          ))}
-        </div>
-
-        <div className="wrapped-footer">
-          <div className="wrapped-pill">Swipe for more</div>
-          <div className="wrapped-pill">Family picks, legendary vibes</div>
-        </div>
       </div>
     );
   };
