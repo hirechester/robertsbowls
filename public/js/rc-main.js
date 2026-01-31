@@ -83,6 +83,7 @@ const App = () => {
     };
 
     const seasonMode = settingInt("season_mode") || 2;
+    const seasonYear = settingInt("season_year");
 
     const defaultTab = useMemo(() => {
         if (seasonMode === 1) return "predictions";
@@ -104,6 +105,12 @@ const App = () => {
         window.addEventListener('hashchange', onHashChange);
         return () => window.removeEventListener('hashchange', onHashChange);
     }, []);
+    useEffect(() => {
+        if (!seasonYear) return;
+        const endTwo = String(seasonYear).slice(-2);
+        const startYear = seasonYear - 1;
+        document.title = `${startYear}-${endTwo} Roberts Cup`;
+    }, [seasonYear]);
     useEffect(() => {
         if (!allowedTabs.has(activeTab)) {
             setActiveTab(defaultTab);

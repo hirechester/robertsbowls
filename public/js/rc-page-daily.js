@@ -264,7 +264,20 @@
   };
 
   const DailyPage = () => {
-    const { schedule, bowlGames, picksIds, teamById, loading, error } = RC.data.useLeagueData();
+    const { appSettings, schedule, bowlGames, picksIds, teamById, loading, error } = RC.data.useLeagueData();
+    const seasonYear = useMemo(() => {
+      const entry = appSettings && appSettings["season_year"];
+      const raw = entry && (entry.value_int ?? entry.value_text);
+      const parsed = parseInt(raw, 10);
+      return Number.isFinite(parsed) ? parsed : null;
+    }, [appSettings]);
+    const seasonRange = useMemo(() => {
+      if (!seasonYear) return null;
+      const endTwo = String(seasonYear).slice(-2);
+      return `${seasonYear - 1}-${endTwo}`;
+    }, [seasonYear]);
+    const seasonLabelUpper = seasonRange ? `${seasonRange} SEASON` : "SEASON";
+    const seasonBadgeLabel = seasonRange ? `${seasonRange} Season` : "Season";
     const [html2CanvasReady, setHtml2CanvasReady] = useState(Boolean(window.html2canvas));
     const yesterdayPosterRef = useRef(null);
     const todayPosterRef = useRef(null);
@@ -1416,8 +1429,7 @@
       pillGrad.addColorStop(0, "rgba(251,191,36,0.2)");
       pillGrad.addColorStop(1, "rgba(251,191,36,0.0)");
       ctx.fillStyle = pillGrad;
-      const seasonLabel = "2025-26 SEASON";
-      const seasonTextWidth = ctx.measureText(seasonLabel).width;
+      const seasonTextWidth = ctx.measureText(seasonLabelUpper).width;
       const seasonPillWidth = Math.ceil(seasonTextWidth + 40);
       roundedRectPath(ctx, 64, 64, seasonPillWidth, 28, 14);
       ctx.fill();
@@ -1426,7 +1438,7 @@
 
       ctx.fillStyle = "#fbbf24";
       ctx.font = "800 14px 'Chivo', sans-serif";
-      drawTrackingText(ctx, seasonLabel, 80, 85, 4);
+      drawTrackingText(ctx, seasonLabelUpper, 80, 85, 4);
 
       const gold = ctx.createLinearGradient(72, 110, 360, 200);
       gold.addColorStop(0, "#fde68a");
@@ -1839,7 +1851,7 @@
                   <div className="daily-header-orb right"></div>
                   <div className="relative z-10 flex items-center justify-between gap-8">
                     <div className="flex flex-col gap-3">
-                      <div className="daily-badge">2025-26 Season</div>
+                      <div className="daily-badge">{seasonBadgeLabel}</div>
                       <div className="text-5xl font-black tracking-tight daily-header-title">Roberts Cup</div>
                       <div className="text-3xl font-semibold">Yesterday's Recap - {formatDisplayDateNoYear(yesterdayKey)}</div>
                     </div>
@@ -2054,7 +2066,7 @@
                   <div className="daily-header-orb right"></div>
                   <div className="relative z-10 flex items-center justify-between gap-8">
                     <div className="flex flex-col gap-3">
-                      <div className="daily-badge">2025-26 Season</div>
+                      <div className="daily-badge">{seasonBadgeLabel}</div>
                       <div className="text-5xl font-black tracking-tight daily-header-title">Roberts Cup</div>
                       <div className="text-3xl font-semibold">Today's Watch List - {formatDisplayDateNoYear(todayKey)}</div>
                     </div>
