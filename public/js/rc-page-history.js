@@ -7,7 +7,7 @@
   // 8. HISTORY PAGE
   const HistoryPage = () => {
     // Shared league data (loaded once per session by rc-data.js)
-    const { loading, error, hallOfFameByYear, teamById, peopleById, peopleByName, picksIds, bowlGames } = RC.data.useLeagueData();
+    const { loading, error, appSettings, hallOfFameByYear, teamById, peopleById, peopleByName, picksIds, bowlGames } = RC.data.useLeagueData();
     const [expandedYear, setExpandedYear] = useState(null);
     const [tableSort, setTableSort] = useState({ key: "rank", direction: "asc" });
     const [activeView, setActiveView] = useState("history");
@@ -24,6 +24,13 @@
       return Number.isFinite(n) ? String(n) : s;
     };
 
+    const getSettingInt = (settings, key) => {
+      const entry = settings && settings[key];
+      const raw = entry && (entry.value_int ?? entry.value_text);
+      const parsed = parseInt(raw, 10);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
     const resolveTeamName = (teamId) => {
       if (!teamId || !teamById) return "";
       const team = teamById[normalizeId(teamId)];
@@ -36,6 +43,19 @@
       const team = teamById[normalizeId(teamId)];
       if (!team) return "";
       return String(team["Team Nickname"] || team["Nickname"] || team["Nick Name"] || team["Mascot"] || "").trim();
+    };
+
+    const formatTeamWithSeed = (teamId) => {
+      if (!teamId || !teamById) return "—";
+      const team = teamById[normalizeId(teamId)];
+      if (!team) return "—";
+      const school = String(team["School Name"] || team["School"] || team["Team"] || team["Name"] || "").trim();
+      const nick = String(team["Team Nickname"] || team["Nickname"] || team["Nick Name"] || team["Mascot"] || "").trim();
+      const seed = String(team["Seed"] || team["Team Seed"] || team["Seed #"] || team["Seed Number"] || "").trim();
+      const rank = String(team["Ranking"] || team["Rank"] || team["AP Rank"] || team["AP Ranking"] || "").trim();
+      const prefix = seed ? `#${seed}` : (rank ? `#${rank}` : "");
+      const baseName = nick && school ? `${school} ${nick}` : (school || nick || "");
+      return baseName ? `${prefix ? `${prefix} ` : ""}${baseName}` : "—";
     };
 
     const resolvePlayerName = (raw) => {
@@ -110,6 +130,76 @@
       return { winners: outWinners, details: outDetails };
     }, [hallOfFameByYear, teamById, peopleById, peopleByName]);
 
+    const currentSeasonSummary = useMemo(() => {
+      const seasonMode = getSettingInt(appSettings, "season_mode");
+      const seasonYear = getSettingInt(appSettings, "season_year");
+      const rowsByYear = hallOfFameByYear instanceof Map ? hallOfFameByYear : new Map();
+      if (seasonMode !== 3 || !Number.isFinite(seasonYear) || !rowsByYear.size) return null;
+      let latestHallYear = null;
+      rowsByYear.forEach((_rows, year) => {
+        const yearNum = parseInt(year, 10);
+        if (!Number.isFinite(yearNum)) return;
+        if (latestHallYear === null || yearNum > latestHallYear) latestHallYear = yearNum;
+      });
+      if (!Number.isFinite(latestHallYear) || seasonYear !== latestHallYear + 1) return null;
+      if (!Array.isArray(bowlGames) || !Array.isArray(picksIds)) return null;
+
+      const completed = bowlGames.filter((g) => normalizeId(g?.["Winner ID"]));
+      if (!completed.length) return null;
+
+      const winsByPlayer = {};
+      const lossesByPlayer = {};
+      picksIds.forEach((player) => {
+        const name = String(player?.Name || "").trim();
+        if (!name) return;
+        winsByPlayer[name] = 0;
+        lossesByPlayer[name] = 0;
+        completed.forEach((game) => {
+          const bowlId = String(game?.["Bowl ID"] || "").trim();
+          if (!bowlId) return;
+          const winnerId = normalizeId(game?.["Winner ID"]);
+          if (!winnerId) return;
+          const pickId = normalizeId(player?.[bowlId]);
+          if (!pickId) return;
+          if (pickId === winnerId) winsByPlayer[name] += 1;
+          else lossesByPlayer[name] += 1;
+        });
+      });
+
+      const winValues = Object.values(winsByPlayer);
+      if (!winValues.length) return null;
+      const maxWins = Math.max(...winValues);
+      const champions = Object.keys(winsByPlayer).filter((name) => winsByPlayer[name] === maxWins);
+      if (!champions.length) return null;
+      const champName = champions.join(" & ");
+      const champRecord = `${winsByPlayer[champions[0]]}-${lossesByPlayer[champions[0]]}`;
+      const winTotal = winsByPlayer[champions[0]] + lossesByPlayer[champions[0]];
+      const winPct = winTotal > 0 ? (winsByPlayer[champions[0]] / winTotal) : null;
+
+      const sortedWins = Object.values(winsByPlayer).filter((v) => v < maxWins).sort((a, b) => b - a);
+      const runnerWins = sortedWins.length ? sortedWins[0] : null;
+      const runners = runnerWins === null ? [] : Object.keys(winsByPlayer).filter((name) => winsByPlayer[name] === runnerWins);
+      const runnerUpLabel = runners.length ? runners.join(", ") : "—";
+
+      const champGame = completed.find((g) => /national\s+championship/i.test(String(g?.["Bowl Name"] || g?.["Sponsored Bowl Name"] || g?.Bowl || "")));
+      const champBowlId = champGame ? String(champGame?.["Bowl ID"] || "").trim() : "";
+      const champPickId = champBowlId
+        ? normalizeId(picksIds.find(p => String(p?.Name || "").trim() === champions[0])?.[champBowlId])
+        : "";
+      const champTeamLabel = champPickId ? formatTeamWithSeed(champPickId) : "—";
+
+      return {
+        year: seasonYear,
+        winner: champName,
+        record: champRecord,
+        winPct,
+        champTeamLabel,
+        runnerUp: runnerUpLabel,
+        runnerUpCount: runners.length,
+        hasDetails: true
+      };
+    }, [appSettings, hallOfFameByYear, bowlGames, picksIds, teamById]);
+
     const historyData = useMemo(() => {
       const items = [];
       hallComputed.winners.forEach((winner, year) => {
@@ -129,10 +219,34 @@
         return { Year: String(year), Winner: winnerName, winNumber: winCounts[winnerName] };
       }).filter(Boolean);
 
+      if (currentSeasonSummary?.year && currentSeasonSummary?.winner) {
+        winCounts[currentSeasonSummary.winner] = (winCounts[currentSeasonSummary.winner] || 0) + 1;
+        listAsc.push({
+          Year: String(currentSeasonSummary.year),
+          Winner: currentSeasonSummary.winner,
+          winNumber: winCounts[currentSeasonSummary.winner]
+        });
+      }
+
       return listAsc.reverse();
-    }, [hallComputed]);
+    }, [hallComputed, currentSeasonSummary]);
 
     const hallDetailsByYear = hallComputed.details;
+    const hallDetailsByYearWithCurrent = useMemo(() => {
+      const map = new Map(hallDetailsByYear || []);
+      if (currentSeasonSummary?.year) {
+        map.set(currentSeasonSummary.year, {
+          record: currentSeasonSummary.record,
+          winPct: currentSeasonSummary.winPct,
+          champTeamLabel: currentSeasonSummary.champTeamLabel,
+          champion: currentSeasonSummary.winner,
+          runnerUp: currentSeasonSummary.runnerUp,
+          runnerUpCount: currentSeasonSummary.runnerUpCount,
+          hasDetails: true
+        });
+      }
+      return map;
+    }, [hallDetailsByYear, currentSeasonSummary]);
     const earliestHallYear = useMemo(() => {
       const rowsByYear = hallOfFameByYear instanceof Map ? hallOfFameByYear : new Map();
       if (!rowsByYear.size) return null;
@@ -307,7 +421,7 @@
         <div className="relative px-4 max-w-2xl mx-auto w-full"><div className="space-y-8">
           {historyData.map((item, index) => {
             const yearNum = parseInt(item.Year, 10);
-            const details = Number.isFinite(yearNum) ? hallDetailsByYear.get(yearNum) : null;
+            const details = Number.isFinite(yearNum) ? hallDetailsByYearWithCurrent.get(yearNum) : null;
             const hasDetails = !!details?.hasDetails;
             const isExpanded = hasDetails && expandedYear === yearNum;
             const cardClasses = [
