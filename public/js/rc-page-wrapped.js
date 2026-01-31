@@ -81,6 +81,12 @@
     return school || "Unknown";
   };
 
+  const getTeamLogo = (teamById, teamId) => {
+    const team = teamById?.[teamId];
+    if (!team) return "";
+    return String(team.Logo || team["Logo URL"] || team["Logo Url"] || team.LogoUrl || "").trim();
+  };
+
   const getTeamNickname = (teamById, teamId) => {
     const team = teamById?.[teamId];
     return team?.["Team Nickname"] || team?.Nickname || team?.Mascot || "team";
@@ -95,14 +101,20 @@
     return out;
   };
 
-  const WrappedCard = ({ title, main, sub, line, theme, kicker, badge, detail, context, patternClass }) => {
+  const WrappedCard = ({ title, main, sub, line, theme, kicker, badge, badgeLogo, badgeAlt, detail, context, patternClass }) => {
     return (
       <div
         className={`wrapped-card ${patternClass || ""}`}
         style={{ "--card-bg": theme.bg, "--card-accent": theme.accent }}
       >
         <span className="wrapped-orb orb-a" />
-        {badge ? <div className="wrapped-badge">{badge}</div> : null}
+        {(badgeLogo || badge) ? (
+          <div className="wrapped-badge">
+            {badgeLogo ? (
+              <img src={badgeLogo} alt={badgeAlt || "Team logo"} className="wrapped-badge-logo" loading="lazy" />
+            ) : badge}
+          </div>
+        ) : null}
         <div className="wrapped-kicker">{kicker || "League Highlight"}</div>
         <div className="wrapped-title">{title}</div>
         <div className="wrapped-main">{main}</div>
@@ -644,10 +656,22 @@
       const crowdFavoriteTeam = computed.crowdFavoriteTeamId
         ? getTeamName(teamById, computed.crowdFavoriteTeamId)
         : "No favorite yet";
+      const crowdFavoriteLogo = computed.crowdFavoriteTeamId
+        ? getTeamLogo(teamById, computed.crowdFavoriteTeamId)
+        : "";
 
       const heartbreakTeam = computed.heartbreakTeamId
         ? getTeamName(teamById, computed.heartbreakTeamId)
         : "TBD";
+      const heartbreakLogo = computed.heartbreakTeamId
+        ? getTeamLogo(teamById, computed.heartbreakTeamId)
+        : "";
+      const shockWinnerLogo = shockWinnerId ? getTeamLogo(teamById, shockWinnerId) : "";
+      const mostPickedLogo = mostPickedTeamId ? getTeamLogo(teamById, mostPickedTeamId) : "";
+      const blowoutLogo = blowoutWinnerId ? getTeamLogo(teamById, blowoutWinnerId) : "";
+      const nailWinnerId = normalizeId(computed.nailBiterGame?.["Winner ID"]);
+      const nailWinnerLogo = nailWinnerId ? getTeamLogo(teamById, nailWinnerId) : "";
+      const nailWinnerName = nailWinnerId ? getTeamName(teamById, nailWinnerId) : "Winner";
 
       return [
         {
@@ -666,7 +690,9 @@
           detail: computed.champPickTotal ? `${computed.champPickTotal} total championship picks` : "",
           context: "Your most popular title prediction.",
           line: "The trophy choice everyone loved.",
-          badge: "👥"
+          badge: "👥",
+          badgeLogo: crowdFavoriteLogo,
+          badgeAlt: crowdFavoriteTeam
         },
         {
           title: "Shock of the Year",
@@ -675,7 +701,9 @@
           detail: shockBowl,
           context: "This is where the bracket chaos began.",
           line: "Nobody saw it. Somebody got it.",
-          badge: "⚡"
+          badge: "⚡",
+          badgeLogo: shockWinnerLogo,
+          badgeAlt: shockWinner
         },
         {
           title: "Most Picked Game",
@@ -684,7 +712,9 @@
           detail: computed.mostPickedCount ? `${computed.mostPickedCount} picks in one game` : "Top pick total",
           context: "The biggest pile-on of the season.",
           line: "This one drew the largest crowd.",
-          badge: "✅"
+          badge: "✅",
+          badgeLogo: mostPickedLogo,
+          badgeAlt: mostPickedTeam
         },
         {
           title: "Blowout Bowl",
@@ -693,7 +723,9 @@
           detail: "Biggest final score gap",
           context: "One team never looked back.",
           line: `${blowoutTeam} ran away with it.`,
-          badge: "💥"
+          badge: "💥",
+          badgeLogo: blowoutLogo,
+          badgeAlt: blowoutTeam
         },
         {
           title: "Split the Room",
@@ -711,7 +743,9 @@
           detail: "The pick that haunted everyone",
           context: "The upset that still stings.",
           line: "We still talk about it at dinner.",
-          badge: "💔"
+          badge: "💔",
+          badgeLogo: heartbreakLogo,
+          badgeAlt: heartbreakTeam
         },
         {
           title: "So Close",
@@ -720,7 +754,9 @@
           detail: "Closest finish on the board",
           context: "A finish you could feel in your bones.",
           line: "Cardiac bowl. Classic.",
-          badge: "😅"
+          badge: "😅",
+          badgeLogo: nailWinnerLogo,
+          badgeAlt: nailWinnerName
         },
         {
           title: "Conference Crown",
@@ -748,6 +784,7 @@
       const signatureTeamId = normalizeId(computed.signatureGame?.["Winner ID"]);
       const signatureTeam = signatureTeamId ? getTeamName(teamById, signatureTeamId) : "that team";
       const signatureNickname = signatureTeamId ? getTeamNickname(teamById, signatureTeamId) : "team";
+      const signatureLogo = signatureTeamId ? getTeamLogo(teamById, signatureTeamId) : "";
       const signatureCount = computed.signatureCount && Number.isFinite(computed.signatureCount) ? computed.signatureCount : null;
 
       const mostSharedPlayer = computed.mostSharedPlayer || "No pick twin yet";
@@ -775,7 +812,7 @@
           detail: selectedPlayer ? `Season recap for ${selectedPlayer}` : "",
           context: "Every pick told your story.",
           line: "A season to remember.",
-          badge: "✨"
+          badge: "🎬"
         },
         {
           title: "Early Bird",
@@ -793,7 +830,9 @@
           detail: signatureBowl,
           context: "Your boldest moment of the year.",
           line: "You saw the twist coming.",
-          badge: "🔮"
+          badge: "🔮",
+          badgeLogo: signatureLogo,
+          badgeAlt: signatureTeam
         },
         {
           title: "Rode With",
@@ -1126,6 +1165,12 @@
             border-radius: 16px;
             box-shadow: 0 12px 18px rgba(0,0,0,0.2);
           }
+          .wrapped-badge-logo {
+            width: 30px;
+            height: 30px;
+            object-fit: contain;
+            filter: drop-shadow(0 3px 6px rgba(15,23,42,0.25));
+          }
           .wrapped-kicker {
             font-family: "Space Grotesk", sans-serif;
             font-size: 11px;
@@ -1232,6 +1277,8 @@
               context={card.context}
               line={card.line}
               badge={card.badge}
+              badgeLogo={card.badgeLogo}
+              badgeAlt={card.badgeAlt}
               theme={themeForIndex(card.__themeIndex)}
               kicker={card.__kicker}
               patternClass={patternClasses[idx % patternClasses.length]}
