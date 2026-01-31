@@ -84,7 +84,7 @@ const Navigation = ({ activeTab, setActiveTab, seasonMode, defaultTab }) => {
             const order = ["wrapped", "history"];
             return order.map(id => MENU_ITEMS.find(item => item.id === id)).filter(Boolean);
         }
-        return MENU_ITEMS.filter((item) => item.id !== "admin");
+        return MENU_ITEMS.filter((item) => item.id !== "admin" && item.id !== "wrapped" && item.id !== "predictions");
     })();
 
     return (
