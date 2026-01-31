@@ -12,9 +12,18 @@
 
   // --- STANDINGS PAGE ---
   const StandingsPage = () => {
-    const { schedule, picks, picksIds, history, teamById, loading, error, refresh, lastUpdated } = RC.data.useLeagueData();
+    const { schedule, picks, picksIds, history, teamById, players, hallOfFameByYear, peopleById, peopleByName, loading, error, refresh, lastUpdated } = RC.data.useLeagueData();
     const [standings, setStandings] = useState([]);
     const [sortConfig, setSortConfig] = useState({ key: 'wins', direction: 'descending' });
+    const [filterValue, setFilterValue] = useState("All");
+
+    const normalizeKey = (val) => {
+        const s = String(val ?? "").trim();
+        if (!s) return "";
+        if (!/^\d+$/.test(s)) return s;
+        const n = parseInt(s, 10);
+        return Number.isFinite(n) ? String(n) : s;
+    };
 
     const formatTeamWithSeed = (team, fallback) => {
         if (!team) return fallback || "-";
@@ -223,6 +232,7 @@
 
                 return {
                     name: playerIds.Name,
+                    playerId: String(playerIds["Player ID"] || "").trim(),
                     wins,
                     losses,
                     percentage: (wins + losses > 0 ? (wins / (wins + losses)).toFixed(3) : ".000").replace('0.', '.'),
@@ -295,6 +305,86 @@
         }
     }, [schedule, picksIds, picks, teamById]);
 
+    const playerMetaById = useMemo(() => {
+        const map = {};
+        (players || []).forEach((row) => {
+            const id = String(row?.id ?? "").trim();
+            if (!id) return;
+            map[id] = {
+                familyLevel: String(row?.family_level ?? "").trim(),
+                gender: String(row?.gender ?? "").trim(),
+                familyUnit: String(row?.family_unit ?? "").trim()
+            };
+        });
+        return map;
+    }, [players]);
+
+    const hallMeta = useMemo(() => {
+        const winnersById = new Set();
+        const winnersByName = new Set();
+        const participantsById = new Set();
+        const participantsByName = new Set();
+        const rowsByYear = hallOfFameByYear instanceof Map ? hallOfFameByYear : new Map();
+        if (!rowsByYear.size) {
+            return { winnersById, winnersByName, participantsById, participantsByName };
+        }
+
+        const resolveName = (raw) => {
+            const rawStr = String(raw || "").trim();
+            if (!rawStr) return "";
+            const idKey = normalizeKey(rawStr);
+            if (peopleById && peopleById[idKey]) return peopleById[idKey];
+            const lower = rawStr.toLowerCase();
+            const matches = peopleByName && peopleByName[lower];
+            if (matches && matches.length === 1) return matches[0];
+            return rawStr;
+        };
+
+        rowsByYear.forEach((rows) => {
+            (rows || []).forEach((row) => {
+                const raw = row?.playerRaw;
+                const rawStr = String(raw || "").trim();
+                if (!rawStr) return;
+                const idKey = normalizeKey(rawStr);
+                if (idKey) participantsById.add(idKey);
+                const name = resolveName(rawStr);
+                if (name) participantsByName.add(String(name).toLowerCase());
+                if (row?.title) {
+                    if (idKey) winnersById.add(idKey);
+                    if (name) winnersByName.add(String(name).toLowerCase());
+                }
+            });
+        });
+
+        return { winnersById, winnersByName, participantsById, participantsByName };
+    }, [hallOfFameByYear, peopleById, peopleByName]);
+
+    const familyGenerationOptions = [
+        { label: "The Grandparents", value: "grandparent" },
+        { label: "The Adults", value: "adult" },
+        { label: "The Grandkids", value: "grandkid" }
+    ];
+
+    const familyUnitOptions = [
+        { label: "Nana & Papa", value: "1" },
+        { label: "Grant & Maria", value: "2" },
+        { label: "Chester & Maria", value: "3" },
+        { label: "Frank & Kaitlyn", value: "4" },
+        { label: "Trent & Hilary", value: "5" },
+        { label: "Grace & Andrew", value: "6" }
+    ];
+
+    const genderOptions = [
+        { label: "Gentlemen", value: "M" },
+        { label: "Ladies", value: "F" }
+    ];
+
+    const legacyOptions = [
+        { label: "Returning Champs", value: "returning" },
+        { label: "Chasing a Cup", value: "chasing" },
+        { label: "Newbies", value: "newbies" }
+    ];
+
     const sortedData = useMemo(() => {
         let sortableItems = [...standings];
         if (sortConfig !== null) {
@@ -334,6 +424,35 @@
         }
         return sortableItems;
     }, [standings, sortConfig]);
+
+    const filteredData = useMemo(() => {
+        if (!filterValue || filterValue === "All") return sortedData;
+        const [group, rawValue] = String(filterValue).split(":", 2);
+        const target = String(rawValue || "").trim().toLowerCase();
+        if (!group || !target) return sortedData;
+        return sortedData.filter((player) => {
+            const pid = String(player.playerId || "").trim();
+            const meta = pid ? playerMetaById[pid] : null;
+            const nameKey = String(player.name || "").trim().toLowerCase();
+            if (!meta) return false;
+            const val = (() => {
+                if (group === "level") return meta.familyLevel;
+                if (group === "gender") return meta.gender;
+                if (group === "unit") return meta.familyUnit;
+                if (group === "legacy") {
+                    const idKey = normalizeKey(pid);
+                    const wasChampion = (idKey && hallMeta.winnersById.has(idKey)) || (nameKey && hallMeta.winnersByName.has(nameKey));
+                    const wasParticipant = (idKey && hallMeta.participantsById.has(idKey)) || (nameKey && hallMeta.participantsByName.has(nameKey));
+                    if (target === "returning") return wasChampion ? "returning" : "";
+                    if (target === "chasing") return wasParticipant && !wasChampion ? "chasing" : "";
+                    if (target === "newbies") return !wasParticipant ? "newbies" : "";
+                    return "";
+                }
+                return "";
+            })();
+            return String(val || "").trim().toLowerCase() === target;
+        });
+    }, [sortedData, playerMetaById, filterValue, hallMeta]);
 
     const requestSort = (key) => {
         let direction = 'ascending';
@@ -389,6 +508,44 @@
             <div className="bg-white pt-8 pb-8 px-4"><div className="max-w-7xl mx-auto text-center"><h2 className="text-3xl text-blue-900 font-bold mb-1">Leaderboard</h2><p className="text-gray-600 text-sm">Who has the bragging rights?</p></div></div>
             <div className="px-2 md:px-6 flex flex-col items-center">
                 <div className="w-full max-w-[98%] md:max-w-[90%] shadow-2xl border border-gray-100 rounded-xl bg-white overflow-hidden">
+                    <div className="flex flex-wrap items-end gap-3 p-4 border-b border-gray-100 bg-gray-50">
+                        <div className="flex flex-col gap-1 min-w-[220px]">
+                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Filter</label>
+                            <select
+                                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                                value={filterValue}
+                                onChange={(e) => setFilterValue(e.target.value)}
+                            >
+                                <option value="All">All Players</option>
+                                <optgroup label="Family Generation">
+                                    {familyGenerationOptions.map((opt) => (
+                                        <option key={`level-${opt.value}`} value={`level:${opt.value}`}>{opt.label}</option>
+                                    ))}
+                                </optgroup>
+                                <optgroup label="Households">
+                                    {familyUnitOptions.map((opt) => (
+                                        <option key={`unit-${opt.value}`} value={`unit:${opt.value}`}>{opt.label}</option>
+                                    ))}
+                                </optgroup>
+                                <optgroup label="Gender">
+                                    {genderOptions.map((opt) => (
+                                        <option key={`gender-${opt.value}`} value={`gender:${opt.value}`}>{opt.label}</option>
+                                    ))}
+                                </optgroup>
+                                <optgroup label="Legacy">
+                                    {legacyOptions.map((opt) => (
+                                        <option key={`legacy-${opt.value}`} value={`legacy:${opt.value}`}>{opt.label}</option>
+                                    ))}
+                                </optgroup>
+                            </select>
+                        </div>
+                        <button
+                            onClick={() => setFilterValue("All")}
+                            className="ml-auto px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-100"
+                        >
+                            Clear Filters
+                        </button>
+                    </div>
                     <div className="overflow-x-auto w-full">
                         <table className="min-w-max border-collapse w-full text-sm">
                             <thead>
@@ -407,7 +564,7 @@
                                 </tr>
                             </thead>
                             <tbody className="bg-white">
-                                {sortedData.map((player, idx) => (
+                                {filteredData.map((player, idx) => (
                                     <tr key={idx} className="group hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-0">
                                         <td className="sticky left-0 sticky-left p-2 text-left font-bold text-gray-900 border-r-2 border-gray-100 sticky-col-shadow bg-white">{player.name}</td>
                                         <td className="p-2 text-center border-r border-gray-100">{renderRank(player.rank)}</td>
