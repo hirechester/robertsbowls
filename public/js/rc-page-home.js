@@ -66,7 +66,19 @@
             };
 
             // Shared league data (fetched once per session by rc-data.js)
-            const { schedule: scheduleData, picks: picksData, picksIds: picksIdsData, teams: teamsData, teamById: teamByIdData, loading: dataLoading, error: dataError } = RC.data.useLeagueData();
+            const { appSettings, schedule: scheduleData, picks: picksData, picksIds: picksIdsData, teams: teamsData, teamById: teamByIdData, loading: dataLoading, error: dataError } = RC.data.useLeagueData();
+            const seasonYear = useMemo(() => {
+                const entry = appSettings && appSettings["season_year"];
+                const raw = entry && (entry.value_int ?? entry.value_text);
+                const parsed = parseInt(raw, 10);
+                return Number.isFinite(parsed) ? parsed : null;
+            }, [appSettings]);
+            const seasonLabel = useMemo(() => {
+                if (!seasonYear) return "Season";
+                const endTwo = String(seasonYear).slice(-2);
+                return `${seasonYear - 1}-${endTwo} Season`;
+            }, [seasonYear]);
+            const timeTravelerYear = seasonYear ? String(seasonYear) : "the future";
             const teamByIdMap = useMemo(() => {
                 const map = new Map();
                 (teamsData || []).forEach((team) => {
@@ -584,7 +596,7 @@
                 { type: "STATIC", Emoji: "📺", Headline: "Glued to the Screen", Content: "4 games, 3 screens, 1 champion. The remote control is the true MVP of the Roberts Cup." },
                 { type: "STATIC", Emoji: "💔", Headline: "Heartbreaker", Content: "That sure-thing lock just lost on a last-second field goal. There goes the perfect weekend." },
                 { type: "STATIC", Emoji: "📈", Headline: "Stock Rising", Content: "Moving up the leaderboard like a rocket. The dark horse has officially entered the chat." },
-                { type: "STATIC", Emoji: "🔮", Headline: "Crystal Ball", Content: "Predicted the upset perfectly. Are they a football genius or a time traveler from 2026?" },
+                { type: "STATIC", Emoji: "🔮", Headline: "Crystal Ball", Content: `Predicted the upset perfectly. Are they a football genius or a time traveler from ${timeTravelerYear}?` },
                 { type: "STATIC", Emoji: "🧂", Headline: "Salty", Content: "The group chat is getting spicy. Rivalries are heating up as the games wind down." },
                 { type: "STATIC", Emoji: "🏆", Headline: "Eye on the Prize", Content: "The Roberts Cup is gleaming. Polish your shelf, or prepare your excuses." },
                 { type: "STATIC", Emoji: "🏹", Headline: "Chaos Theory", Content: "Absolute mayhem in the late games. No lead is safe when the Pac-12 (RIP) plays after dark." },
@@ -610,7 +622,7 @@
                             <div>
                                 <div className="flex items-center justify-center md:justify-start gap-3 mb-3">
                                     <span className="bg-slate-800 text-yellow-400 px-3 py-1 rounded-full text-xs font-bold border border-yellow-500/30 uppercase tracking-widest shadow-sm">
-                                        2025-26 Season
+                                        {seasonLabel}
                                     </span>
                                 </div>
                                 <h1 className="text-5xl md:text-6xl font-black mb-2 tracking-tight">

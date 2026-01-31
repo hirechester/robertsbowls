@@ -206,6 +206,29 @@
     return Number.isFinite(parsed.getTime()) ? parsed.getTime() : Number.NaN;
   };
 
+  const formatFriendlyDate = (dateStr) => {
+    const raw = String(dateStr || "").trim();
+    if (!raw) return "";
+    const parts = raw.split("-").map((part) => parseInt(part, 10));
+    if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return raw;
+    const [year, month, day] = parts;
+    const date = new Date(year, month - 1, day);
+    if (!Number.isFinite(date.getTime())) return raw;
+    const months = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    const suffix = (() => {
+      if (day % 100 >= 11 && day % 100 <= 13) return "th";
+      const mod = day % 10;
+      if (mod === 1) return "st";
+      if (mod === 2) return "nd";
+      if (mod === 3) return "rd";
+      return "th";
+    })();
+    return `${months[month - 1]} ${day}${suffix}, ${year}`;
+  };
+
   const getTeamMeta = (teamById, teamId, fallback) => {
     const key = teamId ? String(teamId).trim() : "";
     const team = key && teamById ? teamById[key] : null;
@@ -1256,7 +1279,7 @@
             <div className="text-sm font-bold text-slate-800">{game.name || game.label}</div>
             {game.date && (
               <div className="text-[11px] font-semibold text-gray-500">
-                {[game.date, game.time, game.network].filter(Boolean).join(" • ")}
+                {[formatFriendlyDate(game.date), game.time, game.network].filter(Boolean).join(" • ")}
               </div>
             )}
           </div>

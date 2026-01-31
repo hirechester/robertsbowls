@@ -5,7 +5,7 @@
   const RC = window.RC;
 
   const AdminConsolePage = () => {
-    const { loading, error, appSettings, bowlGames, teamById, teams, refresh } = RC.data.useLeagueData();
+    const { loading, error, appSettings, bowlGames, teamById, teams, picksBracket, refresh } = RC.data.useLeagueData();
     const { LoadingSpinner, ErrorMessage } = (RC.ui || {});
     const Spinner = LoadingSpinner || (({ text }) => <div className="px-4 py-8 text-gray-600">{text || "Loading..."}</div>);
     const Err = ErrorMessage || (({ message }) => <div className="px-4 py-8 text-red-600">{message}</div>);
@@ -41,6 +41,11 @@
     const [oddsStatus, setOddsStatus] = useState("idle");
     const [oddsMessage, setOddsMessage] = useState("");
     const [oddsError, setOddsError] = useState("");
+    const [bracketRows, setBracketRows] = useState([]);
+    const [bracketRemoved, setBracketRemoved] = useState([]);
+    const [bracketStatus, setBracketStatus] = useState("idle");
+    const [bracketError, setBracketError] = useState("");
+    const [bracketDirty, setBracketDirty] = useState(false);
     const [confirmState, setConfirmState] = useState({
       open: false,
       title: "Confirm action",
@@ -92,6 +97,39 @@
         .filter((t) => t.id && t.label)
         .sort((a, b) => a.label.localeCompare(b.label));
     }, [teams, teamById]);
+
+    const normalizeRoundKey = (roundLabel) => {
+      const raw = String(roundLabel || "").toLowerCase();
+      if (raw.includes("opening")) return "opening";
+      if (raw.includes("quarter")) return "quarterfinals";
+      if (raw.includes("semi")) return "semifinals";
+      if (raw.includes("champ")) return "championship";
+      return "";
+    };
+
+    const bracketRounds = [
+      { key: "opening", label: "Opening Round" },
+      { key: "quarterfinals", label: "Quarterfinals" },
+      { key: "semifinals", label: "Semifinals" },
+      { key: "championship", label: "Championship" }
+    ];
+
+    const bracketSeed = useMemo(() => {
+      if (!Array.isArray(picksBracket)) return [];
+      return picksBracket.map((row, idx) => ({
+        _key: `${row?.round || "round"}-${row?.slot || idx}-${row?.bowl_id || "bowl"}`,
+        round: String(row?.round || "").trim(),
+        slot: Number(row?.slot || 0) || 0,
+        bowlId: normalizeId(row?.bowl_id),
+        advancesTo: normalizeId(row?.advances_to)
+      }));
+    }, [picksBracket]);
+
+    useEffect(() => {
+      if (bracketDirty || !bracketSeed.length) return;
+      setBracketRows(bracketSeed);
+      setBracketRemoved([]);
+    }, [bracketSeed, bracketDirty]);
 
     useEffect(() => {
       if (!appSettings) return;
@@ -193,6 +231,18 @@
       });
     }, [cfbdUpdates, bowlGames]);
 
+    const bowlOptions = useMemo(() => {
+      const list = Array.isArray(bowlGames) ? bowlGames.slice() : [];
+      return list
+        .map((game) => {
+          const id = normalizeId(game?.["Bowl ID"]);
+          const name = String(game?.["Sponsored Bowl Name"] || game?.["Bowl Name"] || "").trim();
+          return { id, label: name ? `${name} (${id})` : id };
+        })
+        .filter((entry) => entry.id)
+        .sort((a, b) => a.label.localeCompare(b.label));
+    }, [bowlGames]);
+
     useEffect(() => {
       if (!pendingGames.length) return;
       setGameEdits((prev) => {
@@ -209,6 +259,83 @@
         return next;
       });
     }, [pendingGames]);
+
+    const handleBracketAdd = (roundKey) => {
+      const label = bracketRounds.find((round) => round.key === roundKey)?.label || "Opening Round";
+      const existing = bracketRows.filter((row) => normalizeRoundKey(row.round) === roundKey);
+      const maxSlot = existing.reduce((max, row) => Math.max(max, Number(row.slot || 0)), 0);
+      const nextSlot = maxSlot + 1;
+      setBracketRows((prev) => [
+        ...prev,
+        {
+          _key: `${roundKey}-${nextSlot}-${Date.now()}`,
+          round: label,
+          slot: nextSlot,
+          bowlId: "",
+          advancesTo: ""
+        }
+      ]);
+      setBracketDirty(true);
+    };
+
+    const handleBracketUpdate = (key, field, value) => {
+      setBracketRows((prev) => prev.map((row) => (row._key === key ? { ...row, [field]: value } : row)));
+      setBracketDirty(true);
+    };
+
+    const handleBracketRemove = (key) => {
+      setBracketRows((prev) => {
+        const row = prev.find((item) => item._key === key);
+        if (row && row.round && Number.isFinite(Number(row.slot || 0)) && Number(row.slot || 0) > 0) {
+          setBracketRemoved((removed) => {
+            const exists = removed.some((r) => r.round === row.round && r.slot === Number(row.slot || 0));
+            if (exists) return removed;
+            return [...removed, { round: row.round, slot: Number(row.slot || 0) }];
+          });
+        }
+        return prev.filter((item) => item._key !== key);
+      });
+      setBracketDirty(true);
+    };
+
+    const handleBracketReset = () => {
+      setBracketRows(bracketSeed);
+      setBracketRemoved([]);
+      setBracketDirty(false);
+      setBracketStatus("idle");
+      setBracketError("");
+    };
+
+    const handleBracketSave = async () => {
+      setBracketStatus("saving");
+      setBracketError("");
+      const season = parseInt(seasonYear, 10);
+      if (!Number.isFinite(season)) {
+        setBracketStatus("error");
+        setBracketError("Season year is required.");
+        return;
+      }
+      const ok = await requestConfirm({
+        title: "Save playoff bracket?",
+        message: "This will update the picks_bracket table for the current season.",
+        confirmText: "Save bracket",
+        cancelText: "Cancel"
+      });
+      if (!ok) {
+        setBracketStatus("idle");
+        return;
+      }
+      try {
+        await savePicksBracket(bracketRows, bracketRemoved, season);
+        setBracketStatus("saved");
+        setBracketDirty(false);
+        setBracketRemoved([]);
+        if (typeof refresh === "function") await refresh();
+      } catch (err) {
+        setBracketStatus("error");
+        setBracketError(err.message || "Failed to save bracket.");
+      }
+    };
 
     const requestConfirm = ({ title, message, confirmText, cancelText }) => {
       return new Promise((resolve) => {
@@ -324,6 +451,69 @@
       if (s === "") return null;
       const n = parseInt(s, 10);
       return Number.isFinite(n) ? n : null;
+    };
+
+    const savePicksBracket = async (rows, removed, season) => {
+      const baseUrl = String(RC.SUPABASE_URL || "").replace(/\/+$/, "");
+      const publishableKey = String(RC.SUPABASE_PUBLISHABLE_KEY || "").trim();
+      if (!baseUrl || !publishableKey) throw new Error("Supabase config is missing.");
+      if (!season) throw new Error("Missing season year.");
+      const code = String(adminCode || "").trim();
+      if (!code) throw new Error("Admin code is required.");
+      const table = RC.SUPABASE_PICKS_BRACKET_TABLE || "picks_bracket";
+
+      const toSave = rows
+        .map((row) => ({
+          season,
+          round: String(row.round || "").trim(),
+          slot: Number(row.slot || 0) || 0,
+          bowl_id: normalizeId(row.bowlId),
+          advances_to: toNull(row.advancesTo)
+        }))
+        .filter((row) => row.round && row.slot > 0 && row.bowl_id);
+
+      if (!toSave.length && !(removed && removed.length)) {
+        throw new Error("Add at least one bracket row with a bowl ID.");
+      }
+
+      if (toSave.length) {
+        const url = `${baseUrl}/rest/v1/${table}?on_conflict=season,round,slot`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            apikey: publishableKey,
+            Authorization: `Bearer ${publishableKey}`,
+            "Content-Type": "application/json",
+            Prefer: "resolution=merge-duplicates,return=minimal",
+            "x-admin-code": code
+          },
+          body: JSON.stringify(toSave)
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || "Failed to save bracket rows.");
+        }
+      }
+
+      if (removed && removed.length) {
+        await Promise.all(removed.map(async (row) => {
+          if (!row || !row.round || !Number.isFinite(row.slot)) return;
+          const url = `${baseUrl}/rest/v1/${table}?season=eq.${encodeURIComponent(season)}&round=eq.${encodeURIComponent(row.round)}&slot=eq.${encodeURIComponent(row.slot)}`;
+          const res = await fetch(url, {
+            method: "DELETE",
+            headers: {
+              apikey: publishableKey,
+              Authorization: `Bearer ${publishableKey}`,
+              Prefer: "return=minimal",
+              "x-admin-code": code
+            }
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || "Failed to delete bracket row.");
+          }
+        }));
+      }
     };
 
     const cfbdFieldLabels = {
@@ -1164,6 +1354,125 @@
             </div>
             {addStatus === "error" && addError && (
               <div className="mt-3 text-xs text-red-600">{addError}</div>
+            )}
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-10 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 text-lg">🏆</div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Playoff Bracket Builder</h2>
+                  <p className="text-xs text-slate-500">Update picks_bracket rows for the current season.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleBracketSave}
+                  className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 shadow-sm"
+                >
+                  Save Bracket
+                </button>
+                <button
+                  onClick={handleBracketReset}
+                  className="px-4 py-2 rounded-lg bg-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-300 shadow-sm"
+                >
+                  Reset
+                </button>
+                {bracketStatus === "saving" && <span className="text-xs text-slate-500">Saving...</span>}
+                {bracketStatus === "saved" && <span className="text-xs text-emerald-600">Saved</span>}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Season Year</label>
+                <input
+                  type="text"
+                  readOnly
+                  className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
+                  value={seasonYear || ""}
+                />
+              </div>
+              <div className="md:col-span-2 text-xs text-slate-500 flex items-end">
+                Slots must be unique per round. Bowl IDs should match the schedule.
+              </div>
+            </div>
+
+            <datalist id="bracket-bowl-options">
+              {bowlOptions.map((opt) => (
+                <option key={`bracket-opt-${opt.id}`} value={opt.id}>{opt.label}</option>
+              ))}
+              <option value="MANUAL_CHAMP">MANUAL_CHAMP</option>
+            </datalist>
+
+            <div className="space-y-6">
+              {bracketRounds.map((round) => {
+                const roundRows = bracketRows
+                  .filter((row) => normalizeRoundKey(row.round) === round.key)
+                  .slice()
+                  .sort((a, b) => (a.slot || 0) - (b.slot || 0));
+                return (
+                  <div key={round.key} className="border border-slate-200 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="text-sm font-bold text-slate-800">{round.label}</div>
+                      <button
+                        onClick={() => handleBracketAdd(round.key)}
+                        className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-500 shadow-sm"
+                      >
+                        Add Row
+                      </button>
+                    </div>
+                    {roundRows.length === 0 && (
+                      <div className="text-xs text-slate-500">No rows yet.</div>
+                    )}
+                    {roundRows.map((row) => (
+                      <div key={row._key} className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3 items-end">
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Slot</label>
+                          <input
+                            type="number"
+                            min="1"
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            value={row.slot || ""}
+                            onChange={(e) => handleBracketUpdate(row._key, "slot", e.target.value)}
+                          />
+                        </div>
+                        <div className="md:col-span-5">
+                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Bowl ID</label>
+                          <input
+                            list="bracket-bowl-options"
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            value={row.bowlId || ""}
+                            onChange={(e) => handleBracketUpdate(row._key, "bowlId", e.target.value)}
+                          />
+                        </div>
+                        <div className="md:col-span-4">
+                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Advances To</label>
+                          <input
+                            list="bracket-bowl-options"
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            value={row.advancesTo || ""}
+                            onChange={(e) => handleBracketUpdate(row._key, "advancesTo", e.target.value)}
+                          />
+                        </div>
+                        <div className="md:col-span-1 flex justify-end">
+                          <button
+                            onClick={() => handleBracketRemove(row._key)}
+                            className="px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+
+            {bracketStatus === "error" && bracketError && (
+              <div className="mt-3 text-xs text-red-600">{bracketError}</div>
             )}
           </div>
 

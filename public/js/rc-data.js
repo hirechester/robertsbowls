@@ -328,7 +328,7 @@
     if (!baseUrl || !publishableKey) return null;
 
     const table = RC.SUPABASE_PLAYERS_TABLE || "players";
-    const url = `${baseUrl}/rest/v1/${table}?select=id,first_name,last_name,family_level,state,family_unit&order=last_name.asc,first_name.asc`;
+    const url = `${baseUrl}/rest/v1/${table}?select=id,first_name,last_name,family_level,gender,state,family_unit&order=last_name.asc,first_name.asc`;
     const res = await fetch(url, {
       cache: "no-store",
       headers: {
