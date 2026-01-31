@@ -1360,7 +1360,7 @@
           <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-10 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 text-lg">🏈</div>
+                <div className="h-10 w-10 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 text-lg">🏆</div>
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">Playoff Bracket Builder</h2>
                   <p className="text-xs text-slate-500">Update picks_bracket rows for the current season.</p>
