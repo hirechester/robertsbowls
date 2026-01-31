@@ -24,7 +24,13 @@
   };
 
   const getBowlName = (game) => {
-    return String(game?.Bowl || game?.["Bowl"] || "").trim() || "Bowl";
+    return String(
+      game?.Bowl ||
+      game?.["Bowl"] ||
+      game?.["Bowl Name"] ||
+      game?.["Sponsored Bowl Name"] ||
+      ""
+    ).trim() || "Bowl";
   };
 
   const parseNumber = (value) => {
@@ -33,21 +39,31 @@
     return cleaned ? Number(cleaned) : NaN;
   };
 
-  const parseScorePair = (game) => {
-    const keysA = ["Team 1 Score", "Score 1", "Away Score", "Away Points", "Team 1 Points", "Home Score"];
-    const keysB = ["Team 2 Score", "Score 2", "Home Score", "Home Points", "Team 2 Points", "Away Score"];
+  const parseScorePair = (game, bowlById) => {
+    const bowlKey = getBowlKey(game);
+    const bowlRow = bowlKey ? bowlById?.[bowlKey] : null;
+    const keysA = ["Home Pts", "Home Points", "Home Score", "Team 1 Score", "Score 1", "Away Score", "Away Points", "Team 1 Points"];
+    const keysB = ["Away Pts", "Away Points", "Away Score", "Team 2 Score", "Score 2", "Home Score", "Home Points", "Team 2 Points"];
     let a = NaN;
     let b = NaN;
     for (const k of keysA) {
-      const v = parseNumber(game?.[k]);
+      const v = parseNumber(game?.[k] ?? bowlRow?.[k]);
       if (Number.isFinite(v)) { a = v; break; }
     }
     for (const k of keysB) {
-      const v = parseNumber(game?.[k]);
+      const v = parseNumber(game?.[k] ?? bowlRow?.[k]);
       if (Number.isFinite(v)) { b = v; break; }
     }
     if (Number.isFinite(a) && Number.isFinite(b)) return [a, b];
-    const combined = String(game?.Score || game?.["Final"] || game?.["Final Score"] || "");
+    const combined = String(
+      game?.Score ||
+      game?.["Final"] ||
+      game?.["Final Score"] ||
+      bowlRow?.Score ||
+      bowlRow?.["Final"] ||
+      bowlRow?.["Final Score"] ||
+      ""
+    );
     const m = combined.match(/(\d+)\D+(\d+)/);
     if (m) return [Number(m[1]), Number(m[2])];
     return [NaN, NaN];
@@ -99,7 +115,7 @@
   };
 
   const WrappedPage = () => {
-    const { appSettings, schedule, picksIds, teamById, loading, error } = RC.data.useLeagueData();
+    const { appSettings, schedule, bowlGames, picksIds, teamById, loading, error } = RC.data.useLeagueData();
     const [selectedPlayer, setSelectedPlayer] = useState("");
     const [cardOrder, setCardOrder] = useState(null);
 
@@ -118,9 +134,16 @@
 
     const computed = useMemo(() => {
       const scheduleList = Array.isArray(schedule) ? schedule : [];
+      const bowlList = Array.isArray(bowlGames) ? bowlGames : [];
       const picksList = Array.isArray(picksIds) ? picksIds : [];
       const completed = scheduleList.filter(g => normalizeId(g?.["Winner ID"]));
+      const completedBowls = bowlList.filter(g => normalizeId(g?.["Winner ID"]));
       const playersCount = players.length || picksList.length;
+      const truthy01 = (v) => {
+        const s = String(v ?? "").trim().toLowerCase();
+        return s === "1" || s === "true" || s === "yes" || s === "y" || s === "x";
+      };
+      const isCfpGame = (g) => truthy01(g?.["CFP?"] ?? g?.["CFP"] ?? g?.["Playoff"] ?? g?.["Playoff?"]);
 
       const sortedSchedule = scheduleList.slice().sort((a, b) => {
         const ad = new Date(`${a.Date || ""} ${a.Time || ""}`);
@@ -132,9 +155,10 @@
 
       const pickCountsByGame = {};
       const globalPickCounts = {};
-      const correctPickCountsByTeam = {};
+      const champPickCounts = {};
       const incorrectPickCountsByTeam = {};
       let totalPickCount = 0;
+      let champPickTotal = 0;
 
       completed.forEach((game) => {
         const bowlKey = getBowlKey(game);
@@ -162,9 +186,7 @@
         };
 
         const winnerId = normalizeId(game?.["Winner ID"]);
-        if (winnerId) {
-          const winnerCount = counts[winnerId] || 0;
-          correctPickCountsByTeam[winnerId] = (correctPickCountsByTeam[winnerId] || 0) + winnerCount;
+        if (winnerId && !isCfpGame(game)) {
           Object.entries(counts).forEach(([teamId, count]) => {
             if (teamId !== winnerId) {
               incorrectPickCountsByTeam[teamId] = (incorrectPickCountsByTeam[teamId] || 0) + count;
@@ -172,6 +194,17 @@
           });
         }
       });
+
+      const champGame = sortedSchedule.find((g) => /national\s+championship/i.test(String(g.Bowl || "")));
+      const champBowlKey = champGame ? getBowlKey(champGame) : "";
+      if (champBowlKey) {
+        picksList.forEach((player) => {
+          const pickId = normalizeId(player?.[champBowlKey]);
+          if (!pickId) return;
+          champPickCounts[pickId] = (champPickCounts[pickId] || 0) + 1;
+          champPickTotal += 1;
+        });
+      }
 
       const winsByPlayer = {};
       const lossesByPlayer = {};
@@ -210,19 +243,10 @@
 
       let crowdFavoriteTeamId = "";
       let crowdFavoriteCount = 0;
-      Object.entries(globalPickCounts).forEach(([teamId, count]) => {
+      Object.entries(champPickCounts).forEach(([teamId, count]) => {
         if (count > crowdFavoriteCount) {
           crowdFavoriteTeamId = teamId;
           crowdFavoriteCount = count;
-        }
-      });
-
-      let mvpTeamId = "";
-      let mvpCount = 0;
-      Object.entries(correctPickCountsByTeam).forEach(([teamId, count]) => {
-        if (count > mvpCount) {
-          mvpTeamId = teamId;
-          mvpCount = count;
         }
       });
 
@@ -235,12 +259,28 @@
         }
       });
 
-      let cleanSweepGame = null;
+      let mostPickedGame = null;
+      let mostPickedCount = 0;
       completed.forEach((game) => {
-        if (cleanSweepGame) return;
         const bowlKey = getBowlKey(game);
         const meta = pickCountsByGame[bowlKey];
-        if (meta && meta.total > 0 && meta.majorityCount === meta.total) cleanSweepGame = game;
+        if (!meta || meta.total < 1) return;
+        if (meta.majorityCount > mostPickedCount) {
+          mostPickedCount = meta.majorityCount;
+          mostPickedGame = game;
+        }
+      });
+
+      let blowoutGame = null;
+      let blowoutMargin = -1;
+      completedBowls.forEach((game) => {
+        const [a, b] = parseScorePair(game, bowlById);
+        if (!Number.isFinite(a) || !Number.isFinite(b)) return;
+        const diff = Math.abs(a - b);
+        if (diff > blowoutMargin) {
+          blowoutMargin = diff;
+          blowoutGame = game;
+        }
       });
 
       let splitGame = null;
@@ -270,8 +310,8 @@
 
       let nailBiterGame = null;
       let nailBiterMargin = Number.POSITIVE_INFINITY;
-      completed.forEach((game) => {
-        const [a, b] = parseScorePair(game);
+      completedBowls.forEach((game) => {
+        const [a, b] = parseScorePair(game, bowlById);
         if (!Number.isFinite(a) || !Number.isFinite(b)) return;
         const diff = Math.abs(a - b);
         if (diff < nailBiterMargin) {
@@ -281,14 +321,28 @@
       });
 
       const confStats = {};
+      const allowedConfs = new Map([
+        ["acc", "ACC"],
+        ["big12", "Big 12"],
+        ["bigten", "Big Ten"],
+        ["sec", "SEC"]
+      ]);
+      const normalizeConf = (name) => String(name || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+
       completed.forEach((game) => {
         const winnerId = normalizeId(game?.["Winner ID"]);
         const homeId = normalizeId(game?.["Home ID"]);
         const awayId = normalizeId(game?.["Away ID"]);
         if (!winnerId || !homeId || !awayId) return;
         const loserId = winnerId === homeId ? awayId : homeId;
-        const winConf = teamById?.[winnerId]?.["Conference"] || teamById?.[winnerId]?.Conference || "";
-        const loseConf = teamById?.[loserId]?.["Conference"] || teamById?.[loserId]?.Conference || "";
+        const winConfRaw = teamById?.[winnerId]?.["Conference"] || teamById?.[winnerId]?.Conference || "";
+        const loseConfRaw = teamById?.[loserId]?.["Conference"] || teamById?.[loserId]?.Conference || "";
+        const winKey = normalizeConf(winConfRaw);
+        const loseKey = normalizeConf(loseConfRaw);
+        const winConf = allowedConfs.get(winKey);
+        const loseConf = allowedConfs.get(loseKey);
         if (winConf) {
           confStats[winConf] = confStats[winConf] || { wins: 0, losses: 0 };
           confStats[winConf].wins += 1;
@@ -326,11 +380,17 @@
       const selectedPick = picksList.find(p => p.Name === selectedPlayer) || null;
       const playerStats = standings.find(s => s.name === selectedPlayer) || { wins: 0, losses: 0, rank: "-" };
 
-      const playerPickCounts = {};
-      const playerWrongCounts = {};
       const playerCorrectByGame = {};
       let maxStreak = 0;
       let currentStreak = 0;
+      const sharedCounts = {};
+      const diffCounts = {};
+      picksList.forEach((p) => {
+        if (p?.Name && p.Name !== selectedPlayer) {
+          sharedCounts[p.Name] = 0;
+          diffCounts[p.Name] = 0;
+        }
+      });
 
       sortedSchedule.forEach((game) => {
         const bowlKey = getBowlKey(game);
@@ -338,7 +398,13 @@
         if (!bowlKey || !winnerId || !selectedPick) return;
         const pickId = normalizeId(selectedPick[bowlKey]);
         if (pickId) {
-          playerPickCounts[pickId] = (playerPickCounts[pickId] || 0) + 1;
+          picksList.forEach((other) => {
+            if (!other?.Name || other.Name === selectedPlayer) return;
+            const otherPick = normalizeId(other[bowlKey]);
+            if (!otherPick) return;
+            if (otherPick === pickId) sharedCounts[other.Name] += 1;
+            if (otherPick !== pickId) diffCounts[other.Name] += 1;
+          });
         }
         const correct = pickId && pickId === winnerId;
         playerCorrectByGame[bowlKey] = correct;
@@ -347,9 +413,6 @@
           if (currentStreak > maxStreak) maxStreak = currentStreak;
         } else {
           currentStreak = 0;
-          if (pickId) {
-            playerWrongCounts[pickId] = (playerWrongCounts[pickId] || 0) + 1;
-          }
         }
       });
 
@@ -369,40 +432,54 @@
         }
       });
 
-      let swingGame = null;
-      let swingDelta = -1;
-      completed.forEach((game) => {
+      let mostSharedPlayer = "";
+      let mostSharedCount = 0;
+      Object.entries(sharedCounts).forEach(([name, count]) => {
+        if (count > mostSharedCount) {
+          mostSharedCount = count;
+          mostSharedPlayer = name;
+        }
+      });
+
+      let mostDifferentPlayer = "";
+      let mostDifferentCount = 0;
+      Object.entries(diffCounts).forEach(([name, count]) => {
+        if (count > mostDifferentCount) {
+          mostDifferentCount = count;
+          mostDifferentPlayer = name;
+        }
+      });
+
+      const earlySlice = completed.slice(0, 10);
+      let earlyWins = 0;
+      let earlyTotal = 0;
+      earlySlice.forEach((game) => {
         if (!selectedPick) return;
         const bowlKey = getBowlKey(game);
         const winnerId = normalizeId(game?.["Winner ID"]);
         const pickId = normalizeId(selectedPick?.[bowlKey]);
-        if (!winnerId || !pickId || pickId !== winnerId) return;
-        const meta = pickCountsByGame[bowlKey];
-        const count = meta?.counts?.[winnerId] || 0;
-        const delta = (meta?.total || 0) - count;
-        if (delta > swingDelta) {
-          swingDelta = delta;
-          swingGame = game;
-        }
+        if (!winnerId || !pickId) return;
+        earlyTotal += 1;
+        if (pickId === winnerId) earlyWins += 1;
       });
 
-      let favoriteTeamId = "";
-      let favoriteTeamCount = 0;
-      Object.entries(playerPickCounts).forEach(([teamId, count]) => {
-        if (count > favoriteTeamCount) {
-          favoriteTeamCount = count;
-          favoriteTeamId = teamId;
+      let rivalryWins = 0;
+      let rivalryLosses = 0;
+      if (selectedPick && mostDifferentPlayer) {
+        const rival = picksList.find(p => p.Name === mostDifferentPlayer) || null;
+        if (rival) {
+          completed.forEach((game) => {
+            const bowlKey = getBowlKey(game);
+            const winnerId = normalizeId(game?.["Winner ID"]);
+            const pickId = normalizeId(selectedPick?.[bowlKey]);
+            const rivalPick = normalizeId(rival?.[bowlKey]);
+            if (!winnerId || !pickId || !rivalPick) return;
+            if (pickId === rivalPick) return;
+            if (pickId === winnerId) rivalryWins += 1;
+            if (rivalPick === winnerId) rivalryLosses += 1;
+          });
         }
-      });
-
-      let nemesisTeamId = "";
-      let nemesisCount = 0;
-      Object.entries(playerWrongCounts).forEach(([teamId, count]) => {
-        if (count > nemesisCount) {
-          nemesisCount = count;
-          nemesisTeamId = teamId;
-        }
-      });
+      }
 
       let contrarianTotal = 0;
       let contrarianCount = 0;
@@ -420,13 +497,13 @@
 
       let closeCallCorrect = 0;
       let closeCallTotal = 0;
-      completed.forEach((game) => {
+      completedBowls.forEach((game) => {
         if (!selectedPick) return;
         const bowlKey = getBowlKey(game);
         const winnerId = normalizeId(game?.["Winner ID"]);
         const pickId = normalizeId(selectedPick?.[bowlKey]);
         if (!winnerId || !pickId) return;
-        const [a, b] = parseScorePair(game);
+        const [a, b] = parseScorePair(game, bowlById);
         if (!Number.isFinite(a) || !Number.isFinite(b)) return;
         const diff = Math.abs(a - b);
         if (diff > 7) return;
@@ -434,7 +511,7 @@
         if (pickId === winnerId) closeCallCorrect += 1;
       });
 
-      const recentSlice = completed.slice(-5);
+      const recentSlice = completed.slice(-10);
       let finishWins = 0;
       recentSlice.forEach((game) => {
         if (!selectedPick) return;
@@ -450,11 +527,12 @@
         standings,
         crowdFavoriteTeamId,
         crowdFavoriteCount,
-        mvpTeamId,
-        mvpCount,
         heartbreakTeamId,
         heartbreakCount,
-        cleanSweepGame,
+        mostPickedGame,
+        mostPickedCount,
+        blowoutGame,
+        blowoutMargin,
         splitGame,
         pickCountsByGame,
         shockGame,
@@ -466,20 +544,23 @@
         chaosTotal,
         chaosUpsets,
         totalPickCount,
+        champPickTotal,
         playerStats,
         signatureGame,
         signatureCount,
-        favoriteTeamId,
-        favoriteTeamCount,
-        nemesisTeamId,
-        nemesisCount,
+        mostSharedPlayer,
+        mostSharedCount,
+        mostDifferentPlayer,
+        mostDifferentCount,
+        earlyWins,
+        earlyTotal,
+        rivalryWins,
+        rivalryLosses,
         maxStreak,
         contrarianTotal,
         contrarianCount,
         closeCallTotal,
         closeCallCorrect,
-        swingGame,
-        swingDelta,
         finishWins
       };
     }, [schedule, picksIds, teamById, selectedPlayer, players]);
@@ -517,15 +598,22 @@
     const leagueCards = useMemo(() => {
       const champions = computed.champions?.length ? computed.champions.join(" & ") : "TBD";
       const champRecord = computed.leaderWins ? `${computed.leaderWins} wins` : "Record pending";
-      const crowdPct = computed.crowdFavoriteCount && computed.totalPickCount
-        ? Math.round((computed.crowdFavoriteCount / computed.totalPickCount) * 100)
+      const crowdPct = computed.crowdFavoriteCount && computed.champPickTotal
+        ? Math.round((computed.crowdFavoriteCount / computed.champPickTotal) * 100)
         : null;
 
-      const cleanBowl = computed.cleanSweepGame ? getBowlName(computed.cleanSweepGame) : "Everyone stayed split";
-      const cleanTeamId = computed.cleanSweepGame
-        ? computed.pickCountsByGame?.[getBowlKey(computed.cleanSweepGame)]?.majorityTeamId
+      const mostPickedBowl = computed.mostPickedGame ? getBowlName(computed.mostPickedGame) : "Most picked game";
+      const mostPickedTeamId = computed.mostPickedGame
+        ? computed.pickCountsByGame?.[getBowlKey(computed.mostPickedGame)]?.majorityTeamId
         : "";
-      const cleanTeam = cleanTeamId ? getTeamName(teamById, cleanTeamId) : "No sweep yet";
+      const mostPickedTeam = mostPickedTeamId ? getTeamName(teamById, mostPickedTeamId) : "No pick leader yet";
+
+      const blowoutBowl = computed.blowoutGame ? getBowlName(computed.blowoutGame) : "Blowout bowl";
+      const blowoutWinnerId = computed.blowoutGame ? normalizeId(computed.blowoutGame?.["Winner ID"]) : "";
+      const blowoutTeam = blowoutWinnerId ? getTeamName(teamById, blowoutWinnerId) : "Big win";
+      const blowoutMarginText = Number.isFinite(computed.blowoutMargin) && computed.blowoutMargin >= 0
+        ? `${computed.blowoutMargin}-point margin`
+        : "Biggest margin";
 
       const splitMeta = computed.splitGame
         ? computed.pickCountsByGame?.[getBowlKey(computed.splitGame)]
@@ -557,10 +645,6 @@
         ? getTeamName(teamById, computed.crowdFavoriteTeamId)
         : "No favorite yet";
 
-      const mvpTeam = computed.mvpTeamId
-        ? getTeamName(teamById, computed.mvpTeamId)
-        : "TBD";
-
       const heartbreakTeam = computed.heartbreakTeamId
         ? getTeamName(teamById, computed.heartbreakTeamId)
         : "TBD";
@@ -577,11 +661,11 @@
         },
         {
           title: "The Crowd Favorite",
-          main: `${crowdFavoriteTeam} was picked the most`,
-          sub: crowdPct ? `${crowdPct}% of all picks` : `${computed.crowdFavoriteCount || 0} total picks`,
-          detail: computed.totalPickCount ? `${computed.totalPickCount} picks across the league` : "",
-          context: "When the family leans in, it leans hard.",
-          line: "Family hive-mind, activated.",
+          main: `${crowdFavoriteTeam} was picked to win it all`,
+          sub: crowdPct ? `${crowdPct}% of championship picks` : `${computed.crowdFavoriteCount || 0} championship picks`,
+          detail: computed.champPickTotal ? `${computed.champPickTotal} total championship picks` : "",
+          context: "Your most popular title prediction.",
+          line: "The trophy choice everyone loved.",
           badge: "👥"
         },
         {
@@ -594,13 +678,22 @@
           badge: "⚡"
         },
         {
-          title: "Everyone Agreed",
-          main: `${cleanTeam} was a clean sweep`,
-          sub: cleanBowl,
-          detail: "Unanimous picks across the league",
-          context: "A rare moment of total agreement.",
-          line: "Unanimous... and still stressful.",
+          title: "Most Picked Game",
+          main: `${mostPickedTeam} led the picks`,
+          sub: mostPickedBowl,
+          detail: computed.mostPickedCount ? `${computed.mostPickedCount} picks in one game` : "Top pick total",
+          context: "The biggest pile-on of the season.",
+          line: "This one drew the largest crowd.",
           badge: "✅"
+        },
+        {
+          title: "Blowout Bowl",
+          main: blowoutBowl,
+          sub: blowoutMarginText,
+          detail: "Biggest final score gap",
+          context: "One team never looked back.",
+          line: `${blowoutTeam} ran away with it.`,
+          badge: "💥"
         },
         {
           title: "Split the Room",
@@ -610,15 +703,6 @@
           context: "This one divided the group chat.",
           line: "Group text went quiet for a while.",
           badge: "⚖️"
-        },
-        {
-          title: "League MVP",
-          main: `${mvpTeam} paid out ${computed.mvpCount || 0} times`,
-          sub: "Most correct picks",
-          detail: "Reliable all the way through",
-          context: "They were the league’s steady win.",
-          line: "You’ll be buying their merch by now.",
-          badge: "🏅"
         },
         {
           title: "Heartbreaker",
@@ -666,13 +750,14 @@
       const signatureNickname = signatureTeamId ? getTeamNickname(teamById, signatureTeamId) : "team";
       const signatureCount = computed.signatureCount && Number.isFinite(computed.signatureCount) ? computed.signatureCount : null;
 
-      const favoriteTeam = computed.favoriteTeamId
-        ? getTeamName(teamById, computed.favoriteTeamId)
-        : "No favorite yet";
-
-      const nemesisTeam = computed.nemesisTeamId
-        ? getTeamName(teamById, computed.nemesisTeamId)
-        : "No nemesis yet";
+      const mostSharedPlayer = computed.mostSharedPlayer || "No pick twin yet";
+      const mostDifferentPlayer = computed.mostDifferentPlayer || "No rival yet";
+      const earlyLine = computed.earlyTotal
+        ? `${computed.earlyWins} of ${computed.earlyTotal} in the first 10`
+        : "Early bowls pending";
+      const rivalryLine = (computed.rivalryWins || computed.rivalryLosses)
+        ? `${computed.rivalryWins}-${computed.rivalryLosses} head-to-head`
+        : "Rivalry record pending";
 
       const contrarianPct = computed.contrarianTotal
         ? Math.round((computed.contrarianCount / computed.contrarianTotal) * 100)
@@ -681,8 +766,6 @@
       const closeCallLine = computed.closeCallTotal
         ? `${computed.closeCallCorrect}/${computed.closeCallTotal} in one-score games`
         : "One-score data pending";
-
-      const swingBowl = computed.swingGame ? getBowlName(computed.swingGame) : "Moment pending";
 
       return [
         {
@@ -695,6 +778,15 @@
           badge: "✨"
         },
         {
+          title: "Early Bird",
+          main: earlyLine,
+          sub: "Fast start",
+          detail: "Your opening stretch",
+          context: "First 10 bowls set the tone.",
+          line: "You came out swinging.",
+          badge: "⏰"
+        },
+        {
           title: "You Called It",
           main: signatureBowl,
           sub: signatureCount ? `Only ${signatureCount} got the ${signatureNickname} right` : `Only a few got ${signatureTeam} right`,
@@ -705,21 +797,30 @@
         },
         {
           title: "Rode With",
-          main: `${favoriteTeam} ${computed.favoriteTeamCount || 0} times`,
-          sub: "Most-picked team",
-          detail: "Your season-long ride or die",
-          context: "Loyalty is a strategy (mostly).",
-          line: "Loyalty pays... sometimes.",
+          main: `Most in sync with ${mostSharedPlayer}`,
+          sub: computed.mostSharedCount ? `${computed.mostSharedCount} matching picks` : "Closest matchups",
+          detail: "Your closest pick partner",
+          context: "Great minds picked alike.",
+          line: "Your closest pick buddy.",
           badge: "🤝"
         },
         {
           title: "Nemesis",
-          main: `${nemesisTeam} hurt you ${computed.nemesisCount || 0} times`,
-          sub: "Most wrong picks",
-          detail: "The team you couldn't quite shake",
-          context: "We all have that one team.",
-          line: "We all have that one team.",
+          main: `Most different from ${mostDifferentPlayer}`,
+          sub: computed.mostDifferentCount ? `${computed.mostDifferentCount} different picks` : "Opposite sides",
+          detail: "Your biggest head-to-head split",
+          context: "Always on the other side.",
+          line: "This matchup never agreed.",
           badge: "😤"
+        },
+        {
+          title: "Rivalry Rival",
+          main: mostDifferentPlayer,
+          sub: rivalryLine,
+          detail: "Your toughest head-to-head",
+          context: "Closest competitor all season.",
+          line: "Every pick felt personal.",
+          badge: "🥊"
         },
         {
           title: "Peak Form",
@@ -749,17 +850,8 @@
           badge: "😬"
         },
         {
-          title: "Your Moment",
-          main: swingBowl,
-          sub: computed.swingDelta > 0 ? `You beat ${computed.swingDelta} picks here` : "Season-swinger",
-          detail: "The pick that moved the needle",
-          context: "This one shifted the standings.",
-          line: "The moment that moved you.",
-          badge: "🎯"
-        },
-        {
           title: "Finish Strong",
-          main: `${computed.finishWins || 0}/5 to close`,
+          main: `${computed.finishWins || 0} out of 10 to close`,
           sub: "Clutch factor",
           detail: "The final stretch",
           context: "You brought it home late.",
@@ -789,9 +881,15 @@
       if (!allCards.length) return;
       if (cardOrder && cardOrder.length === allCards.length) return;
       const championIndex = allCards.findIndex((card) => card.title === "Champion");
-      const indices = allCards.map((_, idx) => idx).filter((idx) => idx !== championIndex);
+      const yourSeasonIndex = allCards.findIndex((card) => card.title === "Your Season");
+      const indices = allCards
+        .map((_, idx) => idx)
+        .filter((idx) => idx !== championIndex && idx !== yourSeasonIndex);
       const shuffled = shuffleArray(indices);
-      const order = championIndex >= 0 ? [championIndex, ...shuffled] : shuffled;
+      const order = [];
+      if (championIndex >= 0) order.push(championIndex);
+      if (yourSeasonIndex >= 0) order.push(yourSeasonIndex);
+      order.push(...shuffled);
       setCardOrder(order);
     }, [allCards, cardOrder]);
 
@@ -1147,3 +1245,8 @@
 
   window.RC.pages.WrappedPage = WrappedPage;
 })();
+      const bowlById = {};
+      bowlList.forEach((game) => {
+        const id = normalizeId(game?.["Bowl ID"]);
+        if (id) bowlById[id] = game;
+      });
