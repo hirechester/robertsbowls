@@ -2,6 +2,7 @@ HANDOFF MESSAGE (LONG):
 
 You’re helping me maintain a small client-side React app for a family bowl pick’em league (“Roberts Cup”). It’s a static site in /public (no backend). Pages are implemented as standalone JS files like /public/js/rc-page-*.js and are routed from /public/js/rc-main.js with navigation in /public/js/rc-nav.js. Data is pulled from published Google Sheets -> CSV (Bowl Games, Teams, Picks, etc.) and joined client-side.
 High-level: The app is a static, client-only bowl pick’em experience that loads shared league data from Supabase, joins it in the browser, and renders multiple pages (standings, picks, scouting, history, badges, etc.) for a family league. It is intentionally lightweight and UI-stable, with ID-based data joins (Bowl IDs, Team IDs) used for all calculations. When updating, prioritize data correctness, avoid UI redesigns, keep hooks at top level, and never introduce duplicate helper declarations.
+Tooling note: We have access to the `gh` CLI for GitHub operations in this repo.
 
 IMPORTANT CONTEXT / CURRENT STATE (main is stable; include ALL pages):
 - Home page:
@@ -48,6 +49,7 @@ IMPORTANT CONTEXT / CURRENT STATE (main is stable; include ALL pages):
 
 - History page:
   - Tested working (minimal UI changes). Typically shows historical results/recap using the same shared data sources.
+  - In season_mode 3, the current season winner is added to the Title History list when season_year is one more than the latest Hall of Fame year, including dropdown details (record, champ pick, runner(s)-up).
   - Preserve the existing recap layout and any year-to-year comparisons.
 
 - Badges (Superlatives) page:
@@ -64,8 +66,18 @@ IMPORTANT CONTEXT / CURRENT STATE (main is stable; include ALL pages):
 
 - Predictions page:
   - Hidden menu page for pre-season picks and template-driven auto-selection (no backend).
+  - Subheader copy: “The family feud starts here.”
   - Uses Bowl Games + Teams IDs for matchup rendering, and supports a CFP bracket defined by explicit bowl IDs with winner-advance logic.
   - Template picker includes categorized strategies with tooltip logic; keep UI styling consistent with current Pick Studio layout.
+
+- Wrapped page:
+  - New Wrapped recap at #wrapped, designed Spotify-style with large, colorful horizontal cards and randomized order (Champion first, Your Season second).
+  - Uses a player dropdown to personalize the player cards; dropdown is alphabetical and randomizes the selected player on load.
+  - Card logic is ID-based; 20 total cards (10 league + 10 player). Keep styling bold and consistent; avoid UI redesigns.
+
+- Admin page:
+  - Uses custom in-page confirmation modal for admin actions (no browser confirm).
+  - Admin remains URL-only (not in the menu) and requires admin code for writes.
 
 - Rules page:
   - New page styled like parchment/scroll (intentionally different vibe than the modern pages).
